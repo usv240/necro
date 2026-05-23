@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+outputs/necro/
+!outputs/.gitkeep
+*.log
+.DS_Store
+node_modules/
+plan/

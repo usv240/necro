@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NECRO — The Code Necromancer</title>
+  <meta name="description" content="AI agent that finds disabled features in GitLab repositories and evaluates revival viability using Gemini 3 Flash and GitLab MCP." />
+
+  <!-- Apply theme before render to prevent flash -->
+  <script>
+    (function() {
+      var t = localStorage.getItem('necro-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<div class="offline-banner" id="offlineBanner">
+  ⚠ Backend unreachable — displayed data is cached locally, not a live response
+</div>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header class="app-header">
+  <a href="#graveyard" class="logo">
+    <span class="skull-icon">💀</span>
+    <span>
+      NECRO
+      <div class="logo-sub">The Code Necromancer · GitLab Track</div>
+    </span>
+  </a>
+  <div class="header-right">
+    <div class="health-dot" id="healthDot" title="Backend status"></div>
+    <button class="btn btn-sm" onclick="window.open('/api/health','_blank')">API Health</button>
+    <button class="btn btn-icon" id="themeToggle" title="Toggle theme">🌙</button>
+  </div>
+</header>
+
+<!-- ── Nav tabs ────────────────────────────────────────────────────────── -->
+<nav class="nav-tabs">
+  <button class="nav-tab active" data-tab="graveyard">☠ Graveyard <span class="tab-badge" id="tabBadgeGraveyard">0</span></button>
+  <button class="nav-tab" data-tab="timeline">📈 Timeline</button>
+  <button class="nav-tab" data-tab="watchlist">👁 Watch List <span class="tab-badge" id="tabBadgeWatch">0</span></button>
+  <button class="nav-tab" data-tab="auditlog">📋 Revival Log <span class="tab-badge" id="tabBadgeLog">0</span></button>
+</nav>
+
+<!-- ── Main ──────────────────────────────────────────────────────────────── -->
+<main class="main">
+
+  <!-- ── Graveyard tab ──────────────────────────────────────────────────── -->
+  <div class="tab-panel active" id="tab-graveyard">
+
+    <!-- Scan card -->
+    <div class="scan-card">
+      <h2>Scan a GitLab Repository</h2>
+      <div class="scan-form">
+        <div class="form-group">
+          <label>GitLab Repository URL</label>
+          <input
+            type="text"
+            class="form-input"
+            id="repoUrl"
+            placeholder="https://gitlab.com/your-org/your-repo"
+          />
+        </div>
+        <div class="form-group" style="max-width:110px">
+          <label>Max commits</label>
+          <input type="number" class="form-input" id="maxCommits" value="300" min="50" max="1000" />
+        </div>
+        <div class="form-group" style="max-width:130px">
+          <label>Lookback (months)</label>
+          <input type="number" class="form-input" id="lookbackMonths" value="24" min="3" max="60" />
+        </div>
+        <button class="btn btn-primary" id="scanBtn" onclick="startScan()">
+          ⚡ Scan Repo
+        </button>
+      </div>
+
+      <div class="scan-demos">
+        <span style="font-size:0.75rem;color:var(--text-muted);align-self:center">Quick load:</span>
+        <button class="demo-chip featured" onclick="loadDemo('gitlab-foss')">
+          💀 gitlab-org/gitlab-foss (pre-scanned)
+        </button>
+        <button class="demo-chip" onclick="setRepoUrl('https://gitlab.com/inkscape/inkscape')">
+          inkscape/inkscape
+        </button>
+        <button class="demo-chip" onclick="setRepoUrl('https://gitlab.com/gnome/gnome-music')">
+          gnome/gnome-music
+        </button>
+      </div>
+    </div>
+
+    <!-- Terminal -->
+    <div class="terminal" id="terminal"></div>
+
+    <!-- Summary stats -->
+    <div class="summary-bar" id="summaryBar" style="display:none">
+      <div class="stat-card repo-stat">
+        <div class="stat-value" id="statRepo">—</div>
+        <div class="stat-label">Repository scanned</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statCommits" style="color:var(--skull)">—</div>
+        <div class="stat-label">Commits analyzed</div>
+      </div>
+      <div class="stat-card revive-stat">
+        <div class="stat-value" id="statRevive">0</div>
+        <div class="stat-label">Revive Now 🔥</div>
+      </div>
+      <div class="stat-card investigate-stat">
+        <div class="stat-value" id="statInvestigate">0</div>
+        <div class="stat-label">Investigate 🔍</div>
+      </div>
+      <div class="stat-card buried-stat">
+        <div class="stat-value" id="statBuried">0</div>
+        <div class="stat-label">Keep Buried ⚰</div>
+      </div>
+      <div class="stat-card" id="statSourceCard" style="display:none">
+        <div class="stat-value" id="statSource" style="font-size:0.8rem"></div>
+        <div class="stat-label">Data source</div>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar" id="filterBar" style="display:none">
+      <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn revive-filter" data-filter="revive_now" onclick="setFilter('revive_now', this)">🔥 Revive Now</button>
+      <button class="filter-btn investigate-filter" data-filter="investigate_further" onclick="setFilter('investigate_further', this)">🔍 Investigate</button>
+      <button class="filter-btn buried-filter" data-filter="keep_buried" onclick="setFilter('keep_buried', this)">⚰ Keep Buried</button>
+    </div>
+
+    <!-- Graveyard grid -->
+    <div class="graveyard-grid" id="graveyardGrid">
+      <div class="empty-state">
+        <div class="empty-icon">💀</div>
+        <p>Load the gitlab-foss demo or scan any GitLab repository to see dead features and revival analysis.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Timeline tab ────────────────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-timeline">
+    <div class="chart-card">
+      <h3>Feature Kill Timeline — kills by month</h3>
+      <div class="chart-container">
+        <canvas id="timelineChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h3>Revival Feasibility Distribution</h3>
+      <div class="chart-container" style="height:220px">
+        <canvas id="feasibilityChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h3>Kill Reason Categories</h3>
+      <div class="chart-container" style="height:220px">
+        <canvas id="categoryChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Watch list tab ─────────────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-watchlist">
+    <div class="monitor-status" id="monitorStatus">
+      <div class="pulse-dot"></div>
+      <div>
+        <div class="status-label">Autonomous monitor</div>
+        <div class="status-value" id="monitorStatusText">Loading...</div>
+      </div>
+      <button class="btn btn-sm" onclick="triggerMonitor()" style="margin-left:auto">Run Now</button>
+    </div>
+
+    <div class="scan-card" style="margin-bottom:1rem">
+      <h2>Add Repository to Watch List</h2>
+      <div class="scan-form">
+        <div class="form-group">
+          <label>GitLab Repository URL</label>
+          <input type="text" class="form-input" id="watchUrl" placeholder="https://gitlab.com/your-org/your-repo" />
+        </div>
+        <div class="form-group" style="max-width:200px">
+          <label>Label (optional)</label>
+          <input type="text" class="form-input" id="watchLabel" placeholder="My main product" />
+        </div>
+        <button class="btn btn-primary" onclick="addWatch()">👁 Watch Repo</button>
+      </div>
+    </div>
+
+    <div id="watchGrid">
+      <div class="empty-state">
+        <div class="empty-icon">👁</div>
+        <p>Add repositories to the watch list. NECRO will automatically re-scan them every 24 hours and alert via Slack when new revival candidates are found.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Audit log tab ──────────────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-auditlog">
+    <div id="auditLogArea">
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p>Revival issues created via NECRO will appear here. Create a GitLab issue from any 'Revive Now' feature card to log it.</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
