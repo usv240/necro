@@ -1,6 +1,6 @@
 # NECRO — The Code Necromancer
 
-**Live demo:** https://necro-REPLACE.run.app  
+**Live demo:** https://necro-agent-38381883054.us-central1.run.app  
 **GitLab:** https://gitlab.com/ujwal240-group/ujwal240-project
 
 > Every codebase has a graveyard of disabled features. Most of them died for reasons that no longer exist. NECRO is an AI agent that reads your GitLab commit history, finds those dead features, and tells you which ones are worth bringing back to life — with cited evidence and competitive intelligence.
