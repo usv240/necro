@@ -259,7 +259,14 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
 async def queue_put_report(emit, report: dict):
     """Emit the final report payload as a special SSE event."""
     import json as _json
-    await emit(f"__REPORT__:{_json.dumps(report)}")
+    from datetime import datetime, date
+
+    def _default(obj):
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+    await emit(f"__REPORT__:{_json.dumps(report, default=_default)}")
 
 
 async def _load_demo_report() -> dict:
@@ -277,7 +284,7 @@ async def _load_demo_report() -> dict:
                 return {
                     "project_path": DEMO_PROJECT,
                     "repo_url": "https://gitlab.com/gitlab-org/gitlab-foss",
-                    "scan_date": scan.get("scan_date", ""),
+                    "scan_date": scan.get("scan_date", "").isoformat() if hasattr(scan.get("scan_date", ""), "isoformat") else str(scan.get("scan_date", "")),
                     "total_commits_scanned": scan.get("total_commits_scanned", 8472),
                     "features": features,
                     "source": "mongodb_atlas",
