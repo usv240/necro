@@ -536,6 +536,9 @@ DEMO2_FEATURES = [
         },
     },
 ]
+
+
+async def seed_demo_data() -> None:
     """Insert demo scan + features into MongoDB if not already present."""
     db = get_db()
 
