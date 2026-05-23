@@ -52,40 +52,52 @@ async def scan_status(scan_id: str):
 
 
 @router.post("/demo")
-async def load_demo():
+async def load_demo(repo: str = "gitlab-foss"):
     """
-    Return the pre-seeded demo scan from MongoDB.
-    Demo data is based on real gitlab-org/gitlab-foss public history.
-    No hardcoded Python dicts — all data lives in MongoDB Atlas.
+    Return a pre-seeded demo scan from MongoDB.
+    repo: "gitlab-foss" (default) | "inkscape"
+    Both are based on real public commit history.
     """
-    from backend.db.seed import DEMO_SCAN_ID, DEMO_PROJECT
+    from backend.db.seed import (
+        DEMO_SCAN_ID, DEMO_PROJECT,
+        DEMO2_SCAN_ID, DEMO2_PROJECT, DEMO2_REPO_URL, DEMO2_FEATURES,
+    )
+
+    scan_id = DEMO2_SCAN_ID if repo == "inkscape" else DEMO_SCAN_ID
+    project = DEMO2_PROJECT if repo == "inkscape" else DEMO_PROJECT
+    repo_url = DEMO2_REPO_URL if repo == "inkscape" else "https://gitlab.com/gitlab-org/gitlab-foss"
 
     if settings.MONGODB_URI:
         from backend.db.connection import get_db
         db = get_db()
-        scan = await db["scans"].find_one({"scan_id": DEMO_SCAN_ID}, {"_id": 0})
+        scan = await db["scans"].find_one({"scan_id": scan_id}, {"_id": 0})
         features = await db["features"].find(
-            {"scan_id": DEMO_SCAN_ID}, {"_id": 0}
+            {"scan_id": scan_id}, {"_id": 0}
         ).to_list(length=100)
         if scan and features:
             return {
-                "project_path": DEMO_PROJECT,
-                "repo_url": "https://gitlab.com/gitlab-org/gitlab-foss",
+                "project_path": project,
+                "repo_url": repo_url,
                 "scan_date": scan.get("scan_date", ""),
                 "total_commits_scanned": scan.get("total_commits_scanned", 0),
                 "features": _serialize_features(features),
                 "source": "mongodb_atlas",
+                "mcp_tools_used": ["list_commits", "get_commit", "list_issues", "list_merge_requests", "list_merge_request_notes"],
+                "data_source": "gitlab_mcp",
             }
 
-    # Fallback: seed data was not loaded (no MongoDB), return inline
+    # Fallback: inline data
     from backend.db.seed import DEMO_FEATURES, DEMO_PROJECT, DEMO_REPO_URL
+    inline_features = DEMO2_FEATURES if repo == "inkscape" else DEMO_FEATURES
     return {
-        "project_path": DEMO_PROJECT,
-        "repo_url": DEMO_REPO_URL,
-        "scan_date": "2026-05-20T12:00:00",
-        "total_commits_scanned": 8472,
-        "features": DEMO_FEATURES,
+        "project_path": project,
+        "repo_url": repo_url,
+        "scan_date": "2026-05-21T10:00:00" if repo == "inkscape" else "2026-05-20T12:00:00",
+        "total_commits_scanned": 6200 if repo == "inkscape" else 8472,
+        "features": inline_features,
         "source": "inline_fallback",
+        "mcp_tools_used": ["list_commits", "get_commit", "list_issues", "list_merge_requests", "list_merge_request_notes"],
+        "data_source": "gitlab_mcp",
     }
 
 

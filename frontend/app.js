@@ -129,12 +129,18 @@ async function loadDemo(which) {
   const terminal = showTerminal();
   clearResults();
 
-  // For gitlab-foss, stream then load real data
   if (which === 'gitlab-foss') {
     document.getElementById('repoUrl').value = 'https://gitlab.com/gitlab-org/gitlab-foss';
     await startScan();
     return;
   }
+
+  if (which === 'inkscape') {
+    document.getElementById('repoUrl').value = 'https://gitlab.com/inkscape/inkscape';
+    await startScan();
+    return;
+  }
+
   toast('Unknown demo', 'error');
 }
 
@@ -188,14 +194,18 @@ function renderReport(data) {
   document.getElementById('statInvestigate').textContent = investigateCt;
   document.getElementById('statBuried').textContent = buriedCt;
 
-  // Source badge
+  // Source badge + MCP audit badge
   if (data.source) {
     const srcCard = document.getElementById('statSourceCard');
     const srcEl = document.getElementById('statSource');
     srcCard.style.display = '';
-    srcEl.innerHTML = data.source === 'mongodb_atlas'
+    const sourceHtml = data.source === 'mongodb_atlas'
       ? '<span class="source-badge source-mongodb">MongoDB Atlas</span>'
       : '<span class="source-badge source-inline">inline fallback</span>';
+    const mcpHtml = data.data_source === 'gitlab_mcp'
+      ? ` <span class="source-badge source-mcp" title="GitLab MCP tools: ${(data.mcp_tools_used || []).join(', ')}">GitLab MCP · ${data.mcp_tool_count || (data.mcp_tools_used || []).length} calls</span>`
+      : '';
+    srcEl.innerHTML = sourceHtml + mcpHtml;
   }
 
   document.getElementById('summaryBar').style.display = '';
@@ -339,6 +349,22 @@ function buildFeatureCard(feat) {
         <ul class="risks-list">
           ${vi.technical_risks.map(r => `<li>${esc(r)}</li>`).join('')}
         </ul>
+      ` : ''}
+
+      ${feat.challenger ? `
+        <div class="section-label">🤖 Challenger Agent — independent verification</div>
+        <div class="challenger-box ${feat.challenger.challenger_verdict || ''}">
+          <div class="challenger-verdict">
+            ${feat.challenger.challenger_verdict === 'confirm' ? '✅ Confirmed — ' : feat.challenger.challenger_verdict === 'downgrade' ? '⚠️ Downgraded — ' : '❌ Rejected — '}
+            Challenger score: ${feat.challenger.challenger_score || '?'}/10
+            <span class="challenger-source">${feat.challenger.source || ''}</span>
+          </div>
+          ${feat.challenger.strongest_objection ? `<div class="challenger-text">Key objection: ${esc(feat.challenger.strongest_objection)}</div>` : ''}
+          ${feat.challenger.recommended_first_step ? `<div class="challenger-text">First step: ${esc(feat.challenger.recommended_first_step)}</div>` : ''}
+          ${feat.challenger.hidden_risks && feat.challenger.hidden_risks.length ? `
+            <div class="challenger-risks">Hidden risks: ${feat.challenger.hidden_risks.map(r => esc(r)).join(' · ')}</div>
+          ` : ''}
+        </div>
       ` : ''}
 
       ${feat.context_snippets && feat.context_snippets.length ? `

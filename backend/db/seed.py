@@ -310,67 +310,340 @@ DEMO_FEATURES = [
 ]
 
 
-async def seed_demo_data() -> None:
+# ── Second demo — inkscape/inkscape public history ───────────────────────────
+
+DEMO2_SCAN_ID = "demo-inkscape-2026"
+DEMO2_PROJECT = "inkscape/inkscape"
+DEMO2_REPO_URL = "https://gitlab.com/inkscape/inkscape"
+
+DEMO2_FEATURES = [
+    {
+        "feature_id": "gtk2-backend",
+        "name": "GTK2 Rendering Backend",
+        "kill_commit_sha": "a1b2c3d",
+        "kill_commit_message": "Remove GTK2 backend — GTK2 is EOL and blocks GTK3 migration",
+        "kill_date": "January 15, 2020",
+        "detection_method": "commit_message_keyword",
+        "linked_mr_iid": 1104,
+        "linked_issue_iids": [1021],
+        "context_snippets": [
+            "Kill commit message: Remove GTK2 backend — GTK2 is EOL and blocks GTK3 migration",
+            "MR #1104: GTK2 is end-of-life as of Dec 2019. Maintaining the GTK2 backend blocks full GTK3 adoption.",
+            "Issue #1021: Drop GTK2 support — maintenance burden is too high for a dead toolkit",
+            "GTK2 went EOL on December 31, 2019. GTK3 has been stable since 2011.",
+        ],
+        "death_reason": {
+            "primary_reason": "GTK2 rendering backend removed because GTK2 reached end-of-life on December 31, 2019 and maintaining it blocked full GTK3 migration",
+            "category": "technical_debt",
+            "specific_constraint": "GTK2 EOL — no security patches, blocks GTK3/GTK4 roadmap",
+            "is_temporary": False,
+            "confidence": "high",
+            "cited_evidence": "GTK2 is end-of-life as of Dec 2019. Maintaining the GTK2 backend blocks full GTK3 adoption. (MR #1104)",
+        },
+        "viability": {
+            "is_still_valid": True,
+            "what_changed": "Nothing has changed — GTK2 has been EOL for 6 years and no security patches exist. GTK4 is now the current target. Re-introducing GTK2 support would be technically regressive and a security liability.",
+            "revival_feasibility": 1,
+            "effort_estimate": "Not feasible — EOL toolkit",
+            "effort_category": "months",
+            "technical_risks": [
+                "GTK2 has known unpatched security vulnerabilities post-EOL",
+                "GTK3/GTK4 migration is in progress — introducing GTK2 would fork the rendering path",
+                "No GTK2 maintainers remain in the ecosystem",
+            ],
+            "recommendation": "keep_buried",
+            "reasoning": "GTK2 is an end-of-life toolkit with unpatched security vulnerabilities. The migration to GTK4 is the correct direction. Reviving GTK2 support would be architecturally regressive.",
+            "confidence": "high",
+        },
+        "roi": {
+            "request_count": 3,
+            "demand_level": "low",
+            "priority_tier": "P4 — Low Priority",
+            "roi_estimate_label": "Negative — security risk outweighs any backward compatibility benefit",
+            "competitive_gap": "GIMP, Krita, and all major GTK apps have dropped GTK2.",
+            "value_drivers": [],
+            "reasoning": "Only 3 references in legacy issue tracker, all from 2019. No current demand.",
+            "caveats": "Purely a legacy support request with no viable path forward.",
+        },
+        "competitive_intel": {
+            "competitors_with_feature": [],
+            "market_urgency": "low",
+            "summary": "No competitor supports GTK2. The entire GNOME ecosystem has moved to GTK4. Zero competitive pressure.",
+            "sources_checked": ["GIMP changelog", "Krita requirements", "GTK release notes"],
+        },
+    },
+    {
+        "feature_id": "windows-xp-support",
+        "name": "Windows XP / Vista Compatibility Build",
+        "kill_commit_sha": "d4e5f6a",
+        "kill_commit_message": "Drop Windows XP and Vista support — blocking modern dependency upgrades",
+        "kill_date": "March 20, 2018",
+        "detection_method": "commit_message_keyword",
+        "linked_mr_iid": 645,
+        "linked_issue_iids": [],
+        "context_snippets": [
+            "Kill commit message: Drop Windows XP and Vista support — blocking modern dependency upgrades",
+            "MR #645: Windows XP/Vista are EOL and prevent upgrading Cairo, Pango, and GTK to current versions. CI build matrix complexity not worth supporting <1% of users.",
+            "Microsoft ended Windows XP extended support in April 2014, Vista in April 2017.",
+        ],
+        "death_reason": {
+            "primary_reason": "Windows XP and Vista compatibility builds were dropped because both OSes are past end-of-life and maintaining them blocked upgrades to Cairo, Pango, and GTK",
+            "category": "technical_debt",
+            "specific_constraint": "EOL Windows versions blocked Cairo/Pango/GTK upgrades needed for font rendering and SVG improvements",
+            "is_temporary": False,
+            "confidence": "high",
+            "cited_evidence": "Windows XP/Vista are EOL and prevent upgrading Cairo, Pango, and GTK to current versions. (MR #645)",
+        },
+        "viability": {
+            "is_still_valid": True,
+            "what_changed": "Nothing — Windows XP has been EOL for 12 years and Vista for 8 years. Market share is statistically zero. Inkscape now depends on modern Win32 APIs not available on XP.",
+            "revival_feasibility": 1,
+            "effort_estimate": "Not feasible",
+            "effort_category": "months",
+            "technical_risks": [
+                "Inkscape 1.x requires MSVC 2019+ and Win32 APIs not in XP/Vista",
+                "Zero user base to justify maintenance cost",
+                "CI matrix complexity for dead platforms",
+            ],
+            "recommendation": "keep_buried",
+            "reasoning": "Windows XP/Vista are dead platforms. No user base, no security patches from Microsoft, and Inkscape's dependencies have moved far beyond what those OSes support.",
+            "confidence": "high",
+        },
+        "roi": {
+            "request_count": 1,
+            "demand_level": "low",
+            "priority_tier": "P4 — Low Priority",
+            "roi_estimate_label": "Zero — no viable user base",
+            "competitive_gap": "No competing SVG editor supports XP/Vista.",
+            "value_drivers": [],
+            "reasoning": "Single request from 2019. No user base.",
+            "caveats": "Legacy artifact.",
+        },
+        "competitive_intel": {
+            "competitors_with_feature": [],
+            "market_urgency": "low",
+            "summary": "No modern creative software supports Windows XP or Vista. Zero competitive pressure.",
+            "sources_checked": ["GIMP requirements", "Krita requirements", "LibreOffice requirements"],
+        },
+    },
+    {
+        "feature_id": "pdf-ghostscript-import",
+        "name": "Ghostscript PDF Import (Direct)",
+        "kill_commit_sha": "7c8d9e0",
+        "kill_commit_message": "Replace Ghostscript PDF import with Poppler — better text extraction",
+        "kill_date": "April 10, 2021",
+        "detection_method": "commit_message_keyword",
+        "linked_mr_iid": 2341,
+        "linked_issue_iids": [2100, 2201],
+        "context_snippets": [
+            "Kill commit message: Replace Ghostscript PDF import with Poppler — better text extraction",
+            "MR #2341: Direct Ghostscript PDF import bypasses text-layer extraction. Poppler provides proper text/vector handling. Removing GS import path to reduce binary size and improve text fidelity.",
+            "Issue #2100: PDF text imports as curves instead of editable text — Ghostscript rasterizes",
+            "Issue #2201: Ghostscript dependency conflicts on Windows packaging",
+        ],
+        "death_reason": {
+            "primary_reason": "Direct Ghostscript PDF import was replaced by Poppler because Ghostscript rasterizes text to curves, losing editability — Poppler preserves text and vector layers",
+            "category": "technical_debt",
+            "specific_constraint": "Ghostscript rasterizes PDF text — text imports as uneditable curves instead of text objects",
+            "is_temporary": False,
+            "confidence": "high",
+            "cited_evidence": "Direct Ghostscript PDF import bypasses text-layer extraction. Poppler provides proper text/vector handling. (MR #2341)",
+        },
+        "viability": {
+            "is_still_valid": False,
+            "what_changed": "pdfimport via Poppler now handles most use cases. However, some advanced PDF features (AI-generated layouts, complex form fields, embedded EPS) that Ghostscript handled are now lost. A complementary import path using Ghostscript only as fallback for Poppler-unreadable PDFs could recover this capability without re-introducing the rasterization problem.",
+            "revival_feasibility": 6,
+            "effort_estimate": "3–5 weeks (fallback import path only)",
+            "effort_category": "weeks",
+            "technical_risks": [
+                "Ghostscript dependency packaging on all three platforms (Win/Mac/Linux)",
+                "Conflict resolution when both Poppler and GS produce different results",
+                "Security: Ghostscript has had high-severity CVEs (CVE-2018-16509, etc.)",
+            ],
+            "recommendation": "investigate_further",
+            "reasoning": "A fallback Ghostscript import for PDFs that Poppler cannot handle would recover lost capability without the rasterization issue (since Poppler runs first). However, Ghostscript's security vulnerability history requires careful sandboxing.",
+            "confidence": "medium",
+        },
+        "roi": {
+            "request_count": 67,
+            "demand_level": "medium",
+            "priority_tier": "P2 — High Priority",
+            "roi_estimate_label": "Medium — 67 references, niche but real use case for complex PDF workflows",
+            "competitive_gap": "Adobe Illustrator supports full Ghostscript-compatible PDF import. Affinity Designer has strong PDF import too.",
+            "value_drivers": ["67 issue references", "Professional PDF workflow users", "Adobe Illustrator migration path"],
+            "reasoning": "67 references indicate a real niche: users with complex PDFs (architectural drawings, form documents) that Poppler cannot fully import.",
+            "caveats": "Security implications of bundling Ghostscript must be evaluated before committing.",
+        },
+        "competitive_intel": {
+            "competitors_with_feature": ["Adobe Illustrator", "Affinity Designer"],
+            "market_urgency": "medium",
+            "summary": "Adobe Illustrator and Affinity Designer both support Ghostscript-compatible PDF import as a standard feature. This is a pain point for Inkscape users migrating complex AI/PDF workflows.",
+            "sources_checked": ["Adobe Illustrator feature list", "Affinity Designer PDF import docs"],
+        },
+    },
+    {
+        "feature_id": "live-path-effects-preview",
+        "name": "Live Path Effects Real-Time Preview (Performance Mode Off)",
+        "kill_commit_sha": "b3c4d5e",
+        "kill_commit_message": "Disable LPE real-time preview by default — causes hangs on complex paths",
+        "kill_date": "May 5, 2022",
+        "detection_method": "feature_flag_removal",
+        "linked_mr_iid": 3156,
+        "linked_issue_iids": [3050],
+        "context_snippets": [
+            "Kill commit message: Disable LPE real-time preview by default — causes hangs on complex paths",
+            "MR #3156: Real-time LPE preview on complex paths with multiple effects hangs the UI thread. Disabling preview by default until rendering is moved off-thread.",
+            "Issue #3050: Inkscape freezes for 10-30 seconds when dragging LPE parameters on complex paths",
+        ],
+        "death_reason": {
+            "primary_reason": "Live Path Effects real-time preview was disabled by default because it caused UI thread hangs of 10–30 seconds on complex paths with multiple effects",
+            "category": "performance",
+            "specific_constraint": "LPE rendering ran on the UI thread — complex paths caused 10-30 second hangs",
+            "is_temporary": True,
+            "confidence": "high",
+            "cited_evidence": "Real-time LPE preview on complex paths hangs the UI thread. Disabling until rendering is moved off-thread. (MR #3156)",
+        },
+        "viability": {
+            "is_still_valid": False,
+            "what_changed": "Inkscape 1.2+ introduced a threading refactor that moved several rendering operations off the main UI thread. Combined with the SVG2 rendering improvements and modern CPU core counts (most users now have 8–16 cores vs 4 in 2022), a threaded LPE preview should be feasible. The original kill reason was specifically 'until rendering is moved off-thread' — that work has been done.",
+            "revival_feasibility": 7,
+            "effort_estimate": "2–3 weeks",
+            "effort_category": "weeks",
+            "technical_risks": [
+                "Thread-safe access to the LPE parameter state machine",
+                "Cancel semantics when user continues dragging before previous render completes",
+                "Testing across the full LPE library (40+ effects)",
+            ],
+            "recommendation": "revive_now",
+            "reasoning": "The original kill reason ('until rendering is moved off-thread') has been addressed in Inkscape 1.2+. The threading infrastructure exists. Re-enabling as opt-in first, then default, is a feasible 2-3 week effort.",
+            "confidence": "high",
+        },
+        "roi": {
+            "request_count": 183,
+            "demand_level": "high",
+            "priority_tier": "P1 — Immediate",
+            "roi_estimate_label": "High — 183 references, directly improves the LPE workflow that is a key Inkscape differentiator",
+            "competitive_gap": "Adobe Illustrator and Affinity Designer both offer real-time effect previews as standard behavior.",
+            "value_drivers": ["183 issue references", "LPE is a key Inkscape differentiator vs. Illustrator", "Professional vector workflow improvement"],
+            "reasoning": "183 references and the fact that LPE real-time preview is standard in competing tools makes this a high-priority UX improvement.",
+            "caveats": "Threading safety needs careful testing across all 40+ LPE types.",
+        },
+        "competitive_intel": {
+            "competitors_with_feature": ["Adobe Illustrator", "Affinity Designer", "CorelDRAW"],
+            "market_urgency": "high",
+            "summary": "Real-time effect preview is standard in Adobe Illustrator, Affinity Designer, and CorelDRAW. This is a consistent pain point cited by users migrating from commercial tools to Inkscape.",
+            "sources_checked": ["Adobe Illustrator live effects docs", "Affinity Designer feature comparison", "Inkscape issue tracker"],
+        },
+    },
+]
     """Insert demo scan + features into MongoDB if not already present."""
     db = get_db()
 
-    # Check if already seeded
+    # ── Demo 1: gitlab-org/gitlab-foss ────────────────────────────────
     existing = await db["scans"].find_one({"scan_id": DEMO_SCAN_ID})
     if existing:
-        logger.info("[SKIP] Demo data already seeded (scan_id=%s)", DEMO_SCAN_ID)
-        return
-
-    # Insert scan record
-    scan = ScanDoc(
-        scan_id=DEMO_SCAN_ID,
-        project_path=DEMO_PROJECT,
-        repo_url=DEMO_REPO_URL,
-        scan_date=datetime(2026, 5, 20, 12, 0, 0, tzinfo=timezone.utc),
-        total_commits_scanned=8472,
-        features_found=len(DEMO_FEATURES),
-        revive_now_count=sum(1 for f in DEMO_FEATURES if f["viability"]["recommendation"] == "revive_now"),
-        investigate_count=sum(1 for f in DEMO_FEATURES if f["viability"]["recommendation"] == "investigate_further"),
-        keep_buried_count=sum(1 for f in DEMO_FEATURES if f["viability"]["recommendation"] == "keep_buried"),
-        status="done",
-    )
-    await db["scans"].insert_one(scan.model_dump())
-    logger.info("[OK] Demo scan record inserted (project=%s)", DEMO_PROJECT)
-
-    # Insert feature documents
-    for f in DEMO_FEATURES:
-        doc = FeatureDoc(
-            project_path=DEMO_PROJECT,
+        logger.info("[SKIP] Demo 1 already seeded (scan_id=%s)", DEMO_SCAN_ID)
+    else:
+        scan = ScanDoc(
             scan_id=DEMO_SCAN_ID,
-            feature_id=f["feature_id"],
-            name=f["name"],
-            kill_commit_sha=f["kill_commit_sha"],
-            kill_commit_message=f["kill_commit_message"],
-            kill_date=f["kill_date"],
-            detection_method=f["detection_method"],
-            linked_mr_iid=f.get("linked_mr_iid"),
-            linked_issue_iids=f.get("linked_issue_iids", []),
-            context_snippets=f.get("context_snippets", []),
-            death_reason=DeathReasonDoc(**f["death_reason"]),
-            viability=ViabilityDoc(**f["viability"]),
-            roi=ROIDoc(**f["roi"]),
-            competitive_intel=CompetitiveIntelDoc(**f["competitive_intel"]) if f.get("competitive_intel") else None,
+            project_path=DEMO_PROJECT,
+            repo_url=DEMO_REPO_URL,
+            scan_date=datetime(2026, 5, 20, 12, 0, 0, tzinfo=timezone.utc),
+            total_commits_scanned=8472,
+            features_found=len(DEMO_FEATURES),
+            revive_now_count=sum(1 for f in DEMO_FEATURES if f["viability"]["recommendation"] == "revive_now"),
+            investigate_count=sum(1 for f in DEMO_FEATURES if f["viability"]["recommendation"] == "investigate_further"),
+            keep_buried_count=sum(1 for f in DEMO_FEATURES if f["viability"]["recommendation"] == "keep_buried"),
+            status="done",
         )
-        await db["features"].insert_one(doc.model_dump())
+        await db["scans"].insert_one(scan.model_dump())
+        logger.info("[OK] Demo 1 scan record inserted (project=%s)", DEMO_PROJECT)
 
-    logger.info("[OK] %d demo features inserted", len(DEMO_FEATURES))
+        for f in DEMO_FEATURES:
+            doc = FeatureDoc(
+                project_path=DEMO_PROJECT,
+                scan_id=DEMO_SCAN_ID,
+                feature_id=f["feature_id"],
+                name=f["name"],
+                kill_commit_sha=f["kill_commit_sha"],
+                kill_commit_message=f["kill_commit_message"],
+                kill_date=f["kill_date"],
+                detection_method=f["detection_method"],
+                linked_mr_iid=f.get("linked_mr_iid"),
+                linked_issue_iids=f.get("linked_issue_iids", []),
+                context_snippets=f.get("context_snippets", []),
+                death_reason=DeathReasonDoc(**f["death_reason"]),
+                viability=ViabilityDoc(**f["viability"]),
+                roi=ROIDoc(**f["roi"]),
+                competitive_intel=CompetitiveIntelDoc(**f["competitive_intel"]) if f.get("competitive_intel") else None,
+            )
+            await db["features"].insert_one(doc.model_dump())
 
-    # Add gitlab-foss to watch list
-    watch = WatchedRepo(
-        project_path=DEMO_PROJECT,
-        repo_url=DEMO_REPO_URL,
-        label="Demo — GitLab FOSS (pre-scanned)",
-        scan_interval_hours=24,
-        revive_now_count=scan.revive_now_count,
-    )
-    await db["watch_list"].replace_one(
-        {"project_path": DEMO_PROJECT}, watch.model_dump(), upsert=True
-    )
-    logger.info("[OK] gitlab-org/gitlab-foss added to watch list")
+        logger.info("[OK] %d demo features inserted (gitlab-foss)", len(DEMO_FEATURES))
+
+        watch1 = WatchedRepo(
+            project_path=DEMO_PROJECT,
+            repo_url=DEMO_REPO_URL,
+            label="Demo — GitLab FOSS (pre-scanned)",
+            scan_interval_hours=24,
+            revive_now_count=scan.revive_now_count,
+        )
+        await db["watch_list"].replace_one(
+            {"project_path": DEMO_PROJECT}, watch1.model_dump(), upsert=True
+        )
+
+    # ── Demo 2: inkscape/inkscape ─────────────────────────────────────
+    existing2 = await db["scans"].find_one({"scan_id": DEMO2_SCAN_ID})
+    if existing2:
+        logger.info("[SKIP] Demo 2 already seeded (scan_id=%s)", DEMO2_SCAN_ID)
+    else:
+        scan2 = ScanDoc(
+            scan_id=DEMO2_SCAN_ID,
+            project_path=DEMO2_PROJECT,
+            repo_url=DEMO2_REPO_URL,
+            scan_date=datetime(2026, 5, 21, 10, 0, 0, tzinfo=timezone.utc),
+            total_commits_scanned=6200,
+            features_found=len(DEMO2_FEATURES),
+            revive_now_count=sum(1 for f in DEMO2_FEATURES if f["viability"]["recommendation"] == "revive_now"),
+            investigate_count=sum(1 for f in DEMO2_FEATURES if f["viability"]["recommendation"] == "investigate_further"),
+            keep_buried_count=sum(1 for f in DEMO2_FEATURES if f["viability"]["recommendation"] == "keep_buried"),
+            status="done",
+        )
+        await db["scans"].insert_one(scan2.model_dump())
+        logger.info("[OK] Demo 2 scan record inserted (project=%s)", DEMO2_PROJECT)
+
+        for f in DEMO2_FEATURES:
+            doc = FeatureDoc(
+                project_path=DEMO2_PROJECT,
+                scan_id=DEMO2_SCAN_ID,
+                feature_id=f["feature_id"],
+                name=f["name"],
+                kill_commit_sha=f["kill_commit_sha"],
+                kill_commit_message=f["kill_commit_message"],
+                kill_date=f["kill_date"],
+                detection_method=f["detection_method"],
+                linked_mr_iid=f.get("linked_mr_iid"),
+                linked_issue_iids=f.get("linked_issue_iids", []),
+                context_snippets=f.get("context_snippets", []),
+                death_reason=DeathReasonDoc(**f["death_reason"]),
+                viability=ViabilityDoc(**f["viability"]),
+                roi=ROIDoc(**f["roi"]),
+                competitive_intel=CompetitiveIntelDoc(**f["competitive_intel"]) if f.get("competitive_intel") else None,
+            )
+            await db["features"].insert_one(doc.model_dump())
+
+        logger.info("[OK] %d demo features inserted (inkscape)", len(DEMO2_FEATURES))
+
+        watch2 = WatchedRepo(
+            project_path=DEMO2_PROJECT,
+            repo_url=DEMO2_REPO_URL,
+            label="Demo — Inkscape (pre-scanned)",
+            scan_interval_hours=24,
+            revive_now_count=scan2.revive_now_count,
+        )
+        await db["watch_list"].replace_one(
+            {"project_path": DEMO2_PROJECT}, watch2.model_dump(), upsert=True
+        )
 
 
 async def main() -> None:

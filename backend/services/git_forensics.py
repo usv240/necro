@@ -56,11 +56,19 @@ async def detect_dead_features(
     max_commits: int = 500,
     lookback_months: int = 36,
     progress_cb=None,
+    mcp_calls: list | None = None,
 ) -> list[DeadFeature]:
     """
     Run all five detection strategies against a GitLab repo.
     progress_cb(message: str) is called for each step to stream to the client.
+    mcp_calls is an optional list that will be populated with every MCP tool call made,
+    providing a verifiable audit log of GitLab MCP usage (similar to 'source: mcp').
     """
+
+    def log_mcp(tool: str, **kwargs):
+        if mcp_calls is not None:
+            entry = {"tool": tool, "source": "gitlab_mcp", **kwargs}
+            mcp_calls.append(entry)
 
     async def emit(msg: str):
         logger.info(msg)
@@ -82,6 +90,7 @@ async def detect_dead_features(
             break
 
     all_commits = all_commits[:max_commits]
+    log_mcp("list_commits", repo=project_path, result_count=len(all_commits))
     await emit(f"[MCP] list_commits returned {len(all_commits)} commits")
 
     if not all_commits:
@@ -95,18 +104,20 @@ async def detect_dead_features(
     candidates.extend(_detect_reverts(all_commits))
 
     await emit("Scanning for feature flag disablements...")
-    candidates.extend(await _detect_feature_flags(all_commits, project_path, emit))
+    candidates.extend(await _detect_feature_flags(all_commits, project_path, emit, log_mcp))
 
     await emit("Scanning commit messages for disable keywords...")
     candidates.extend(_detect_by_message(all_commits))
 
     await emit(f"[MCP] list_issues — scanning closed issues for shelved features...")
     issues = await mcp.list_issues(project_path, state="closed", per_page=100)
+    log_mcp("list_issues", repo=project_path, state="closed", result_count=len(issues))
     await emit(f"[MCP] list_issues returned {len(issues)} closed issues")
     candidates.extend(_detect_from_issues(issues))
 
     await emit(f"[MCP] list_merge_requests — scanning merged MRs...")
     mrs = await mcp.list_merge_requests(project_path, state="merged", per_page=100)
+    log_mcp("list_merge_requests", repo=project_path, state="merged", result_count=len(mrs))
     await emit(f"[MCP] list_merge_requests returned {len(mrs)} merged MRs")
     candidates.extend(_detect_from_mrs(mrs, all_commits))
 
@@ -123,7 +134,7 @@ async def detect_dead_features(
 
     # Enrich each candidate with linked MR notes and issue context
     for feat in unique:
-        await _enrich_feature(feat, project_path, emit)
+        await _enrich_feature(feat, project_path, emit, log_mcp)
 
     await emit(f"Detection complete — {len(unique)} dead features found")
     return unique
@@ -157,6 +168,7 @@ async def _detect_feature_flags(
     commits: list[dict],
     project_path: str,
     emit,
+    log_mcp=None,
 ) -> list[DeadFeature]:
     features = []
     candidates = [
@@ -170,6 +182,8 @@ async def _detect_feature_flags(
             continue
         await emit(f"[MCP] get_commit {sha[:8]} — checking diff for feature flag changes...")
         detail = await mcp.get_commit(project_path, sha)
+        if log_mcp:
+            log_mcp("get_commit", repo=project_path, sha=sha[:8], found=detail is not None)
         if not detail:
             continue
 
@@ -291,10 +305,12 @@ def _detect_from_mrs(mrs: list[dict], commits: list[dict]) -> list[DeadFeature]:
 # ── Enrichment: pull MR discussion + issue context via MCP ────────────
 
 
-async def _enrich_feature(feat: DeadFeature, project_path: str, emit) -> None:
+async def _enrich_feature(feat: DeadFeature, project_path: str, emit, log_mcp=None) -> None:
     if feat.linked_mr_iid:
         await emit(f"[MCP] list_merge_request_notes — MR #{feat.linked_mr_iid} for '{feat.name}'...")
         notes = await mcp.list_mr_notes(project_path, feat.linked_mr_iid)
+        if log_mcp:
+            log_mcp("list_merge_request_notes", repo=project_path, mr_iid=feat.linked_mr_iid, result_count=len(notes))
         for note in notes[:5]:
             body = note.get("body", "")
             if body and len(body) > 10:
@@ -303,6 +319,8 @@ async def _enrich_feature(feat: DeadFeature, project_path: str, emit) -> None:
     for iid in feat.linked_issue_iids[:2]:
         await emit(f"[MCP] list_issue_notes — Issue #{iid} for '{feat.name}'...")
         notes = await mcp.list_issue_notes(project_path, iid)
+        if log_mcp:
+            log_mcp("list_issue_notes", repo=project_path, issue_iid=iid, result_count=len(notes))
         for note in notes[:3]:
             body = note.get("body", "")
             if body and len(body) > 10:

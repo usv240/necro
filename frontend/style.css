@@ -587,6 +587,24 @@ body {
 }
 .source-mongodb { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
 .source-inline { background: rgba(245,158,11,0.1); color: var(--amber); border: 1px solid rgba(245,158,11,0.2); }
+.source-mcp { background: rgba(139,92,246,0.12); color: #a78bfa; border: 1px solid rgba(139,92,246,0.25); cursor: help; }
+
+/* ── Challenger Agent box ────────────────────────────────────────────────────── */
+.challenger-box {
+  background: rgba(139,92,246,0.06);
+  border: 1px solid rgba(139,92,246,0.2);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+}
+.challenger-box.confirm { border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.05); }
+.challenger-box.downgrade { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.05); }
+.challenger-box.reject { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.05); }
+.challenger-verdict { font-weight: 600; margin-bottom: 0.4rem; color: var(--text); }
+.challenger-source { font-size: 0.7rem; color: var(--text-muted); font-family: var(--mono); margin-left: 0.5rem; }
+.challenger-text { color: var(--text-muted); margin-bottom: 0.25rem; }
+.challenger-risks { color: var(--text-muted); font-size: 0.78rem; margin-top: 0.3rem; }
 
 /* ── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 760px) {
