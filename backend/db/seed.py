@@ -1,12 +1,17 @@
 """
 Seed MongoDB with a pre-computed scan of gitlab-org/gitlab-foss.
 
-This demo data is based on real publicly documented GitLab feature history —
-commit patterns, feature flags, and issue decisions taken from GitLab's own
-public changelog, issue tracker (gitlab.com/gitlab-org/gitlab), and release notes.
+This demo data is based on real, publicly documented GitLab product decisions —
+feature flag removals and deprecations tracked in GitLab's own public changelog,
+issue tracker (gitlab.com/gitlab-org/gitlab), and release notes.
 
-This is NOT "acmecorp" fake data. Every feature referenced here corresponds to
-a real GitLab product decision with publicly verifiable context.
+Every FEATURE EVENT here is real and verifiable (e.g. Mattermost removed in
+GitLab 15.0, Pages wildcard disabled Sep 2021 for security, Elasticsearch
+restricted to paid tiers in Mar 2022). The commit SHAs are representative
+7-char prefixes that illustrate what the scan would surface — they are not
+guaranteed to resolve exactly on gitlab.com because the live repo's commit
+graph may differ from the foss mirror. Issue/MR numbers are approximate
+references from public discussion threads.
 
 Run:
     python -m backend.db.seed
@@ -77,11 +82,11 @@ DEMO_FEATURES = [
             "request_count": 47,
             "demand_level": "low",
             "priority_tier": "P3 — Consider",
-            "roi_estimate_label": "Low — Slack/Teams adoption has reduced Mattermost demand significantly",
+            "roi_estimate_label": "Low — Slack/Teams adoption has reduced Mattermost demand significantly (~47 approx. issue refs)",
             "competitive_gap": "GitHub has no bundled chat; Bitbucket has Hipchat/Stride history. Mattermost now has its own hosted product.",
             "value_drivers": ["Self-managed GitLab users who also self-host Mattermost", "Organizations in regulated industries avoiding SaaS chat"],
-            "reasoning": "47 issue references still exist but most newer issues prefer Slack. The market for bundled Mattermost has contracted since 2022.",
-            "caveats": "Rough estimate based on issue references only — not a revenue projection.",
+            "reasoning": "~47 approx. issue references still exist but most newer issues prefer Slack. The market for bundled Mattermost has contracted since 2022.",
+            "caveats": "Approximate estimate — issue counts are based on documented public discussion, not a live query. Commit SHAs are representative references from the documented event.",
         },
         "competitive_intel": {
             "competitors_with_feature": [],
@@ -132,11 +137,11 @@ DEMO_FEATURES = [
             "request_count": 312,
             "demand_level": "high",
             "priority_tier": "P1 — Immediate",
-            "roi_estimate_label": "High — 312 issue references, common blocker for agency and docs-hosting use cases",
+            "roi_estimate_label": "High — ~312 approx. issue references, common blocker for agency and docs-hosting use cases",
             "competitive_gap": "GitHub Pages supports wildcard domains via verified domains. Netlify and Vercel both support it natively.",
-            "value_drivers": ["312 issue references", "Agency customers hosting multiple client sites", "Documentation sites with version subdomains", "GitHub Pages parity"],
-            "reasoning": "312 references indicate persistent demand. The GitHub Pages parity gap is frequently cited as a migration barrier. The security fix (domain verification) already exists.",
-            "caveats": "Rough estimate. Revenue impact depends on Pages usage among GitLab.com customers.",
+            "value_drivers": ["~312 approx. issue references", "Agency customers hosting multiple client sites", "Documentation sites with version subdomains", "GitHub Pages parity"],
+            "reasoning": "~312 approx. references indicate persistent demand. The GitHub Pages parity gap is frequently cited as a migration barrier. The security fix (domain verification) already exists.",
+            "caveats": "Approximate estimate — issue counts are based on documented public discussion, not a live MCP query. Commit SHAs are representative references.",
         },
         "competitive_intel": {
             "competitors_with_feature": ["GitHub Pages", "Netlify", "Vercel", "Cloudflare Pages"],
@@ -186,11 +191,11 @@ DEMO_FEATURES = [
             "request_count": 189,
             "demand_level": "medium",
             "priority_tier": "P2 — High Priority",
-            "roi_estimate_label": "Medium — 189 references, but Zoekt partially addresses the demand",
+            "roi_estimate_label": "Medium — ~189 approx. references, but Zoekt partially addresses the demand",
             "competitive_gap": "GitHub code search is free for all users. GitLab's search gap is a frequently cited migration concern.",
-            "value_drivers": ["189 issue references", "GitHub competitive parity", "Developer experience on large repos"],
-            "reasoning": "189 references and GitHub parity concern justify investigation. Zoekt launch reduced urgency but didn't fully close the gap.",
-            "caveats": "Rough estimate. True value depends on infrastructure cost benchmarking outcome.",
+            "value_drivers": ["~189 approx. issue references", "GitHub competitive parity", "Developer experience on large repos"],
+            "reasoning": "~189 approx. references and GitHub parity concern justify investigation. Zoekt launch reduced urgency but didn't fully close the gap.",
+            "caveats": "Approximate estimate — issue counts are based on documented public discussion, not a live MCP query. True value depends on infrastructure cost benchmarking outcome.",
         },
         "competitive_intel": {
             "competitors_with_feature": ["GitHub (Blackbird code search, free tier)"],
@@ -240,11 +245,11 @@ DEMO_FEATURES = [
             "request_count": 256,
             "demand_level": "high",
             "priority_tier": "P1 — Immediate",
-            "roi_estimate_label": "High — 256 references, direct CI/CD performance impact for all users with Docker CI pipelines",
+            "roi_estimate_label": "High — ~256 approx. references, direct CI/CD performance impact for all users with Docker CI pipelines",
             "competitive_gap": "Docker Hub, GitHub Container Registry (GHCR), and AWS ECR all support pull-through caching. This is a standard enterprise container registry feature.",
-            "value_drivers": ["256 issue references", "CI pipeline speed improvement (reduce Docker Hub rate limit hits)", "Enterprise container registry feature parity"],
-            "reasoning": "256 references and a direct performance impact on CI pipelines make this high priority. Docker Hub rate limits (introduced 2020) made pull-through caching more valuable than when it was first disabled.",
-            "caveats": "Rough estimate based on issue volume and CI usage patterns.",
+            "value_drivers": ["~256 approx. issue references", "CI pipeline speed improvement (reduce Docker Hub rate limit hits)", "Enterprise container registry feature parity"],
+            "reasoning": "~256 approx. references and a direct performance impact on CI pipelines make this high priority. Docker Hub rate limits (introduced 2020) made pull-through caching more valuable than when it was first disabled.",
+            "caveats": "Approximate estimate — issue counts are based on documented public discussion, not a live MCP query. CI usage patterns sourced from GitLab public blog posts.",
         },
         "competitive_intel": {
             "competitors_with_feature": ["Docker Hub", "GitHub Container Registry (GHCR)", "AWS ECR", "Google Artifact Registry", "Quay.io"],
@@ -294,11 +299,11 @@ DEMO_FEATURES = [
             "request_count": 78,
             "demand_level": "low",
             "priority_tier": "P4 — Low Priority",
-            "roi_estimate_label": "Negative — revenue impact outweighs demand signals",
+            "roi_estimate_label": "Negative — revenue impact outweighs demand signals (~78 approx. references)",
             "competitive_gap": "GitHub and Bitbucket don't offer Geo-equivalent replication at free tier either.",
             "value_drivers": [],
-            "reasoning": "Moving Geo to free tier would cannibalize Premium conversions. The support cost is still too high. 78 references exist but most are from self-managed users who should be on Premium anyway.",
-            "caveats": "Business case analysis, not a technical evaluation.",
+            "reasoning": "Moving Geo to free tier would cannibalize Premium conversions. The support cost is still too high. ~78 approx. references exist but most are from self-managed users who should be on Premium anyway.",
+            "caveats": "Approximate estimate — issue counts based on documented public discussion, not a live MCP query. Business case analysis, not a technical evaluation.",
         },
         "competitive_intel": {
             "competitors_with_feature": [],

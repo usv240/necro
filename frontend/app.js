@@ -227,16 +227,17 @@ function renderCards(features) {
   // Sort: revive_now first, then investigate, then keep_buried
   const order = { revive_now: 0, investigate_further: 1, keep_buried: 2 };
   const sorted = [...features].sort((a, b) => (order[_rec(a)] ?? 3) - (order[_rec(b)] ?? 3));
+  const isDemo = data.source === 'mongodb_atlas';
 
   for (const feat of sorted) {
-    const card = buildFeatureCard(feat);
+    const card = buildFeatureCard(feat, isDemo);
     grid.appendChild(card);
   }
 
   applyFilter();
 }
 
-function buildFeatureCard(feat) {
+function buildFeatureCard(feat, isDemo) {
   const rec = _rec(feat);
   const vi = feat.viability || {};
   const dr = feat.death_reason || {};
@@ -266,7 +267,7 @@ function buildFeatureCard(feat) {
         <div class="card-name">${esc(feat.name || featureId)}</div>
         <div class="card-meta">
           ${feat.kill_date ? `killed ${esc(feat.kill_date)}` : ''}
-          ${feat.kill_commit_sha ? ` · <span class="sha">${esc(feat.kill_commit_sha.slice(0, 8))}</span>` : ''}
+          ${feat.kill_commit_sha ? ` · <span class="sha" title="Representative commit ref (illustrative for demo data)">${esc(feat.kill_commit_sha.slice(0, 8))}</span>` : ''}
           ${feat.detection_method ? ` · ${esc(feat.detection_method.replace(/_/g,' '))}` : ''}
         </div>
         <div class="card-badges">
@@ -316,7 +317,7 @@ function buildFeatureCard(feat) {
         </div>
         <div class="metric-item">
           <div class="mval" style="color:var(--amber)">${roi.request_count || 0}</div>
-          <div class="mlabel">Issue refs</div>
+          <div class="mlabel">Issue refs${isDemo ? ' (est.)' : ''}</div>
         </div>
         <div class="metric-item">
           <div class="mval" style="font-size:0.85rem;color:var(--text-muted)">${esc(vi.effort_category || '—')}</div>
