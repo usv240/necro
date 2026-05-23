@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # Autonomous monitoring
     MONITOR_INTERVAL_HOURS: int = 24
 
+    # GitLab webhook secret (optional — validates incoming webhook payloads)
+    NECRO_WEBHOOK_SECRET: str = ""
+
 
 settings = Settings()
 OUTPUT_PATH = Path(settings.OUTPUT_DIR) / "necro"

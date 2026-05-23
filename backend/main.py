@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import OUTPUT_PATH, settings
-from backend.routes import report, revive, scan, stream, watch, monitor as monitor_route
+from backend.routes import report, revive, scan, stream, watch, monitor as monitor_route, agent as agent_route
 from backend.services.gitlab_mcp import mcp
 from backend.services.monitor import start_monitor, stop_monitor
 
@@ -78,6 +78,7 @@ app.include_router(scan.router, prefix="/api/scan", tags=["scan"])
 app.include_router(stream.router, prefix="/api/scan", tags=["scan"])
 app.include_router(report.router, prefix="/api/report", tags=["report"])
 app.include_router(revive.router, prefix="/api/revive", tags=["revive"])
+app.include_router(agent_route.router, prefix="/api/agent", tags=["agent"])
 app.include_router(watch.router, prefix="/api/watch", tags=["watch"])
 app.include_router(monitor_route.router, prefix="/api/monitor", tags=["monitor"])
 
@@ -115,6 +116,11 @@ async def health():
         ],
         "mcp_tool_count": 10,
         "adk_agent": "initialized" if _runner is not None else "pending",
+        "adk_endpoints": [
+            "POST /api/agent/ask — freeform prompt to ADK agent",
+            "POST /api/agent/revive — create GitLab revival issue via ADK + MCPToolset",
+            "POST /api/agent/webhook/gitlab — GitLab push webhook → re-evaluate graveyard",
+        ],
         "slack": "configured" if settings.SLACK_BOT_TOKEN else "not configured",
         "monitor": get_monitor_status(),
         "gemini_primary": "gemini-3-flash-preview",

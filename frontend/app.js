@@ -155,7 +155,7 @@ function showTerminal() {
 function addTerminalLine(terminal, msg, cls) {
   if (!cls) {
     if (msg.startsWith('[MCP]')) cls = 'mcp';
-    else if (msg.startsWith('Gemini')) cls = 'gemini';
+    else if (msg.startsWith('Gemini') || msg.startsWith('[ADK]') || msg.startsWith('Google Cloud Agent Builder')) cls = 'gemini';
     else if (msg.startsWith('REVIVE') || msg.startsWith('REVIVE NOW')) cls = 'revive';
     else if (msg.startsWith('INVESTIGATE')) cls = 'investigate';
     else if (msg.startsWith('KEEP BURIED')) cls = 'buried';
@@ -428,13 +428,14 @@ async function createRevivalIssue(featureId, btn) {
   }
 
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Creating...';
+  btn.innerHTML = '<span class="spinner"></span> Agent Builder — creating issue...';
 
   try {
-    const r = await fetch(`/api/revive/${featureId}`, {
+    // Route through ADK Agent (Google Cloud Agent Builder + GitLab MCPToolset)
+    const r = await fetch(`/api/agent/revive`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project_path: projectPath }),
+      body: JSON.stringify({ feature_id: featureId, project_path: projectPath }),
     });
     const d = await r.json();
 
@@ -456,7 +457,10 @@ async function createRevivalIssue(featureId, btn) {
       btn.insertAdjacentElement('afterend', link);
     }
 
-    toast(`GitLab issue created: ${d.issue_url || 'done'}`, 'success');
+    const via = d.via === 'adk_mcptoolset_gitlab'
+      ? 'GitLab issue created via Google Cloud Agent Builder + MCPToolset'
+      : `GitLab issue created: ${d.issue_url || 'done'}`;
+    toast(via, 'success');
     // Update badge
     loadAuditLog();
 
