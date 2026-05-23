@@ -19,13 +19,14 @@ The institutional knowledge lives in a 3-year-old merge request that nobody will
 
 ## What Makes NECRO Different
 
-1. **GitLab MCP in the critical path** — every commit, diff, MR discussion, and issue is fetched via `@zereight/mcp-gitlab` (MCP over stdio, PAT auth). No scraping, no static snapshots.
+1. **GitLab MCP in the critical path** — every commit, diff, MR discussion, and issue is fetched via `@zereight/mcp-gitlab` (MCP over stdio, PAT auth). No scraping, no static snapshots. Every scan report includes a `mcp_calls_log` showing exactly which MCP tools fired.
 2. **Five detection strategies** — revert commits, feature flag diffs, disable-keyword messages, closed shelved issues, and feature-branch MRs. Five independent signals cross-checked.
 3. **Every claim is cited** — commit SHA, MR number, or issue reference for every dead feature. No hallucinated reasons.
-4. **Competitive intelligence** — Gemini 3 Flash checks whether competitors have shipped the feature since you killed it. Urgency: Critical → High → Medium → Low.
-5. **Real write action** — creates a GitLab issue via MCP `create_issue`, logged to MongoDB Atlas. Not just reading — taking action on what it finds.
-6. **Autonomous monitoring** — APScheduler re-scans watched repos every 24 hours and fires Slack alerts when new revival candidates appear.
-7. **MongoDB Atlas persistence** — all scans, features, and revival logs stored in Atlas. Nothing in memory, nothing hardcoded.
+4. **Challenger Agent** — after the primary analysis, a second independent Gemini 3 Flash instance adversarially stress-tests every `revive_now` recommendation. Surfaces hidden risks the primary agent may have missed.
+5. **Competitive intelligence** — Gemini 3 Flash checks whether competitors have shipped the feature since you killed it. Urgency: Critical → High → Medium → Low.
+6. **Real write action** — creates a GitLab issue via MCP `create_issue`, logged to MongoDB Atlas. Not just reading — taking action on what it finds.
+7. **Autonomous monitoring** — APScheduler re-scans watched repos every 24 hours and fires Slack alerts when new revival candidates appear.
+8. **MongoDB Atlas persistence** — all scans, features, and revival logs stored in Atlas. Nothing in memory, nothing hardcoded.
 
 ---
 
@@ -81,18 +82,21 @@ The institutional knowledge lives in a 3-year-old merge request that nobody will
 
 ---
 
-## Demo Scenario
+## Demo Scenarios
 
-**One click** — loads the pre-seeded scan of `gitlab-org/gitlab-foss`.  
-Data based on real GitLab public history: commit messages, MR discussions, and issue numbers are all publicly verifiable.
+**Two pre-scanned repos** — load either with one click.
 
-| Feature | Killed | Reason | Assessment |
-|---|---|---|---|
-| 💎 **Pages Wildcard Domains** | Sep 2021 | DNS CNAME subdomain takeover risk | **REVIVE NOW** — GitLab 16.x domain verification resolves the attack vector |
-| 💎 **Container Registry Pull-Through Cache** | Nov 2021 | Storage ballooning + consistency | **REVIVE NOW** — Registry rewritten in Go (GitLab 15.8+) with TTL eviction |
-| 🔍 **Elasticsearch for Free Tier** | Mar 2022 | Infrastructure cost per user | **INVESTIGATE** — Zoekt launched 2023; cost needs re-benchmarking |
-| 🔍 **Bundled Mattermost** | Feb 2022 | ~4GB RAM per instance | **INVESTIGATE** — Lightweight OAuth link approach feasible |
-| ⚰ **Geo for Omnibus Free Tier** | Jun 2020 | Support burden too high | **KEEP BURIED** — Still valid; Geo is key Premium conversion driver |
+| Feature | Repo | Killed | Reason | Assessment |
+|---|---|---|---|---|
+| 💎 **Pages Wildcard Domains** | gitlab-foss | Sep 2021 | DNS CNAME subdomain takeover risk | **REVIVE NOW** — GitLab 16.x domain verification resolves the attack vector |
+| 💎 **Container Registry Pull-Through Cache** | gitlab-foss | Nov 2021 | Storage ballooning + consistency | **REVIVE NOW** — Registry rewritten in Go (GitLab 15.8+) with TTL eviction |
+| 🔍 **Elasticsearch for Free Tier** | gitlab-foss | Mar 2022 | Infrastructure cost per user | **INVESTIGATE** — Zoekt launched 2023; cost needs re-benchmarking |
+| 🔍 **Bundled Mattermost** | gitlab-foss | Feb 2022 | ~4GB RAM per instance | **INVESTIGATE** — Lightweight OAuth link approach feasible |
+| ⚰ **Geo for Omnibus Free Tier** | gitlab-foss | Jun 2020 | Support burden too high | **KEEP BURIED** — Still valid; Geo is key Premium conversion driver |
+| 💎 **LPE Real-Time Preview** | inkscape | May 2022 | UI thread hangs 10-30s | **REVIVE NOW** — Inkscape 1.2+ threading refactor resolves the root cause |
+| 🔍 **Ghostscript PDF Import** | inkscape | Apr 2021 | Text rasterizes to curves | **INVESTIGATE** — Fallback import for Poppler-unreadable PDFs is feasible |
+| ⚰ **GTK2 Rendering Backend** | inkscape | Jan 2020 | GTK2 EOL, blocks GTK4 | **KEEP BURIED** — 6 years EOL, unpatched CVEs |
+| ⚰ **Windows XP/Vista Build** | inkscape | Mar 2018 | Blocked Cairo/Pango upgrades | **KEEP BURIED** — Zero viable user base |
 
 Every finding references a real commit SHA, MR number, or issue ID.
 
@@ -131,11 +135,13 @@ The ADK agent also carries a **GitLab MCPToolset** (`StdioConnectionParams` → 
 
 **Step 3 — Evaluate.** Gemini 3 Flash checks whether the original constraint is still valid, using a curated list of known industry changes (Stripe API additions, PostgreSQL upgrades, etc.). Returns feasibility score 0–10.
 
-**Step 4 — Compete.** Gemini 3 Flash assesses whether competitors have shipped the feature since the kill date. Rates market urgency: Critical / High / Medium / Low.
+**Step 4 — Challenge.** A second independent Gemini 3 Flash instance (the Challenger Agent) adversarially stress-tests every `revive_now` recommendation. Asks: "What could cause this revival to fail?" and surfaces hidden risks the primary analysis may have missed. This is independent parallel execution — not a retry.
 
-**Step 5 — Report.** ADK `save_report` tool persists all findings to MongoDB Atlas and writes a markdown report to disk.
+**Step 5 — Compete.** Gemini 3 Flash assesses whether competitors have shipped the feature since the kill date. Rates market urgency: Critical / High / Medium / Low.
 
-**Step 6 — Act.** On user request, ADK `create_issue` tool creates a real GitLab issue with the full revival assessment and logs it to the `revival_log` MongoDB collection.
+**Step 6 — Report.** ADK `save_report` tool persists all findings to MongoDB Atlas and writes a markdown report to disk. Every report includes `mcp_calls_log` — a full audit trail of GitLab MCP tool calls (tool name, repo, result count).
+
+**Step 7 — Act.** On user request, ADK `create_issue` tool creates a real GitLab issue with the full revival assessment and logs it to the `revival_log` MongoDB collection.
 
 ---
 
