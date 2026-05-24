@@ -351,6 +351,8 @@ async def queue_put_report(emit, report: dict):
 
 def _url_to_path(url: str) -> str:
     url = url.rstrip("/")
+    if url.endswith(".git"):
+        url = url[:-4]
     if "gitlab.com/" in url:
         return url.split("gitlab.com/", 1)[1]
     return url

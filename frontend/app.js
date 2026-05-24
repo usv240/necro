@@ -739,7 +739,10 @@ async function addWatch() {
 
 async function removeWatch(path) {
   try {
-    const r = await fetch(`/api/watch/${encodeURIComponent(path)}`, { method: 'DELETE' });
+    // Encode each path segment individually — don't encode slashes, since FastAPI's
+    // {project_path:path} route matches raw slashes in the URL path.
+    const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+    const r = await fetch(`/api/watch/${encodedPath}`, { method: 'DELETE' });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || 'Failed');
     toast(`Removed ${path}`, 'info');
