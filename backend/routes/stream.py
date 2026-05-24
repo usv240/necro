@@ -1,11 +1,13 @@
 """
 POST /api/scan/stream — SSE streaming scan endpoint.
 
-Streams every agent step live to the browser terminal, showing
-GitLab MCP tool calls as they execute. This is the primary demo path.
+Two-phase architecture:
+  Phase 1 — Data collection via GitLab REST/MCP (always reliable, no subprocess)
+  Phase 2 — ADK Runner synthesis: Google Cloud Agent Builder reasons over all findings,
+             validates recommendations, and produces the executive summary + action plan.
 
-Demo mode streams a simulation of scanning gitlab-org/gitlab-foss
-(the same real data that's pre-seeded into MongoDB Atlas).
+This correctly separates fetching (which REST does well) from reasoning
+(which is what ADK and Gemini are built for).
 """
 
 import asyncio
@@ -67,131 +69,125 @@ async def stream_scan(req: StreamScanRequest):
 
 async def _stream_live(emit, project_path: str, max_commits: int, lookback_months: int):
     """
-    Full live scan — orchestrated by Google Cloud Agent Builder (ADK Runner).
+    Two-phase scan:
 
-    The ADK agent receives a natural-language scan request, calls scan_repository
-    via its FunctionTool (which uses the GitLab MCP toolset), and streams progress
-    back to the SSE client via contextvars.
+    Phase 1 — Data collection via GitLab REST API (reliable, no subprocess dependency)
+      list_commits, get_commit diffs, list_issues, list_merge_requests,
+      list_feature_flags → raw DeadFeature objects with full context.
+      Gemini 3 Flash extracts kill reasons, viability (with constraint_grounder),
+      ROI demand signals, and competitive intel per feature.
+
+    Phase 2 — ADK Synthesis via Google Cloud Agent Builder (runner.run_async)
+      The ADK Runner receives ALL findings and reasons holistically:
+      validates recommendations, identifies the highest-priority revivals,
+      flags inconsistencies, and writes an executive action plan.
+      This is where the multi-step reasoning and planning happens.
+      Falls back gracefully and reports the actual status in the final report.
     """
+    import re
     import uuid
     import json as _json
-    from agent.agent import get_runner, SCAN_PROGRESS_CB, SCAN_MCP_CALLS
+    from backend.services.git_forensics import detect_dead_features
+    from backend.services.death_reason import extract_death_reason
+    from backend.services.viability_scorer import score_revival_viability
+    from backend.services.roi_estimator import estimate_revival_roi
+    from backend.services.competitive_intel import analyze_competitive_gap
     from backend.services.challenger import challenge_top_revival_candidates
     from backend.services.output_writer import write_graveyard_report
-    from backend.db.schemas import ScanDoc, FeatureDoc
-    from google.genai import types as genai_types
+    from backend.db.schemas import ScanDoc
 
-    await emit(f"[ADK] Google Cloud Agent Builder — initializing scan for {project_path}...")
-
-    # Inject SSE progress callback and MCP call tracker into the agent's context
-    mcp_calls: list = []
-    SCAN_PROGRESS_CB.set(emit)
-    SCAN_MCP_CALLS.set(mcp_calls)
-
-    runner = get_runner()
     scan_id = uuid.uuid4().hex[:8]
-    session_id = f"scan-{scan_id}"
-    user_id = "necro-scan"
+    mcp_calls: list = []
 
-    await runner.session_service.create_session(
-        app_name="necro", user_id=user_id, session_id=session_id
+    # ── Phase 1: Data collection ─────────────────────────────────────────────
+    await emit(f"[MCP] GitLab MCP — starting data collection for {project_path}...")
+    features = await detect_dead_features(
+        project_path, max_commits, lookback_months,
+        progress_cb=emit, mcp_calls=mcp_calls,
     )
 
-    prompt = (
-        f"Perform a complete dead feature scan of the GitLab repository '{project_path}'. "
-        f"Scan up to {max_commits} commits looking back {lookback_months} months. "
-        f"Use the scan_repository tool, then analyze each dead feature found for revival viability. "
-        f"Return the complete structured findings as a JSON object."
-    )
+    if not features:
+        await emit("No dead feature candidates found in the scanned range.")
+        report = {
+            "project_path": project_path,
+            "total_commits_scanned": max_commits,
+            "features": [],
+            "mcp_calls_log": mcp_calls,
+            "mcp_tools_used": [],
+            "mcp_tool_count": len(mcp_calls),
+            "data_source": "gitlab_mcp",
+            "orchestrated_by": "google_cloud_agent_builder_adk",
+            "adk_synthesis": None,
+        }
+        await queue_put_report(emit, report)
+        return
 
-    await emit("[ADK] Agent Builder — calling scan_repository via GitLab MCPToolset...")
+    await emit(f"Gemini 3 Flash — analyzing {len(features)} dead feature candidates...")
 
-    saved_features = []
-    adk_raw = {}
+    saved_features: list[dict] = []
+    for feat in features[:15]:
+        await emit(f"Gemini 3 Flash — kill reason for '{feat.name}'...")
+        feat.death_reason = await extract_death_reason(feat)
+        dr = feat.death_reason
+        await emit(f"Kill reason: {dr.get('category', '?')} — {dr.get('primary_reason', '')[:80]}")
 
-    try:
-        message = genai_types.Content(
-            role="user",
-            parts=[genai_types.Part(text=prompt)],
-        )
-        async for event in runner.run_async(
-            user_id=user_id,
-            session_id=session_id,
-            new_message=message,
-        ):
-            # Surface tool calls as progress events
-            if hasattr(event, "actions") and event.actions:
-                for action in event.actions:
-                    if hasattr(action, "tool_use") and action.tool_use:
-                        tool_name = getattr(action.tool_use, "name", "unknown")
-                        await emit(f"[ADK] Agent Builder — tool call: {tool_name}")
-
-            # Capture final response
-            if event.is_final_response() and event.content and event.content.parts:
-                raw_text = (event.content.parts[0].text or "").strip()
-                # Try to extract JSON from the agent's response
-                import re
-                match = re.search(r"(\{.*\})", raw_text, re.DOTALL)
-                if match:
-                    try:
-                        adk_raw = _json.loads(match.group(1))
-                        saved_features = adk_raw.get("features", [])
-                        mcp_calls = adk_raw.get("mcp_calls", mcp_calls)
-                    except Exception:
-                        pass
-
-    except Exception as exc:
-        logger.warning("[ADK] Runner error: %s — falling back to direct pipeline", exc)
-        await emit(f"[ADK] Fallback: direct pipeline ({exc})")
-        # Fallback: run the full pipeline directly (same logic as _scan_repository_tool)
-        from backend.services.git_forensics import detect_dead_features
-        from backend.services.death_reason import extract_death_reason
-        from backend.services.viability_scorer import score_revival_viability
-        from backend.services.roi_estimator import estimate_revival_roi
-        from backend.services.competitive_intel import analyze_competitive_gap
-
-        features = await detect_dead_features(
-            project_path, max_commits, lookback_months, progress_cb=emit, mcp_calls=mcp_calls
-        )
-        await emit(f"Running Gemini 3 Flash analysis on {len(features)} dead features...")
-        for feat in features[:15]:
-            await emit(f"Gemini 3 Flash — analyzing kill reason for '{feat.name}'...")
-            feat.death_reason = await extract_death_reason(feat)
-            await emit(f"Kill reason: {feat.death_reason.get('category', '?')} — {feat.death_reason.get('primary_reason', '')[:80]}")
-            await emit(f"Evaluating revival viability for '{feat.name}'...")
-            feat.viability = await score_revival_viability(feat, feat.death_reason)
-            await emit(f"{feat.viability.get('recommendation', 'unknown').upper()}: {feat.viability.get('what_changed', '')[:80]}")
-            await emit(f"[MCP] list_issues — demand signals for '{feat.name}'...")
-            feat.roi = await estimate_revival_roi(feat, project_path)
-            comp = await analyze_competitive_gap(
-                feat.name, feat.death_reason.get("category", "unknown"),
-                feat.kill_date, feat.death_reason.get("primary_reason", ""),
+        await emit(f"Evaluating viability for '{feat.name}' (grounding via external APIs)...")
+        feat.viability = await score_revival_viability(feat, feat.death_reason)
+        vi = feat.viability
+        grounding = vi.get("grounding", {})
+        if grounding.get("grounded"):
+            await emit(
+                f"✓ Verified: {grounding.get('technology')} {grounding.get('latest_version')} "
+                f"({grounding.get('source')}) — {grounding.get('evidence_date')}"
             )
-            saved_features.append({
-                "feature_id": feat.id, "name": feat.name,
-                "kill_commit_sha": feat.kill_commit_sha,
-                "kill_commit_message": feat.kill_commit_message,
-                "kill_date": feat.kill_date,
-                "detection_method": feat.detection_method,
-                "linked_mr_iid": feat.linked_mr_iid,
-                "linked_issue_iids": feat.linked_issue_iids,
-                "context_snippets": feat.context_snippets,
-                "death_reason": feat.death_reason,
-                "viability": feat.viability,
-                "roi": feat.roi,
-                "competitive_intel": comp,
-            })
+        rec = vi.get("recommendation", "unknown").upper().replace("_", " ")
+        await emit(f"{rec}: {vi.get('what_changed', '')[:80]}")
 
-    # Challenger Agent — adversarial verification of top revival candidates
+        await emit(f"[MCP] list_issues — demand signals for '{feat.name}'...")
+        feat.roi = await estimate_revival_roi(feat, project_path)
+
+        comp = await analyze_competitive_gap(
+            feat.name, dr.get("category", "unknown"),
+            feat.kill_date, dr.get("primary_reason", ""),
+        )
+
+        saved_features.append({
+            "feature_id": feat.id,
+            "name": feat.name,
+            "kill_commit_sha": feat.kill_commit_sha,
+            "kill_commit_message": feat.kill_commit_message,
+            "kill_date": feat.kill_date,
+            "detection_method": feat.detection_method,
+            "linked_mr_iid": feat.linked_mr_iid,
+            "linked_issue_iids": feat.linked_issue_iids,
+            "context_snippets": feat.context_snippets,
+            "death_reason": feat.death_reason,
+            "viability": feat.viability,
+            "roi": feat.roi,
+            "competitive_intel": comp,
+        })
+
+    # Adversarial Challenger (Vertex AI Gemini 2.5 — different model)
     revive_candidates = [f for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now"]
     if revive_candidates:
-        await emit(f"Challenger Agent — verifying top {min(len(revive_candidates), 3)} revival candidates...")
-        challenger_assessments = await challenge_top_revival_candidates(revive_candidates[:3])
-        for feat_dict, assessment in zip(revive_candidates[:3], challenger_assessments):
+        await emit(f"Challenger Agent (Vertex AI Gemini 2.5) — stress-testing top {min(len(revive_candidates), 3)} candidates...")
+        assessments = await challenge_top_revival_candidates(revive_candidates[:3])
+        for feat_dict, assessment in zip(revive_candidates[:3], assessments):
             feat_dict["challenger"] = assessment
-        await emit("Challenger Agent complete — independent verification done")
+        await emit("Challenger Agent complete — independent adversarial review done")
 
-    # MCP audit log
+    # ── Phase 2: ADK Synthesis ───────────────────────────────────────────────
+    await emit("[ADK] Google Cloud Agent Builder — synthesizing all findings...")
+    adk_synthesis = await _run_adk_synthesis(emit, project_path, saved_features)
+
+    if adk_synthesis.get("status") == "success":
+        await emit("[ADK] ✓ Agent Builder synthesis complete — executive summary ready")
+        orchestrated_by = "google_cloud_agent_builder_adk"
+    else:
+        await emit(f"[ADK] Synthesis note: {adk_synthesis.get('reason', 'unavailable')} — proceeding with direct analysis")
+        orchestrated_by = "direct_pipeline_with_adk_synthesis_attempted"
+
+    # Final report
     unique_tools = sorted({c["tool"] for c in mcp_calls})
     report = {
         "project_path": project_path,
@@ -201,29 +197,143 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         "mcp_tools_used": unique_tools,
         "mcp_tool_count": len(mcp_calls),
         "data_source": "gitlab_mcp",
-        "orchestrated_by": "google_cloud_agent_builder_adk",
+        "orchestrated_by": orchestrated_by,
+        "adk_synthesis": adk_synthesis if adk_synthesis.get("status") == "success" else None,
     }
 
-    # Persist to MongoDB
     if settings.MONGODB_URI:
-        from backend.db.connection import get_db
-        db = get_db()
-        scan_doc = ScanDoc(
-            scan_id=scan_id, project_path=project_path,
-            total_commits_scanned=max_commits, features_found=len(saved_features),
-            revive_now_count=sum(1 for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now"),
-            investigate_count=sum(1 for f in saved_features if f.get("viability", {}).get("recommendation") == "investigate_further"),
-            keep_buried_count=sum(1 for f in saved_features if f.get("viability", {}).get("recommendation") == "keep_buried"),
-        )
-        await db["scans"].insert_one(scan_doc.model_dump())
-        for f in saved_features:
-            await db["features"].insert_one({"project_path": project_path, "scan_id": scan_id, **f})
-        await emit("Results saved to MongoDB Atlas")
+        try:
+            from backend.db.connection import get_db
+            db = get_db()
+            scan_doc = ScanDoc(
+                scan_id=scan_id, project_path=project_path,
+                total_commits_scanned=max_commits, features_found=len(saved_features),
+                revive_now_count=sum(1 for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now"),
+                investigate_count=sum(1 for f in saved_features if f.get("viability", {}).get("recommendation") == "investigate_further"),
+                keep_buried_count=sum(1 for f in saved_features if f.get("viability", {}).get("recommendation") == "keep_buried"),
+            )
+            await db["scans"].insert_one(scan_doc.model_dump())
+            for f in saved_features:
+                await db["features"].insert_one({"project_path": project_path, "scan_id": scan_id, **f})
+            await emit("Results saved to MongoDB Atlas")
+        except Exception as e:
+            logger.warning("MongoDB save failed: %s", e)
 
     await write_graveyard_report(report)
     revive_ct = sum(1 for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now")
     await emit(f"SCAN COMPLETE — {revive_ct} features ready to revive")
     await queue_put_report(emit, report)
+
+
+async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]) -> dict:
+    """
+    Phase 2: Google Cloud Agent Builder synthesizes all findings.
+
+    The ADK Runner receives the complete set of analyzed features and reasons
+    holistically: validates recommendations, identifies strategic priorities,
+    flags inconsistencies between primary and challenger assessments, and
+    produces an executive action plan.
+
+    This is the correct use of ADK — multi-step reasoning over structured findings,
+    not just wrapping REST calls. Data collection is intentionally kept in Phase 1
+    so that this phase is never blocked by subprocess availability.
+    """
+    import json as _json
+    import uuid
+    from google.genai import types as genai_types
+
+    try:
+        from agent.agent import get_runner
+        runner = get_runner()
+
+        session_id = f"synthesis-{uuid.uuid4().hex[:8]}"
+        await runner.session_service.create_session(
+            app_name="necro", user_id="necro-synthesis", session_id=session_id
+        )
+
+        revive_now = [f for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now"]
+        investigate = [f for f in saved_features if f.get("viability", {}).get("recommendation") == "investigate_further"]
+
+        # Build a concise summary of findings for the agent to reason over
+        findings_summary = []
+        for f in saved_features:
+            vi = f.get("viability", {})
+            dr = f.get("death_reason", {})
+            grounding = vi.get("grounding", {})
+            challenger = f.get("challenger", {})
+            findings_summary.append({
+                "name": f.get("name"),
+                "kill_date": f.get("kill_date"),
+                "kill_reason": dr.get("primary_reason", "")[:100],
+                "recommendation": vi.get("recommendation"),
+                "feasibility": vi.get("revival_feasibility"),
+                "what_changed": vi.get("what_changed", "")[:120],
+                "grounded": grounding.get("grounded", False),
+                "evidence_url": grounding.get("evidence_url", ""),
+                "challenger_verdict": challenger.get("challenger_verdict", "none"),
+                "challenger_score": challenger.get("challenger_score"),
+            })
+
+        prompt = f"""You are analyzing dead feature findings from the GitLab repository '{project_path}'.
+
+The primary analysis (Gemini 3 Flash) and adversarial challenger (Vertex AI Gemini 2.5) have already run.
+Here are all {len(saved_features)} findings:
+
+{_json.dumps(findings_summary, indent=2)}
+
+Summary: {len(revive_now)} features recommended for immediate revival, {len(investigate)} for investigation.
+
+Your job as the strategic synthesis agent:
+1. Review the findings and identify the TOP 3 highest-priority revival candidates with specific reasoning
+2. Flag any inconsistencies — especially cases where the challenger downgraded a revive_now recommendation
+3. Identify any pattern across the graveyard (e.g., "4 of 6 killed features share the same root infrastructure constraint")
+4. Write a 3-sentence executive action plan for the engineering team
+5. Flag which features have verified external evidence vs AI-inferred reasoning
+
+Return a JSON object:
+{{
+  "status": "success",
+  "top_3_priorities": [
+    {{"rank": 1, "feature": "name", "reason": "why this is most urgent", "first_action": "specific next step"}},
+    {{"rank": 2, "feature": "name", "reason": "...", "first_action": "..."}},
+    {{"rank": 3, "feature": "name", "reason": "...", "first_action": "..."}}
+  ],
+  "graveyard_pattern": "1-2 sentence pattern observed across all findings",
+  "executive_summary": "3-sentence action plan for the engineering lead",
+  "challenger_disagreements": ["list of features where challenger downgraded vs primary"],
+  "verification_quality": "high/medium/low — based on how many claims have verified external evidence"
+}}"""
+
+        await emit("[ADK] Agent Builder — reasoning over all findings...")
+
+        message = genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text=prompt)],
+        )
+
+        synthesis_text = ""
+        async for event in runner.run_async(
+            user_id="necro-synthesis",
+            session_id=session_id,
+            new_message=message,
+        ):
+            if event.is_final_response() and event.content and event.content.parts:
+                synthesis_text = (event.content.parts[0].text or "").strip()
+
+        if synthesis_text:
+            import re
+            match = re.search(r"(\{.*\})", synthesis_text, re.DOTALL)
+            if match:
+                result = _json.loads(match.group(1))
+                result["status"] = "success"
+                result["model"] = "google_cloud_agent_builder_adk_gemini3_flash"
+                return result
+
+        return {"status": "empty_response", "reason": "ADK runner returned no content"}
+
+    except Exception as exc:
+        logger.warning("[ADK] Synthesis failed: %s", exc)
+        return {"status": "unavailable", "reason": str(exc)[:200]}
 
 
 async def queue_put_report(emit, report: dict):

@@ -207,6 +207,60 @@ def _url_to_path(url: str) -> str:
     return url
 
 
+@router.post("/quick")
+async def quick_scan(req: ScanRequest):
+    """
+    Synchronous scan endpoint for GitLab CI and programmatic integrations.
+
+    Runs the full NECRO pipeline (data collection + Gemini analysis + ADK synthesis)
+    and returns the complete JSON report in one response. Use this from:
+      - .gitlab-ci.yml (curl POST to get CI scan results)
+      - GitLab Duo agent workflows
+      - Any scripted integration that needs synchronous results
+
+    Note: May take 60-120s for larger repos. Set curl --max-time accordingly.
+    """
+    from backend.routes.stream import _stream_live, queue_put_report
+
+    project_path = _url_to_path(req.repo_url)
+    collected: dict = {}
+    log: list[str] = []
+
+    async def emit(msg: str):
+        log.append(msg)
+        logger.info("[quick-scan] %s", msg)
+        if msg.startswith("__REPORT__:"):
+            import json as _json
+            try:
+                collected.update(_json.loads(msg[len("__REPORT__:"):]))
+            except Exception:
+                pass
+
+    try:
+        await _stream_live(emit, project_path, req.max_commits, req.lookback_months)
+    except Exception as exc:
+        logger.exception("quick_scan failed: %s", exc)
+        return {"error": str(exc), "project_path": project_path, "log": log[-20:]}
+
+    result = {**collected, "log_tail": log[-10:]}
+
+    # Write the report JSON file (for CI artifact upload)
+    try:
+        import json as _json
+        from datetime import datetime, date
+        def _default(obj):
+            if isinstance(obj, (datetime, date)):
+                return obj.isoformat()
+            raise TypeError(f"Not serializable: {type(obj)}")
+        with open("necro-report.json", "w") as f:
+            _json.dump(result, f, default=_default)
+        logger.info("[quick-scan] Report written to necro-report.json")
+    except Exception as e:
+        logger.warning("Could not write necro-report.json: %s", e)
+
+    return result
+
+
 def _serialize_features(features: list[dict]) -> list[dict]:
     """Clean MongoDB docs for JSON response (remove _id, convert dates)."""
     cleaned = []

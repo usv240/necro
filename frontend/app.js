@@ -253,6 +253,45 @@ function renderReport(data) {
     postBtn._reportData = data;
   }
 
+  // ADK Synthesis panel — show when ADK successfully synthesized findings
+  const synthPanel = document.getElementById('adkSynthesisPanel');
+  const synth = data.adk_synthesis;
+  if (synthPanel && synth && synth.status === 'success') {
+    const top3 = (synth.top_3_priorities || []).map((p, i) => `
+      <div class="synth-priority">
+        <span class="synth-rank">#${p.rank || i + 1}</span>
+        <div>
+          <strong>${escHtml(p.feature || '')}</strong>
+          <div class="synth-reason">${escHtml(p.reason || '')}</div>
+          <div class="synth-action">→ ${escHtml(p.first_action || '')}</div>
+        </div>
+      </div>`).join('');
+
+    const disagreements = (synth.challenger_disagreements || []);
+    const disagreementsHtml = disagreements.length
+      ? `<div class="synth-section"><span class="synth-label">Challenger disagreements</span> ${disagreements.map(d => `<span class="synth-tag synth-tag-warn">${escHtml(d)}</span>`).join(' ')}</div>`
+      : '';
+
+    const verifBadge = synth.verification_quality
+      ? `<span class="synth-tag synth-tag-${synth.verification_quality === 'high' ? 'ok' : synth.verification_quality === 'medium' ? 'warn' : 'bad'}">${synth.verification_quality} verification</span>`
+      : '';
+
+    synthPanel.innerHTML = `
+      <div class="synth-header">
+        <span class="synth-adk-badge">Google Cloud Agent Builder</span>
+        <span style="font-size:0.72rem;color:var(--text-muted);margin-left:0.5rem">ADK strategic synthesis</span>
+        ${verifBadge}
+      </div>
+      ${synth.executive_summary ? `<div class="synth-exec">${escHtml(synth.executive_summary)}</div>` : ''}
+      ${synth.graveyard_pattern ? `<div class="synth-section"><span class="synth-label">Pattern</span> <span class="synth-pattern">${escHtml(synth.graveyard_pattern)}</span></div>` : ''}
+      ${top3 ? `<div class="synth-section"><span class="synth-label">Top priorities</span>${top3}</div>` : ''}
+      ${disagreementsHtml}
+    `;
+    synthPanel.style.display = '';
+  } else if (synthPanel) {
+    synthPanel.style.display = 'none';
+  }
+
   renderCards(features);
 }
 
@@ -835,6 +874,7 @@ function esc(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+const escHtml = esc; // alias used by ADK synthesis panel
 
 // ── Keyboard shortcuts ─────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {

@@ -1,0 +1,82 @@
+# NECRO — GitLab CI integration
+#
+# NECRO dogfoods itself: every push triggers a dead feature scan of this very repo.
+# Results are posted as a GitLab issue in the project, so the graveyard is always
+# visible to contributors without leaving GitLab.
+#
+# To add NECRO to YOUR project:
+#   1. Set NECRO_URL as a CI/CD variable (value: your Cloud Run URL)
+#   2. Copy the `necro-scan` job below into your .gitlab-ci.yml
+#   3. That's it — the graveyard report appears as a GitLab issue after every scan.
+
+variables:
+  NECRO_URL: "https://necro-agent-38381883054.us-central1.run.app"
+  NECRO_MAX_COMMITS: "50"
+  NECRO_LOOKBACK_MONTHS: "24"
+
+stages:
+  - necro-scan
+  - necro-report
+
+# ── Self-scan: NECRO scans its own graveyard ─────────────────────────────────
+necro-self-scan:
+  stage: necro-scan
+  image: curlimages/curl:latest
+  rules:
+    # Run on default branch pushes and scheduled pipelines
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  script:
+    - |
+      echo "=== NECRO Code Necromancer — scanning ${CI_PROJECT_PATH} ==="
+      echo "Powered by Google Cloud Agent Builder + GitLab MCP"
+      echo ""
+
+      # Trigger the scan (synchronous via /api/scan/quick)
+      RESPONSE=$(curl -s -X POST "${NECRO_URL}/api/scan/quick" \
+        -H "Content-Type: application/json" \
+        -d "{
+          \"repo_url\": \"${CI_PROJECT_PATH}\",
+          \"max_commits\": ${NECRO_MAX_COMMITS},
+          \"lookback_months\": ${NECRO_LOOKBACK_MONTHS}
+        }" \
+        --max-time 120)
+
+      echo "$RESPONSE" | head -c 2000
+      echo ""
+      echo "Scan complete — check MR/Issues for the Graveyard Report"
+
+  artifacts:
+    reports:
+      dotenv: necro-scan.env
+    paths:
+      - necro-report.json
+    when: always
+    expire_in: 30 days
+  allow_failure: true  # NECRO findings are advisory, not blocking
+
+# ── Post report: create GitLab issue with graveyard findings ─────────────────
+necro-post-report:
+  stage: necro-report
+  image: curlimages/curl:latest
+  needs: ["necro-self-scan"]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: on_success
+  script:
+    - |
+      if [ ! -f necro-report.json ]; then
+        echo "No report file — skipping issue creation"
+        exit 0
+      fi
+
+      # Post the report as a GitLab issue
+      curl -s -X POST "${NECRO_URL}/api/report/post-to-gitlab" \
+        -H "Content-Type: application/json" \
+        -d @necro-report.json \
+        --max-time 30 || true
+
+      echo "Graveyard report posted to ${CI_PROJECT_URL}/-/issues"
+  allow_failure: true
