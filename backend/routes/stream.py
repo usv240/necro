@@ -13,6 +13,7 @@ This correctly separates fetching (which REST does well) from reasoning
 import asyncio
 import json
 import logging
+import re
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -84,7 +85,6 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
       This is where the multi-step reasoning and planning happens.
       Falls back gracefully and reports the actual status in the final report.
     """
-    import re
     import uuid
     import json as _json
     from backend.services.git_forensics import detect_dead_features
@@ -118,11 +118,20 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             "data_source": "gitlab_mcp",
             "orchestrated_by": "google_cloud_agent_builder_adk",
             "adk_synthesis": None,
+            "resurrection_chains": [],
         }
         await queue_put_report(emit, report)
         return
 
     await emit(f"Gemini 3 Flash — analyzing {len(features)} dead feature candidates...")
+
+    # Fetch open issues once for demand signal matching
+    await emit(f"[MCP] list_issues (open) — fetching open issue demand signals...")
+    from backend.services.gitlab_mcp import mcp as _mcp
+    all_open_issues = await _mcp.list_open_issues(project_path, per_page=100)
+    if all_open_issues:
+        mcp_calls.append({"tool": "list_issues_open", "project": project_path})
+        await emit(f"[MCP] Found {len(all_open_issues)} open issues — matching to dead features...")
 
     saved_features: list[dict] = []
     for feat in features[:15]:
@@ -151,6 +160,11 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             feat.kill_date, dr.get("primary_reason", ""),
         )
 
+        # Match open issues against this dead feature (Open Requests Match)
+        open_matches = _match_open_requests(feat.name, all_open_issues, project_path)
+        if open_matches:
+            await emit(f"🔥 Open Requests Match: {len(open_matches)} open issues are asking for '{feat.name}'")
+
         saved_features.append({
             "feature_id": feat.id,
             "name": feat.name,
@@ -165,6 +179,7 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             "viability": feat.viability,
             "roi": feat.roi,
             "competitive_intel": comp,
+            "open_issue_matches": open_matches,
         })
 
     # Adversarial Challenger (Vertex AI Gemini 2.5 — different model)
@@ -187,6 +202,16 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         await emit(f"[ADK] Synthesis note: {adk_synthesis.get('reason', 'unavailable')} — proceeding with direct analysis")
         orchestrated_by = "direct_pipeline_with_adk_synthesis_attempted"
 
+    # ── Resurrection Chains — group features by shared constraint ─────────────
+    resurrection_chains = _compute_resurrection_chains(saved_features)
+    if resurrection_chains:
+        total_locked = sum(c["feature_count"] for c in resurrection_chains)
+        total_fixes = len(resurrection_chains)
+        await emit(
+            f"🔗 Resurrection Chains: {total_fixes} shared constraint{'s' if total_fixes != 1 else ''} "
+            f"lock {total_locked} features — fix one constraint, unlock multiple features"
+        )
+
     # Final report
     unique_tools = sorted({c["tool"] for c in mcp_calls})
     report = {
@@ -199,6 +224,7 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         "data_source": "gitlab_mcp",
         "orchestrated_by": orchestrated_by,
         "adk_synthesis": adk_synthesis if adk_synthesis.get("status") == "success" else None,
+        "resurrection_chains": resurrection_chains,
     }
 
     if settings.MONGODB_URI:
@@ -223,7 +249,6 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
     revive_ct = sum(1 for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now")
     await emit(f"SCAN COMPLETE — {revive_ct} features ready to revive")
     await queue_put_report(emit, report)
-
 
 async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]) -> dict:
     """
@@ -356,3 +381,142 @@ def _url_to_path(url: str) -> str:
     if "gitlab.com/" in url:
         return url.split("gitlab.com/", 1)[1]
     return url
+
+
+def _match_open_requests(feature_name: str, open_issues: list[dict],
+                          project_path: str) -> list[dict]:
+    """
+    Match open GitLab issues to a dead feature by keyword overlap.
+
+    For each open issue, check if its title shares 2+ significant words with the
+    feature name. Returns a list of matching issues with {iid, title, url}.
+
+    This surfaces the key insight: "Users are actively asking for what you killed."
+    """
+    if not open_issues or not feature_name:
+        return []
+
+    # Tokenize feature name — filter out short/common words
+    stop_words = {"the", "and", "for", "with", "from", "that", "this", "was", "are",
+                  "has", "have", "been", "feat", "fix", "add", "remove", "update",
+                  "revert", "disable", "enable", "support", "use", "via", "allow"}
+    name_tokens = {
+        w.lower() for w in re.split(r"[\s_\-/]+", feature_name)
+        if len(w) > 3 and w.lower() not in stop_words
+    }
+    if not name_tokens:
+        return []
+
+    gitlab_base = "https://gitlab.com"
+    matches = []
+    for issue in open_issues:
+        title = issue.get("title", "")
+        body = issue.get("description", "") or ""
+        search_text = (title + " " + body[:200]).lower()
+        # Check overlap: at least 1 strong token match in title, or 2+ in title+body
+        title_tokens = set(re.split(r"[\s_\-/.,;:!?]+", title.lower()))
+        title_overlap = name_tokens & title_tokens
+        if len(title_overlap) >= 1 or len(name_tokens & set(re.split(r"\W+", search_text))) >= 2:
+            issue_url = issue.get("web_url") or f"{gitlab_base}/{project_path}/-/issues/{issue.get('iid', '')}"
+            matches.append({
+                "iid": issue.get("iid"),
+                "title": title[:120],
+                "url": issue_url,
+            })
+            if len(matches) >= 5:
+                break
+
+    return matches
+
+
+# Known technology keywords for resurrection chain detection
+_TECH_KEYWORDS = [
+    "webpack", "angular", "react", "vue", "rails", "django", "flask", "postgres",
+    "mysql", "redis", "elasticsearch", "kubernetes", "docker", "oauth", "graphql",
+    "grpc", "websocket", "sidekiq", "celery", "kafka", "rabbitmq", "nginx", "node",
+    "python", "ruby", "golang", "typescript", "safari", "firefox", "chrome", "ie11",
+    "internet explorer", "openssl", "jwt", "cors", "csrf", "s3", "gcs", "azure",
+    "terraform", "ansible", "gitlab", "github", "bitbucket", "ldap", "saml", "sso",
+]
+
+
+def _compute_resurrection_chains(features: list[dict]) -> list[dict]:
+    """
+    Resurrection Chains — identify shared constraints locking multiple features.
+
+    Groups dead features by the root technology/constraint they share.
+    When 2+ features share a constraint, fixing that constraint unlocks all of them
+    simultaneously — a force-multiplier for engineering effort.
+
+    Returns chains sorted by feature_count descending, minimum chain size = 2.
+    """
+    if not features:
+        return []
+
+    # For each feature, extract constraint keywords
+    def extract_keys(feat: dict) -> set[str]:
+        dr = feat.get("death_reason", {})
+        vi = feat.get("viability", {})
+        text = " ".join([
+            dr.get("specific_constraint", ""),
+            dr.get("primary_reason", ""),
+            feat.get("kill_commit_message", ""),
+            vi.get("what_changed", ""),
+        ]).lower()
+
+        keys = set()
+        for kw in _TECH_KEYWORDS:
+            if kw in text:
+                keys.add(kw)
+
+        # Also extract first significant word from specific_constraint as a catch-all
+        constraint = dr.get("specific_constraint", "").strip()
+        if constraint:
+            words = [w for w in re.split(r"\W+", constraint.lower()) if len(w) > 4]
+            if words:
+                keys.add(words[0])
+
+        return keys
+
+    keyword_to_features: dict[str, list[dict]] = {}
+    for feat in features:
+        keys = extract_keys(feat)
+        for key in keys:
+            keyword_to_features.setdefault(key, []).append(feat)
+
+    chains = []
+    seen_feature_groups: set[frozenset] = set()
+
+    for keyword, matching_feats in sorted(keyword_to_features.items(),
+                                           key=lambda x: len(x[1]), reverse=True):
+        if len(matching_feats) < 2:
+            continue
+
+        fid_set = frozenset(f.get("feature_id", f.get("name", "")) for f in matching_feats)
+        if fid_set in seen_feature_groups:
+            continue
+        seen_feature_groups.add(fid_set)
+
+        revivable = [
+            f for f in matching_feats
+            if f.get("viability", {}).get("recommendation") in ("revive_now", "investigate_further")
+        ]
+
+        # Build a human-readable fix suggestion
+        what_changed_list = [
+            f.get("viability", {}).get("what_changed", "")
+            for f in matching_feats if f.get("viability", {}).get("what_changed")
+        ]
+        fix_suggestion = what_changed_list[0][:120] if what_changed_list else f"Resolve the {keyword} constraint"
+
+        chains.append({
+            "constraint_key": keyword,
+            "feature_count": len(matching_feats),
+            "revivable_count": len(revivable),
+            "features": [f.get("name", "?") for f in matching_feats[:6]],
+            "feature_ids": [f.get("feature_id", "") for f in matching_feats],
+            "fix_suggestion": fix_suggestion,
+            "impact": "high" if len(revivable) >= 3 else "medium" if len(revivable) >= 2 else "low",
+        })
+
+    return chains[:6]  # top 6 chains max

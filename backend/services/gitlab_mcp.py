@@ -96,6 +96,70 @@ class GitLabClient:
             json={"title": title, "description": description, "labels": ",".join(labels)},
         )
 
+    async def get_project(self, project_path: str) -> Optional[dict]:
+        """Fetch project metadata (incl. default_branch)."""
+        result = await self._get(f"/projects/{_encode(project_path)}")
+        return result if isinstance(result, dict) else None
+
+    async def get_default_branch(self, project_path: str) -> str:
+        """Return the project's default branch name."""
+        proj = await self.get_project(project_path)
+        if proj:
+            return proj.get("default_branch") or "main"
+        return "main"
+
+    async def create_branch(self, project_path: str, branch_name: str,
+                             ref: str = "main") -> Optional[dict]:
+        """Create a new branch from ref."""
+        logger.info("[REST] create_branch → %s: %s (from %s)", project_path, branch_name, ref)
+        return await self._post(
+            f"/projects/{_encode(project_path)}/repository/branches",
+            json={"branch": branch_name, "ref": ref},
+        )
+
+    async def create_file(self, project_path: str, file_path: str, content: str,
+                           branch: str, commit_message: str) -> Optional[dict]:
+        """Create a file on a branch (base64-encoded)."""
+        import base64
+        encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        logger.info("[REST] create_file → %s: %s on %s", project_path, file_path, branch)
+        return await self._post(
+            f"/projects/{_encode(project_path)}/repository/files/{_encode(file_path)}",
+            json={
+                "branch": branch,
+                "content": encoded,
+                "encoding": "base64",
+                "commit_message": commit_message,
+            },
+        )
+
+    async def create_merge_request(self, project_path: str, title: str,
+                                    description: str = "", source_branch: str = "",
+                                    target_branch: str = "main", labels: list[str] | None = None,
+                                    draft: bool = True) -> Optional[dict]:
+        """Create a draft merge request."""
+        labels = labels or []
+        full_title = f"Draft: {title}" if draft else title
+        logger.info("[REST] create_merge_request → %s: %s", project_path, full_title)
+        return await self._post(
+            f"/projects/{_encode(project_path)}/merge_requests",
+            json={
+                "source_branch": source_branch,
+                "target_branch": target_branch,
+                "title": full_title,
+                "description": description,
+                "labels": ",".join(labels),
+                "draft": draft,
+            },
+        )
+
+    async def list_open_issues(self, project_path: str, per_page: int = 100) -> list[dict]:
+        """Fetch open issues — used for demand signal matching against dead features."""
+        return await self._get(
+            f"/projects/{_encode(project_path)}/issues",
+            params={"state": "opened", "per_page": per_page},
+        )
+
     # ── lifecycle stubs (no-ops — no subprocess to manage) ────────────────────
 
     async def start(self) -> None:

@@ -747,6 +747,175 @@ body {
 .roi-bar-item  { display: flex; flex-direction: column; gap: 0.05rem; }
 .roi-bar-divider { width: 1px; height: 2rem; background: rgba(255,255,255,0.08); }
 
+/* ── Ghost MR button ─────────────────────────────────────────────────────── */
+.btn-ghost-mr {
+  background: linear-gradient(135deg, rgba(139,92,246,0.18), rgba(99,102,241,0.18));
+  border: 1px solid rgba(139,92,246,0.5);
+  color: #a78bfa;
+  font-weight: 600;
+  transition: all var(--transition);
+}
+.btn-ghost-mr:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(139,92,246,0.35), rgba(99,102,241,0.35));
+  border-color: #a78bfa;
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 0 12px rgba(139,92,246,0.4);
+}
+.btn-ghost-mr-done {
+  background: rgba(139,92,246,0.2);
+  border: 1px solid #7c3aed;
+  color: #a78bfa;
+}
+.btn-ghost-mr-link {
+  border-color: #7c3aed;
+  color: #a78bfa;
+}
+.btn-ghost-mr-link:hover { color: #fff; background: rgba(124,58,237,0.2); }
+
+/* ── Open Requests box ───────────────────────────────────────────────────── */
+.open-requests-box {
+  background: linear-gradient(135deg, rgba(239,68,68,0.06), rgba(245,158,11,0.06));
+  border: 1px solid rgba(239,68,68,0.25);
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  margin-top: 0.25rem;
+}
+.open-req-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.45rem;
+}
+.open-req-count {
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: #f87171;
+}
+.open-req-insight {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.open-req-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.open-req-list li { font-size: 0.78rem; }
+.open-req-list a {
+  color: var(--amber);
+  text-decoration: none;
+  border-bottom: 1px dotted rgba(245,158,11,0.3);
+}
+.open-req-list a:hover { color: #fff; border-bottom-color: #fff; }
+
+/* ── Resurrection Chains panel ───────────────────────────────────────────── */
+.resurrect-chains-panel {
+  background: linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(59,130,246,0.05) 100%);
+  border: 1px solid rgba(16,185,129,0.2);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin: 0.75rem 0;
+}
+.chains-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.chains-badge {
+  background: linear-gradient(90deg, #059669, #0d9488);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 5px;
+  padding: 0.15rem 0.55rem;
+}
+.chains-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex: 1;
+}
+.chains-count {
+  font-size: 0.7rem;
+  background: rgba(16,185,129,0.12);
+  color: #10b981;
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-weight: 600;
+}
+.chains-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.chain-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid;
+}
+.chain-impact-high  { border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.06); }
+.chain-impact-medium { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.05); }
+.chain-impact-low   { border-color: rgba(107,114,128,0.25); background: rgba(107,114,128,0.04); }
+.chain-icon { font-size: 1rem; flex-shrink: 0; margin-top: 0.1rem; }
+.chain-body { flex: 1; min-width: 0; }
+.chain-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.3rem;
+}
+.chain-keyword {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #10b981;
+  background: rgba(16,185,129,0.1);
+  border-radius: 4px;
+  padding: 0.05rem 0.4rem;
+}
+.chain-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.chain-revivable {
+  font-size: 0.68rem;
+  background: rgba(239,68,68,0.12);
+  color: #f87171;
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  font-weight: 600;
+}
+.chain-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.3rem;
+}
+.chain-feat {
+  font-size: 0.7rem;
+  background: rgba(139,92,246,0.1);
+  color: #a78bfa;
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+}
+.chain-fix {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 760px) {
   .graveyard-grid { grid-template-columns: 1fr; }

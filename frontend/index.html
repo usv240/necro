@@ -147,6 +147,9 @@
     <div id="adkSynthesisPanel" class="adk-synthesis-panel" style="display:none"></div>
     </div>
 
+    <!-- Resurrection Chains panel — shown when shared constraints locking multiple features are detected -->
+    <div id="resurrectChainsPanel" class="resurrect-chains-panel" style="display:none"></div>
+
     <!-- Portfolio ROI bar (populated by JS after scan) -->
     <div class="roi-bar" id="roiBar" style="display:none"></div>
 
@@ -177,6 +180,13 @@
       <h3>Kill Reason Categories</h3>
       <div class="chart-container" style="height:220px">
         <canvas id="categoryChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h3>Cost-Benefit — Effort vs Revival Feasibility</h3>
+      <p style="font-size:0.75rem;color:var(--text-muted);margin:-0.5rem 0 0.75rem">Bubble size = user demand signals. Top-left quadrant = best candidates (easy + feasible).</p>
+      <div class="chart-container" style="height:260px">
+        <canvas id="scatterChart"></canvas>
       </div>
     </div>
   </div>

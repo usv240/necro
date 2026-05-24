@@ -63,6 +63,7 @@ async function checkHealth() {
 // ── State ────────────────────────────────────────────────────────────────────
 let currentFeatures = [];
 let currentFilter = 'all';
+let _reportMeta = {}; // full report payload — used by renderCards, chains, scatter
 
 // ── Scan ────────────────────────────────────────────────────────────────────
 function setRepoUrl(url) {
@@ -176,6 +177,7 @@ function clearResults() {
 function renderReport(data) {
   const features = data.features || [];
   currentFeatures = features;
+  _reportMeta = data;
 
   // Stats
   const reviveCt = features.filter(f => _rec(f) === 'revive_now').length;
@@ -292,6 +294,37 @@ function renderReport(data) {
     synthPanel.style.display = 'none';
   }
 
+  // Resurrection Chains panel — show when chains detected
+  const chainsPanel = document.getElementById('resurrectChainsPanel');
+  const chains = data.resurrection_chains || [];
+  if (chainsPanel && chains.length) {
+    const chainsHtml = chains.map(chain => `
+      <div class="chain-item chain-impact-${chain.impact || 'low'}">
+        <div class="chain-icon">🔗</div>
+        <div class="chain-body">
+          <div class="chain-title">
+            <span class="chain-keyword">${escHtml(chain.constraint_key)}</span>
+            <span class="chain-count">1 fix unlocks ${chain.feature_count} feature${chain.feature_count !== 1 ? 's' : ''}</span>
+            ${chain.revivable_count > 0 ? `<span class="chain-revivable">${chain.revivable_count} revivable now</span>` : ''}
+          </div>
+          <div class="chain-features">${(chain.features || []).map(f => `<span class="chain-feat">${escHtml(f)}</span>`).join('')}</div>
+          <div class="chain-fix">→ ${escHtml(chain.fix_suggestion || '')}</div>
+        </div>
+      </div>`).join('');
+
+    const topChain = chains[0];
+    chainsPanel.innerHTML = `
+      <div class="chains-header">
+        <span class="chains-badge">🔗 Resurrection Chains</span>
+        <span class="chains-sub">Shared constraints locking multiple features — fix once, unlock many</span>
+        ${chains.length > 1 ? `<span class="chains-count">${chains.length} chains detected</span>` : ''}
+      </div>
+      <div class="chains-list">${chainsHtml}</div>`;
+    chainsPanel.style.display = '';
+  } else if (chainsPanel) {
+    chainsPanel.style.display = 'none';
+  }
+
   renderCards(features);
 }
 
@@ -306,7 +339,7 @@ function renderCards(features) {
   // Sort: revive_now first, then investigate, then keep_buried
   const order = { revive_now: 0, investigate_further: 1, keep_buried: 2 };
   const sorted = [...features].sort((a, b) => (order[_rec(a)] ?? 3) - (order[_rec(b)] ?? 3));
-  const isDemo = data.source === 'mongodb_atlas';
+  const isDemo = _reportMeta.source === 'mongodb_atlas';
 
   for (const feat of sorted) {
     const card = buildFeatureCard(feat, isDemo);
@@ -486,10 +519,28 @@ function buildFeatureCard(feat, isDemo) {
         </ul>
       ` : ''}
 
+      ${feat.open_issue_matches && feat.open_issue_matches.length ? `
+        <div class="section-label">🔥 Open Requests — users are asking for this now</div>
+        <div class="open-requests-box">
+          <div class="open-req-header">
+            <span class="open-req-count">${feat.open_issue_matches.length} open issue${feat.open_issue_matches.length !== 1 ? 's' : ''} requesting this feature</span>
+            <span class="open-req-insight">Already built — revival costs ~80% less than a rebuild.</span>
+          </div>
+          <ul class="open-req-list">
+            ${feat.open_issue_matches.slice(0, 4).map(m => `
+              <li><a href="${esc(m.url)}" target="_blank" rel="noopener">#${m.iid}: ${esc(m.title)}</a></li>
+            `).join('')}
+          </ul>
+        </div>
+      ` : ''}
+
       <div class="card-actions">
         ${rec !== 'keep_buried' ? `
           <button class="btn btn-primary btn-sm" onclick="createRevivalIssue('${featureId}', this)">
             🚀 Create GitLab Issue
+          </button>
+          <button class="btn btn-ghost-mr btn-sm" onclick="createGhostMR('${featureId}', this)" title="NECRO creates a real Draft MR with branch + NECRO_REVIVAL.md plan file via 3 GitLab MCP write operations">
+            👻 Ghost MR
           </button>
         ` : ''}
         ${feat.linked_mr_iid ? `
@@ -582,8 +633,55 @@ async function createRevivalIssue(featureId, btn) {
   }
 }
 
-// ── Post Graveyard Report to GitLab ─────────────────────────────────────────
-async function postReportToGitLab(data) {
+// ── Create Ghost MR — NECRO creates a real draft GitLab MR ──────────────────
+async function createGhostMR(featureId, btn) {
+  const project = currentFeatures.find(f => (f.feature_id || f.id) === featureId);
+  const projectPath = project ? (project.project_path || '') : '';
+
+  if (!projectPath) {
+    toast('Cannot determine project path for this feature.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Creating Ghost MR...';
+
+  try {
+    const r = await fetch(`/api/revive/${featureId}/ghost-mr`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_path: projectPath }),
+    });
+    const d = await r.json();
+
+    if (!r.ok) throw new Error(d.detail || 'Failed to create Ghost MR');
+
+    btn.innerHTML = '✅ Ghost MR Created';
+    btn.className = 'btn btn-ghost-mr-done btn-sm';
+
+    if (d.mr_url) {
+      const link = document.createElement('a');
+      link.href = d.mr_url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.className = 'btn btn-sm btn-ghost-mr-link';
+      link.textContent = `View Draft MR !${d.mr_iid || ''} ↗`;
+      btn.insertAdjacentElement('afterend', link);
+    }
+
+    toast(
+      `Ghost MR created! Branch: ${d.branch_name} · Plan: ${d.plan_file} · 3 GitLab write ops via MCP`,
+      'success'
+    );
+    loadAuditLog();
+  } catch (e) {
+    btn.disabled = false;
+    btn.innerHTML = '👻 Ghost MR';
+    toast(`Ghost MR: ${e.message}`, 'error');
+  }
+}
+
+// ── Post Graveyard Report to GitLab ─────────────────────────────────────────async function postReportToGitLab(data) {
   const btn = document.getElementById('postToGitLabBtn');
   if (!btn) return;
 
@@ -634,7 +732,6 @@ let _charts = {};
 function renderCharts() {
   if (!currentFeatures.length) return;
   if (_charts.timeline) { Object.values(_charts).forEach(c => c.destroy()); _charts = {}; chartsDrawn = false; }
-
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
   const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
   const textColor = isDark ? '#888898' : '#6b6b8a';
@@ -709,6 +806,67 @@ function renderCharts() {
       scales: {
         x: { ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } },
         y: { ticks: { color: textColor } },
+      }
+    }
+  });
+
+  // Cost-Benefit Scatter — effort (x) vs feasibility (y), bubble size = demand
+  const effortOrder = { days: 1, 'days-weeks': 2, weeks: 3, 'weeks-months': 4, months: 5, 'months-quarters': 6, quarters: 7 };
+  const effortLabels = { 1: 'days', 2: 'days-wks', 3: 'weeks', 4: 'wks-mo', 5: 'months', 6: 'mo-qtr', 7: 'quarters' };
+
+  const scatterData = currentFeatures.map(f => {
+    const vi = f.viability || {};
+    const roi = f.roi || {};
+    const rec = _rec(f);
+    const xVal = effortOrder[vi.effort_category] || 3;
+    const yVal = vi.revival_feasibility || 0;
+    const demand = roi.request_count || 0;
+    return { x: xVal + (Math.random() * 0.4 - 0.2), y: yVal + (Math.random() * 0.3 - 0.15),
+             r: Math.max(5, Math.min(22, demand * 2.5 + 6)), label: f.name, rec };
+  });
+
+  const pointColors = scatterData.map(d =>
+    d.rec === 'revive_now'        ? 'rgba(16,185,129,0.75)' :
+    d.rec === 'investigate_further' ? 'rgba(245,158,11,0.75)' :
+    'rgba(107,114,128,0.45)'
+  );
+
+  _charts.scatter = new Chart(document.getElementById('scatterChart'), {
+    type: 'bubble',
+    data: {
+      datasets: [{
+        label: 'Features',
+        data: scatterData,
+        backgroundColor: pointColors,
+        borderColor: pointColors.map(c => c.replace('0.75', '1').replace('0.45', '0.7')),
+        borderWidth: 1.5,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const d = ctx.raw;
+              const el = effortLabels[Math.round(d.x)] || d.x;
+              return `${d.label}  ·  effort: ${el}  ·  feasibility: ${Math.round(d.y)}/10`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Revival Effort  ←  less effort', color: textColor, font: { size: 11 } },
+          ticks: { color: textColor, callback: v => effortLabels[Math.round(v)] || '' },
+          min: 0, max: 8, grid: { color: gridColor },
+        },
+        y: {
+          title: { display: true, text: 'Feasibility  ↑  higher = easier revival', color: textColor, font: { size: 11 } },
+          ticks: { color: textColor, stepSize: 2 },
+          min: 0, max: 10, grid: { color: gridColor },
+        }
       }
     }
   });
