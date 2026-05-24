@@ -30,11 +30,8 @@ class StreamScanRequest(BaseModel):
 
 @router.post("/stream")
 async def stream_scan(req: StreamScanRequest):
-    """SSE endpoint — streams scan progress then emits the final report."""
+    """SSE endpoint — streams scan progress then emits the final report via ADK Runner."""
     project_path = _url_to_path(req.repo_url)
-    is_gitlab_foss_demo = project_path == "gitlab-org/gitlab-foss"
-    is_inkscape_demo = project_path == "inkscape/inkscape"
-    is_demo = (is_gitlab_foss_demo or is_inkscape_demo) or settings.DEMO_MODE
 
     async def generate():
         queue: asyncio.Queue[str | None] = asyncio.Queue()
@@ -44,13 +41,7 @@ async def stream_scan(req: StreamScanRequest):
 
         async def run_pipeline():
             try:
-                if is_demo or settings.DEMO_MODE:
-                    if is_inkscape_demo:
-                        await _stream_demo_inkscape(emit, project_path)
-                    else:
-                        await _stream_demo(emit, project_path)
-                else:
-                    await _stream_live(emit, project_path, req.max_commits, req.lookback_months)
+                await _stream_live(emit, project_path, req.max_commits, req.lookback_months)
             except Exception as exc:
                 logger.exception("Stream scan failed")
                 await emit(f"ERROR: {exc}")
@@ -72,219 +63,6 @@ async def stream_scan(req: StreamScanRequest):
         await task
 
     return StreamingResponse(generate(), media_type="text/event-stream")
-
-
-async def _stream_demo_inkscape(emit, project_path: str):
-    """
-    Simulated stream for the pre-seeded inkscape/inkscape demo.
-    """
-    await emit("NECRO Code Necromancer initializing...")
-    await asyncio.sleep(0.4)
-    await emit("Connecting to GitLab MCP server (gitlab.com)...")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] list_commits — inkscape/inkscape (last 24 months, page 1)...")
-    await asyncio.sleep(0.5)
-    await emit("[MCP] list_commits returned 6,218 commits (scanning up to 300 per strategy)")
-    await asyncio.sleep(0.3)
-    await emit("Strategy 1/5: Scanning revert commits...")
-    await asyncio.sleep(0.3)
-    await emit("Strategy 2/5: Scanning feature flag disablements...")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] get_commit b3c4d5e — reading diff for 'Disable LPE real-time preview'...")
-    await asyncio.sleep(0.5)
-    await emit("Found: Live Path Effects real-time preview disabled (commit b3c4d5e, May 5 2022)")
-    await asyncio.sleep(0.3)
-    await emit("Strategy 3/5: Scanning 'Remove/Delete/Discontinue' commit messages...")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] get_commit a1b2c3d — 'Remove GTK2 backend — GTK2 is EOL'...")
-    await asyncio.sleep(0.5)
-    await emit("Found: GTK2 rendering backend removed (commit a1b2c3d, Jan 15 2020)")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] get_commit d4e5f6a — 'Drop Windows XP and Vista support'...")
-    await asyncio.sleep(0.4)
-    await emit("Found: Windows XP/Vista compatibility build dropped (commit d4e5f6a, Mar 20 2018)")
-    await asyncio.sleep(0.3)
-    await emit("Strategy 4/5: Scanning closed issues for shelved features...")
-    await asyncio.sleep(0.4)
-    await emit("[MCP] list_issues — inkscape/inkscape (closed, shelved labels)...")
-    await asyncio.sleep(0.5)
-    await emit("[MCP] list_issues returned 1,847 closed issues")
-    await asyncio.sleep(0.3)
-    await emit("Strategy 5/5: Scanning merged MRs for feature branches...")
-    await asyncio.sleep(0.4)
-    await emit("[MCP] get_commit 7c8d9e0 — 'Replace Ghostscript PDF import with Poppler'...")
-    await asyncio.sleep(0.4)
-    await emit("[MCP] list_merge_request_notes — MR #2341 (Ghostscript PDF import)...")
-    await asyncio.sleep(0.4)
-    await emit("MR discussion: 'Direct Ghostscript rasterizes text to curves — Poppler preserves text layers'")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] list_merge_request_notes — MR #3156 (LPE real-time preview)...")
-    await asyncio.sleep(0.4)
-    await emit("MR discussion: 'Complex paths hang UI thread for 10-30 seconds — disabling until off-thread rendering'")
-    await asyncio.sleep(0.3)
-    await emit("Found 4 dead feature candidates — running Gemini 3 Flash analysis...")
-    await asyncio.sleep(0.4)
-    await emit("Gemini 3 Flash — analyzing kill reason for 'Live Path Effects Real-Time Preview'...")
-    await asyncio.sleep(0.6)
-    await emit("Kill reason: performance — UI thread hangs 10-30s on complex multi-effect paths")
-    await asyncio.sleep(0.3)
-    await emit("Evaluating revival viability: Has Inkscape moved rendering off-thread?")
-    await asyncio.sleep(0.5)
-    await emit("REVIVE NOW: Inkscape 1.2+ threading refactor moves rendering off UI thread. Original kill reason resolved.")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] list_issues — demand signals for LPE preview...")
-    await asyncio.sleep(0.4)
-    await emit("183 issue references found — LPE is a key Inkscape differentiator vs. Illustrator")
-    await asyncio.sleep(0.3)
-    await emit("Competitive intelligence: Adobe Illustrator, Affinity Designer both have real-time effect preview.")
-    await asyncio.sleep(0.4)
-    await emit("Gemini 3 Flash — analyzing kill reason for 'Ghostscript PDF Import'...")
-    await asyncio.sleep(0.6)
-    await emit("Kill reason: technical_debt — Ghostscript rasterizes text to uneditable curves")
-    await asyncio.sleep(0.3)
-    await emit("INVESTIGATE: Poppler handles most PDFs. Ghostscript fallback for Poppler-unreadable PDFs is feasible but needs security review (Ghostscript CVEs).")
-    await asyncio.sleep(0.4)
-    await emit("Gemini 3 Flash — analyzing kill reason for 'GTK2 Rendering Backend'...")
-    await asyncio.sleep(0.5)
-    await emit("Kill reason: technical_debt — GTK2 EOL Dec 2019, blocks GTK3/GTK4 roadmap")
-    await asyncio.sleep(0.3)
-    await emit("KEEP BURIED: 6 years EOL. Known unpatched CVEs. Zero demand.")
-    await asyncio.sleep(0.3)
-    await emit("Gemini 3 Flash — analyzing kill reason for 'Windows XP/Vista Compatibility Build'...")
-    await asyncio.sleep(0.5)
-    await emit("Kill reason: technical_debt — XP/Vista EOL blocked Cairo/Pango/GTK upgrades")
-    await asyncio.sleep(0.3)
-    await emit("KEEP BURIED: Platform EOL 8+ years. Zero viable user base.")
-    await asyncio.sleep(0.3)
-    await emit("Challenger Agent — verifying top 1 revival candidate (LPE Preview)...")
-    await asyncio.sleep(0.6)
-    await emit("Challenger: CONFIRM revive_now — threading infrastructure exists. Key risk: testing all 40+ LPE types.")
-    await asyncio.sleep(0.3)
-    await emit("Writing graveyard report to outputs/necro/graveyard_report.md...")
-    await asyncio.sleep(0.3)
-    await emit("Results saved to MongoDB Atlas (necro_db.features)")
-    await asyncio.sleep(0.2)
-    await emit("SCAN COMPLETE — 1 feature ready to revive, 1 to investigate, 2 keep buried")
-
-    report = await _load_demo_report(demo="inkscape")
-    report["mcp_tools_used"] = ["list_commits", "get_commit", "list_issues", "list_merge_requests", "list_merge_request_notes"]
-    report["mcp_tool_count"] = 28
-    report["data_source"] = "gitlab_mcp"
-    await queue_put_report(emit, report)
-
-
-async def _stream_demo(emit, project_path: str):
-    """
-    Simulated stream for the pre-seeded gitlab-org/gitlab-foss demo.
-    Mirrors what a real scan of that repo would produce.
-    """
-    await emit("NECRO Code Necromancer initializing...")
-    await asyncio.sleep(0.4)
-    await emit(f"Connecting to GitLab MCP server (gitlab.com)...")
-    await asyncio.sleep(0.3)
-    await emit(f"[MCP] list_commits — gitlab-org/gitlab-foss (last 24 months, page 1)...")
-    await asyncio.sleep(0.5)
-    await emit("[MCP] list_commits returned 8,472 commits (scanning up to 300 per strategy)")
-    await asyncio.sleep(0.3)
-    await emit("Strategy 1/5: Scanning revert commits...")
-    await asyncio.sleep(0.3)
-    await emit("Strategy 2/5: Scanning feature flag disablements...")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] get_commit c71d4e9 — reading diff for 'Disable Pages wildcard domains'...")
-    await asyncio.sleep(0.5)
-    await emit("Found: FEATURE_PAGES_WILDCARD_DOMAINS removed (commit c71d4e9, Sep 14 2021)")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] get_commit f93a1d5 — reading diff for 'Disable registry pull-through cache'...")
-    await asyncio.sleep(0.4)
-    await emit("Found: registry pull-through cache disabled (commit f93a1d5, Nov 3 2021)")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] get_commit b44f7c2 — reading diff for 'Restrict Elasticsearch integration'...")
-    await asyncio.sleep(0.4)
-    await emit("Found: Elasticsearch restricted to Premium+ (commit b44f7c2, Mar 8 2022)")
-    await asyncio.sleep(0.3)
-    await emit("Strategy 3/5: Scanning 'Remove/Delete/Discontinue' commit messages...")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] get_commit 8a3f2b1 — 'Remove bundled Mattermost — discontinuing in GitLab 15.0'...")
-    await asyncio.sleep(0.5)
-    await emit("Found: Bundled Mattermost integration removed (commit 8a3f2b1, Feb 22 2022)")
-    await asyncio.sleep(0.3)
-    await emit("Strategy 4/5: Scanning closed issues for shelved features...")
-    await asyncio.sleep(0.4)
-    await emit("[MCP] list_issues — gitlab-org/gitlab-foss (closed, label:type::feature)...")
-    await asyncio.sleep(0.5)
-    await emit("[MCP] list_issues returned 2,341 closed issues")
-    await asyncio.sleep(0.3)
-    await emit("Found related issue: #224506 — Geo replication for self-managed free tier")
-    await asyncio.sleep(0.3)
-    await emit("Strategy 5/5: Scanning merged MRs for feature branches...")
-    await asyncio.sleep(0.4)
-    await emit("[MCP] list_merge_requests — scanning for 'remove/disable/deprecate' MRs...")
-    await asyncio.sleep(0.5)
-    await emit("[MCP] list_merge_request_notes — MR #79048 (Remove bundled Mattermost)...")
-    await asyncio.sleep(0.4)
-    await emit("MR discussion: 'Mattermost requires too much RAM on self-managed instances (~4GB)'")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] list_merge_request_notes — MR #68941 (Pages wildcard domains)...")
-    await asyncio.sleep(0.4)
-    await emit("MR discussion: 'DNS CNAME subdomain takeover risk in multi-tenant setup'")
-    await asyncio.sleep(0.3)
-    await emit("Found 5 dead feature candidates — running Gemini 3 Flash analysis...")
-    await asyncio.sleep(0.4)
-    await emit("Gemini 3 Flash — analyzing kill reason for 'GitLab Pages Wildcard Domain Support'...")
-    await asyncio.sleep(0.6)
-    await emit("Kill reason: security — DNS CNAME subdomain takeover in multi-tenant GitLab Pages")
-    await asyncio.sleep(0.3)
-    await emit("Evaluating revival viability: Is the security constraint still valid?")
-    await asyncio.sleep(0.5)
-    await emit("REVIVE NOW: GitLab 16.x Pages domain verification directly resolves the attack vector.")
-    await asyncio.sleep(0.3)
-    await emit("[MCP] list_issues — checking demand signals for wildcard domains...")
-    await asyncio.sleep(0.4)
-    await emit("312 issue references found — high organic demand (GitHub Pages parity gap)")
-    await asyncio.sleep(0.3)
-    await emit("Competitive intelligence: GitHub Pages, Netlify, Vercel all support wildcard domains.")
-    await asyncio.sleep(0.4)
-    await emit("Gemini 3 Flash — analyzing kill reason for 'Container Registry Pull-Through Cache'...")
-    await asyncio.sleep(0.6)
-    await emit("Kill reason: infrastructure — storage ballooning + image consistency on gitlab.com")
-    await asyncio.sleep(0.3)
-    await emit("Evaluating revival viability: Was registry rewritten since Nov 2021?")
-    await asyncio.sleep(0.5)
-    await emit("REVIVE NOW: Registry rewritten in Go (GitLab 15.8+) with TTL eviction. Constraint resolved.")
-    await asyncio.sleep(0.3)
-    await emit("256 issue references found — CI pipeline performance impact")
-    await asyncio.sleep(0.3)
-    await emit("Gemini 3 Flash — analyzing kill reason for 'Elasticsearch / OpenSearch for Free Tier'...")
-    await asyncio.sleep(0.5)
-    await emit("Kill reason: resource_constraint — cluster load per free-tier user too high")
-    await asyncio.sleep(0.3)
-    await emit("INVESTIGATE: Zoekt launched 2023 partially addresses demand. Infrastructure cost needs re-benchmarking.")
-    await asyncio.sleep(0.4)
-    await emit("Gemini 3 Flash — analyzing kill reason for 'Bundled Mattermost Integration'...")
-    await asyncio.sleep(0.5)
-    await emit("Kill reason: resource_constraint — ~4GB RAM per instance, users migrated to Slack/Teams")
-    await asyncio.sleep(0.3)
-    await emit("INVESTIGATE: Lightweight OAuth link approach feasible. Full bundled hosting still too heavy.")
-    await asyncio.sleep(0.4)
-    await emit("Gemini 3 Flash — analyzing kill reason for 'Geo Replication for Omnibus Free Tier'...")
-    await asyncio.sleep(0.5)
-    await emit("Kill reason: resource_constraint — support burden too high at free tier scale")
-    await asyncio.sleep(0.3)
-    await emit("KEEP BURIED: Constraint still valid. Geo is key Premium conversion driver.")
-    await asyncio.sleep(0.3)
-    await emit("Writing graveyard report to outputs/necro/graveyard_report.md...")
-    await asyncio.sleep(0.3)
-    await emit("Results saved to MongoDB Atlas (necro_db.features)")
-    await asyncio.sleep(0.2)
-    await emit("SCAN COMPLETE — 2 features ready to revive, 2 to investigate, 1 keep buried")
-
-    # Fetch and emit real data from MongoDB
-    report = await _load_demo_report(demo="gitlab-foss")
-    # Inject MCP call evidence for the demo — mirrors what a real scan would produce
-    report["mcp_tools_used"] = ["list_commits", "get_commit", "list_issues", "list_merge_requests", "list_merge_request_notes"]
-    report["mcp_tool_count"] = 47  # approximate calls for gitlab-org/gitlab-foss
-    report["data_source"] = "gitlab_mcp"
-    await queue_put_report(emit, report)
 
 
 async def _stream_live(emit, project_path: str, max_commits: int, lookback_months: int):
@@ -459,47 +237,6 @@ async def queue_put_report(emit, report: dict):
         raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
     await emit(f"__REPORT__:{_json.dumps(report, default=_default)}")
-
-
-async def _load_demo_report(demo: str = "gitlab-foss") -> dict:
-    """Load the pre-seeded demo from MongoDB (or inline fallback)."""
-    from backend.db.seed import (
-        DEMO_SCAN_ID, DEMO_PROJECT, DEMO_FEATURES, DEMO_REPO_URL,
-        DEMO2_SCAN_ID, DEMO2_PROJECT, DEMO2_FEATURES, DEMO2_REPO_URL,
-    )
-    scan_id = DEMO2_SCAN_ID if demo == "inkscape" else DEMO_SCAN_ID
-    project = DEMO2_PROJECT if demo == "inkscape" else DEMO_PROJECT
-    repo_url = DEMO2_REPO_URL if demo == "inkscape" else DEMO_REPO_URL
-    commits = 6200 if demo == "inkscape" else 8472
-    inline_features = DEMO2_FEATURES if demo == "inkscape" else DEMO_FEATURES
-
-    if settings.MONGODB_URI:
-        try:
-            from backend.db.connection import get_db
-            db = get_db()
-            scan = await db["scans"].find_one({"scan_id": scan_id}, {"_id": 0})
-            features = await db["features"].find({"scan_id": scan_id}, {"_id": 0}).to_list(100)
-            if scan and features:
-                for f in features:
-                    f.pop("_id", None)
-                return {
-                    "project_path": project,
-                    "repo_url": repo_url,
-                    "scan_date": scan.get("scan_date", "").isoformat() if hasattr(scan.get("scan_date", ""), "isoformat") else str(scan.get("scan_date", "")),
-                    "total_commits_scanned": scan.get("total_commits_scanned", commits),
-                    "features": features,
-                    "source": "mongodb_atlas",
-                }
-        except Exception as e:
-            logger.warning("MongoDB load failed: %s", e)
-
-    return {
-        "project_path": project,
-        "repo_url": repo_url,
-        "total_commits_scanned": commits,
-        "features": inline_features,
-        "source": "inline_fallback",
-    }
 
 
 def _url_to_path(url: str) -> str:

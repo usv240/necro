@@ -17,11 +17,6 @@ window.addEventListener('hashchange', () => activateTab(location.hash.slice(1)))
 window.addEventListener('load', () => {
   activateTab(location.hash.slice(1) || 'graveyard');
   checkHealth();
-  // Auto-load demo on first visit
-  if (!sessionStorage.getItem('necro-loaded')) {
-    sessionStorage.setItem('necro-loaded', '1');
-    setTimeout(() => loadDemo('gitlab-foss'), 600);
-  }
 });
 
 document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -124,24 +119,23 @@ async function startScan() {
   }
 }
 
-// ── Demo load ────────────────────────────────────────────────────────────────
+// ── Quick Scan examples ──────────────────────────────────────────────────────
+function quickScan(projectPath, maxCommits, lookbackMonths) {
+  document.getElementById('repoUrl').value = `https://gitlab.com/${projectPath}`;
+  if (maxCommits) document.getElementById('maxCommits').value = maxCommits;
+  if (lookbackMonths) document.getElementById('lookbackMonths').value = lookbackMonths;
+  startScan();
+}
+
+// ── loadDemo redirects to real scan (no fake data) ───────────────────────────
 async function loadDemo(which) {
-  const terminal = showTerminal();
-  clearResults();
-
-  if (which === 'gitlab-foss') {
-    document.getElementById('repoUrl').value = 'https://gitlab.com/gitlab-org/gitlab-foss';
-    await startScan();
-    return;
-  }
-
-  if (which === 'inkscape') {
-    document.getElementById('repoUrl').value = 'https://gitlab.com/inkscape/inkscape';
-    await startScan();
-    return;
-  }
-
-  toast('Unknown demo', 'error');
+  const repos = {
+    'gitlab-foss': { path: 'gitlab-org/gitlab-foss', commits: 80, months: 12 },
+    'inkscape':    { path: 'inkscape/inkscape',       commits: 60, months: 12 },
+  };
+  const r = repos[which];
+  if (r) quickScan(r.path, r.commits, r.months);
+  else toast('Unknown quick-scan target', 'error');
 }
 
 // ── Terminal helpers ─────────────────────────────────────────────────────────
@@ -252,6 +246,13 @@ function renderReport(data) {
     roiBarEl.style.display = 'none';
   }
 
+  // Show "Post to GitLab" button after results render
+  const postBtn = document.getElementById('postToGitLabBtn');
+  if (postBtn && features.length > 0) {
+    postBtn.style.display = '';
+    postBtn._reportData = data;
+  }
+
   renderCards(features);
 }
 
@@ -282,6 +283,7 @@ function buildFeatureCard(feat, isDemo) {
   const dr = feat.death_reason || {};
   const roi = feat.roi || {};
   const ci = feat.competitive_intel || null;
+  const grounding = vi.grounding || null;
   const featureId = feat.feature_id || feat.id || '';
 
   const feasibility = vi.revival_feasibility || 0;
@@ -353,8 +355,11 @@ function buildFeatureCard(feat, isDemo) {
           <div class="tl-step tl-resolved">
             <div class="tl-dot"></div>
             <div class="tl-content">
-              <div class="tl-label">Constraint resolved</div>
-              <div class="tl-desc">${esc(vi.what_changed)}</div>
+              <div class="tl-label">Constraint resolved${grounding && grounding.grounded ? ' <span class="verified-badge">✓ verified</span>' : ' <span class="unverified-badge">AI-inferred</span>'}</div>
+              ${grounding && grounding.evidence_date ? `<div class="tl-date">${esc(grounding.evidence_date)} · ${esc(grounding.technology || '')} ${esc(grounding.latest_version || '')}</div>` : ''}
+              <div class="tl-desc">${grounding && grounding.evidence_url
+                ? `<a href="${esc(grounding.evidence_url)}" target="_blank" rel="noopener" style="color:var(--amber)">${esc(vi.what_changed)}</a>`
+                : esc(vi.what_changed)}</div>
             </div>
           </div>
           <div class="tl-line"></div>
@@ -534,6 +539,51 @@ async function createRevivalIssue(featureId, btn) {
   } catch (e) {
     btn.disabled = false;
     btn.innerHTML = '🚀 Create GitLab Issue';
+    toast(`Error: ${e.message}`, 'error');
+  }
+}
+
+// ── Post Graveyard Report to GitLab ─────────────────────────────────────────
+async function postReportToGitLab(data) {
+  const btn = document.getElementById('postToGitLabBtn');
+  if (!btn) return;
+
+  const projectPath = data.project_path;
+  if (!projectPath) { toast('No project path in report', 'error'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Posting to GitLab...';
+
+  try {
+    const r = await fetch('/api/report/post-to-gitlab', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_path: projectPath,
+        features: data.features || [],
+        total_commits_scanned: data.total_commits_scanned || 0,
+        mcp_tools_used: data.mcp_tools_used || [],
+        mcp_tool_count: data.mcp_tool_count || 0,
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Post failed');
+
+    btn.innerHTML = '✅ Posted to GitLab';
+    btn.style.background = 'var(--green)';
+    if (d.issue_url) {
+      const link = document.createElement('a');
+      link.href = d.issue_url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = ` View Issue #${d.issue_iid || ''} ↗`;
+      link.className = 'btn btn-sm';
+      btn.insertAdjacentElement('afterend', link);
+    }
+    toast(`Graveyard report posted to GitLab as Issue #${d.issue_iid || ''}`, 'success');
+  } catch (e) {
+    btn.disabled = false;
+    btn.innerHTML = '📋 Post Report to GitLab';
     toast(`Error: ${e.message}`, 'error');
   }
 }

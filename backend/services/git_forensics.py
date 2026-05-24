@@ -121,6 +121,9 @@ async def detect_dead_features(
     await emit(f"[MCP] list_merge_requests returned {len(mrs)} merged MRs")
     candidates.extend(_detect_from_mrs(mrs, all_commits))
 
+    await emit("[MCP] feature_flags — querying GitLab native Feature Flags API...")
+    candidates.extend(await _detect_from_feature_flags_api(project_path, emit, log_mcp))
+
     # Deduplicate by kill commit SHA
     seen: set[str] = set()
     unique: list[DeadFeature] = []
@@ -273,7 +276,60 @@ def _detect_from_issues(issues: list[dict]) -> list[DeadFeature]:
     return features
 
 
-# ── Detection strategy 5: Feature branches merged then closed ─────────
+# ── Detection strategy 6: GitLab native Feature Flags API ────────────
+
+
+async def _detect_from_feature_flags_api(
+    project_path: str,
+    emit,
+    log_mcp=None,
+) -> list[DeadFeature]:
+    """
+    Strategy 6: Query GitLab's native Feature Flags API.
+
+    Unlike commit-message scanning, this returns *confirmed* disabled features — flags
+    where `active=False` in GitLab's own feature flag tracking system. These are the
+    flags GitLab explicitly tracks, not flags we inferred from commit messages.
+
+    Requires Deployments > Feature Flags to be enabled on the project.
+    """
+    flags = await mcp.list_feature_flags(project_path, per_page=100)
+
+    if log_mcp:
+        log_mcp("list_feature_flags", repo=project_path, result_count=len(flags))
+
+    await emit(f"[MCP] feature_flags returned {len(flags)} flags")
+
+    disabled_flags = [f for f in flags if not f.get("active", True)]
+    await emit(f"GitLab Feature Flags API: {len(disabled_flags)} disabled flags confirmed")
+
+    features = []
+    for flag in disabled_flags:
+        name = flag.get("name", "unknown-flag")
+        created_at = flag.get("created_at", "")
+        updated_at = flag.get("updated_at", "")
+        strategies = flag.get("strategies", [])
+        strategy_names = [s.get("name", "") for s in strategies if s.get("name")]
+
+        context = [
+            f"GitLab Feature Flag (native API): {name}",
+            f"Status: disabled (active=False)",
+            f"Strategies: {', '.join(strategy_names) or 'none'}",
+        ]
+        if created_at:
+            context.append(f"Created: {created_at[:10]}")
+
+        features.append(DeadFeature(
+            id=_slugify(name),
+            name=name.replace("_", " ").replace("-", " ").title(),
+            kill_commit_sha="",
+            kill_commit_message=f"Feature flag '{name}' disabled in GitLab Feature Flags",
+            kill_date=_parse_date(updated_at or created_at),
+            detection_method="gitlab_feature_flags_api",
+            context_snippets=context,
+        ))
+
+    return features
 
 
 def _detect_from_mrs(mrs: list[dict], commits: list[dict]) -> list[DeadFeature]:

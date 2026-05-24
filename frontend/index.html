@@ -82,20 +82,27 @@
       </div>
 
       <div class="scan-demos">
-        <span style="font-size:0.75rem;color:var(--text-muted);align-self:center">Quick load:</span>
-        <button class="demo-chip featured" onclick="loadDemo('gitlab-foss')">
-          💀 gitlab-org/gitlab-foss (pre-scanned)
+        <span style="font-size:0.75rem;color:var(--text-muted);align-self:center">Quick scan:</span>
+        <button class="demo-chip featured" onclick="quickScan('gitlab-org/gitlab-foss', 80, 12)" title="Real live scan — 80 commits, 12 months">
+          ⚡ gitlab-org/gitlab-foss
         </button>
-        <button class="demo-chip featured" onclick="loadDemo('inkscape')">
-          🎨 inkscape/inkscape (pre-scanned)
+        <button class="demo-chip featured" onclick="quickScan('inkscape/inkscape', 60, 12)" title="Real live scan — 60 commits, 12 months">
+          ⚡ inkscape/inkscape
         </button>
-        <button class="demo-chip" onclick="setRepoUrl('https://gitlab.com/gnome/gnome-music')">
+        <button class="demo-chip" onclick="quickScan('gnome/gnome-music', 50, 12)">
           gnome/gnome-music
         </button>
-        <button class="demo-chip" onclick="setRepoUrl('https://gitlab.com/kde/dolphin')">
+        <button class="demo-chip" onclick="quickScan('kde/dolphin', 50, 12)">
           kde/dolphin
         </button>
       </div>
+    </div>
+
+    <!-- Post to GitLab button (shown after scan completes) -->
+    <div style="margin:0.5rem 0" id="postToGitLabBtnWrapper">
+      <button class="btn btn-secondary" id="postToGitLabBtn" style="display:none" onclick="postReportToGitLab(document.getElementById('postToGitLabBtn')._reportData)">
+        📋 Post Graveyard Report to GitLab
+      </button>
     </div>
 
     <!-- Terminal -->

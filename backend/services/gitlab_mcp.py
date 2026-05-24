@@ -74,6 +74,18 @@ class GitLabClient:
             params={"state": state, "per_page": per_page},
         )
 
+    async def list_feature_flags(self, project_path: str, per_page: int = 100) -> list[dict]:
+        """
+        Fetch GitLab native Feature Flags (Deployments > Feature Flags).
+        Returns flags that have active=False — confirmed disabled features,
+        not guesses from commit messages.
+        Requires Developer+ role for private repos; available on public repos.
+        """
+        return await self._get(
+            f"/projects/{_encode(project_path)}/feature_flags",
+            params={"per_page": per_page},
+        )
+
     async def create_issue(self, project_path: str, title: str,
                            description: str = "", labels: list[str] | None = None) -> Optional[dict]:
         """Create a GitLab issue via REST API."""

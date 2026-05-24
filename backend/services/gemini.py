@@ -96,3 +96,37 @@ async def generate_json(prompt: str) -> dict | None:
     except json.JSONDecodeError as exc:
         logger.warning("JSON parse error: %s\nRaw text: %.200s", exc, text)
         return None
+
+
+async def generate_json_adversarial(prompt: str) -> dict | None:
+    """
+    Generate a JSON response using the Vertex AI client (Gemini 2.5 Flash).
+
+    Used by the Challenger Agent to ensure genuine model independence from the
+    primary analysis (Gemini 3 Flash via API key). Different model family,
+    different serving infrastructure, different training data mix.
+    """
+    full_prompt = prompt + "\n\nReturn ONLY valid JSON. No markdown fences, no explanation outside the JSON."
+
+    # Primary: Vertex AI Gemini 2.5 Flash (independent from primary Gemini 3 Flash)
+    vertex = _get_vertex_client()
+    if vertex:
+        try:
+            resp = await vertex.aio.models.generate_content(
+                model=_FALLBACK_MODEL,
+                contents=full_prompt,
+            )
+            text = resp.text or ""
+            text = re.sub(r"```(?:json)?\s*", "", text).strip().strip("`").strip()
+            match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
+            if match:
+                text = match.group(1)
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                pass
+        except Exception as exc:
+            logger.warning("Vertex adversarial call failed: %s — falling back to primary", exc)
+
+    # Fallback: primary model with adversarial framing preserved
+    return await generate_json(prompt)

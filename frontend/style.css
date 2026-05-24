@@ -644,6 +644,8 @@ body {
 .tl-label { font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .tl-date  { font-family: var(--mono); font-size: 0.72rem; color: var(--text-muted); }
 .tl-desc  { font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; margin-top: 0.1rem; }
+.verified-badge   { font-size: 0.65rem; background: rgba(16,185,129,0.15); color: #10b981; border-radius: 4px; padding: 0.05rem 0.3rem; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.unverified-badge { font-size: 0.65rem; background: rgba(245,158,11,0.12); color: #f59e0b; border-radius: 4px; padding: 0.05rem 0.3rem; text-transform: none; letter-spacing: 0; font-weight: 500; }
 
 /* ── Portfolio ROI bar ────────────────────────────────────────────────────── */
 .roi-bar {
