@@ -606,6 +606,63 @@ body {
 .challenger-text { color: var(--text-muted); margin-bottom: 0.25rem; }
 .challenger-risks { color: var(--text-muted); font-size: 0.78rem; margin-top: 0.3rem; }
 
+/* ── "Why Now?" constraint resolution timeline ───────────────────────────── */
+.why-now-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0.6rem 0 0.8rem;
+  padding-left: 0.25rem;
+}
+.tl-step {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+.tl-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 0.3rem;
+  border: 2px solid currentColor;
+}
+.tl-line {
+  width: 2px;
+  height: 22px;
+  margin-left: 5px;
+  background: rgba(255,255,255,0.1);
+}
+.tl-killed  { color: #ef4444; }
+.tl-killed .tl-dot  { background: rgba(239,68,68,0.25); border-color: #ef4444; }
+.tl-resolved { color: #f59e0b; }
+.tl-resolved .tl-dot { background: rgba(245,158,11,0.25); border-color: #f59e0b; }
+.tl-ready   { color: #10b981; }
+.tl-ready .tl-dot   { background: rgba(16,185,129,0.25); border-color: #10b981; }
+.tl-investigate { color: #a78bfa; }
+.tl-investigate .tl-dot { background: rgba(167,139,250,0.25); border-color: #a78bfa; }
+.tl-label { font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.tl-date  { font-family: var(--mono); font-size: 0.72rem; color: var(--text-muted); }
+.tl-desc  { font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; margin-top: 0.1rem; }
+
+/* ── Portfolio ROI bar ────────────────────────────────────────────────────── */
+.roi-bar {
+  background: linear-gradient(90deg, rgba(139,92,246,0.1) 0%, rgba(16,185,129,0.08) 100%);
+  border: 1px solid rgba(139,92,246,0.2);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.roi-bar-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.roi-bar-value { font-size: 1.05rem; font-weight: 700; color: #10b981; font-family: var(--mono); }
+.roi-bar-sub   { font-size: 0.72rem; color: var(--text-muted); }
+.roi-bar-item  { display: flex; flex-direction: column; gap: 0.05rem; }
+.roi-bar-divider { width: 1px; height: 2rem; background: rgba(255,255,255,0.08); }
+
 /* ── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 760px) {
   .graveyard-grid { grid-template-columns: 1fr; }

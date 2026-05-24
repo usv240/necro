@@ -10,8 +10,12 @@ Custom FunctionTools handle NECRO's analytical pipeline:
   scan_repository  → Git forensics + AI analysis via Gemini
   save_report      → Persist graveyard report to disk
   create_issue     → Create GitLab revival issue (via MCP or REST)
+
+Context variables allow the streaming SSE layer to inject callbacks into
+the agent's tool execution without coupling the agent to FastAPI internals.
 """
 
+import contextvars
 import logging
 import os
 import sys
@@ -29,6 +33,12 @@ _SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.txt").read_text()
 _runner: Runner | None = None
 _agent: Agent | None = None
 
+# Context variables — injected by the SSE stream layer before calling run_async()
+# This lets the ADK tool emit real-time progress to the SSE client without
+# coupling the agent module to FastAPI/SSE internals.
+SCAN_PROGRESS_CB: contextvars.ContextVar = contextvars.ContextVar("scan_progress_cb", default=None)
+SCAN_MCP_CALLS: contextvars.ContextVar = contextvars.ContextVar("scan_mcp_calls", default=None)
+
 
 # ── Custom analytical FunctionTools ──────────────────────────────────────────
 
@@ -40,22 +50,54 @@ async def _scan_repository_tool(
     """
     Scan a GitLab repository for disabled/dead features using MCP tools.
     Returns a list of dead feature candidates with detection method and context.
+
+    Uses SCAN_PROGRESS_CB and SCAN_MCP_CALLS context variables when available,
+    allowing the calling SSE stream to receive real-time progress events.
     """
     from backend.services.git_forensics import detect_dead_features
     from backend.services.death_reason import extract_death_reason
     from backend.services.viability_scorer import score_revival_viability
     from backend.services.roi_estimator import estimate_revival_roi
+    from backend.services.competitive_intel import analyze_competitive_gap
 
-    features = await detect_dead_features(project_path, max_commits, lookback_months)
+    # Pick up progress callback and MCP call log from context (injected by SSE layer)
+    progress_cb = SCAN_PROGRESS_CB.get()
+    mcp_calls = SCAN_MCP_CALLS.get()
+    if mcp_calls is None:
+        mcp_calls = []
+
+    async def _emit(msg: str):
+        if progress_cb:
+            await progress_cb(msg)
+
+    await _emit(f"[ADK] Google Cloud Agent Builder — scanning {project_path}...")
+    features = await detect_dead_features(
+        project_path, max_commits, lookback_months,
+        progress_cb=progress_cb, mcp_calls=mcp_calls,
+    )
+    await _emit(f"[ADK] Found {len(features)} dead feature candidates — running Gemini 3 Flash analysis...")
 
     results = []
     for feat in features[:15]:
+        await _emit(f"Gemini 3 Flash — analyzing kill reason for '{feat.name}'...")
         feat.death_reason = await extract_death_reason(feat)
+        await _emit(f"Kill reason: {feat.death_reason.get('category', '?')} — {feat.death_reason.get('primary_reason', '')[:80]}")
+        await _emit(f"Evaluating revival viability for '{feat.name}'...")
         feat.viability = await score_revival_viability(feat, feat.death_reason)
+        rec = feat.viability.get("recommendation", "unknown").upper().replace("_", " ")
+        await _emit(f"{rec}: {feat.viability.get('what_changed', '')[:80]}")
+        await _emit(f"[MCP] list_issues — demand signals for '{feat.name}'...")
         feat.roi = await estimate_revival_roi(feat, project_path)
-        results.append(_feature_to_dict(feat))
+        comp = await analyze_competitive_gap(
+            feat.name,
+            feat.death_reason.get("category", "unknown"),
+            feat.kill_date,
+            feat.death_reason.get("primary_reason", ""),
+        )
+        results.append({**_feature_to_dict(feat), "competitive_intel": comp})
 
-    return {"project_path": project_path, "features": results, "total_found": len(features)}
+    await _emit(f"[ADK] Google Cloud Agent Builder — scan complete ({len(results)} features analyzed)")
+    return {"project_path": project_path, "features": results, "total_found": len(features), "mcp_calls": mcp_calls}
 
 
 async def _save_report_tool(report_data: dict) -> dict:

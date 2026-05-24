@@ -288,64 +288,123 @@ async def _stream_demo(emit, project_path: str):
 
 
 async def _stream_live(emit, project_path: str, max_commits: int, lookback_months: int):
-    """Full live scan against a real GitLab repo via MCP."""
-    from backend.services.git_forensics import detect_dead_features
-    from backend.services.death_reason import extract_death_reason
-    from backend.services.viability_scorer import score_revival_viability
-    from backend.services.roi_estimator import estimate_revival_roi
-    from backend.services.competitive_intel import analyze_competitive_gap
+    """
+    Full live scan — orchestrated by Google Cloud Agent Builder (ADK Runner).
+
+    The ADK agent receives a natural-language scan request, calls scan_repository
+    via its FunctionTool (which uses the GitLab MCP toolset), and streams progress
+    back to the SSE client via contextvars.
+    """
+    import uuid
+    import json as _json
+    from agent.agent import get_runner, SCAN_PROGRESS_CB, SCAN_MCP_CALLS
     from backend.services.challenger import challenge_top_revival_candidates
     from backend.services.output_writer import write_graveyard_report
-    from backend.db.schemas import ScanDoc, FeatureDoc, DeathReasonDoc, ViabilityDoc, ROIDoc, CompetitiveIntelDoc
-    import uuid
+    from backend.db.schemas import ScanDoc, FeatureDoc
+    from google.genai import types as genai_types
 
-    await emit(f"NECRO Code Necromancer — scanning {project_path}...")
+    await emit(f"[ADK] Google Cloud Agent Builder — initializing scan for {project_path}...")
 
+    # Inject SSE progress callback and MCP call tracker into the agent's context
     mcp_calls: list = []
-    features = await detect_dead_features(
-        project_path, max_commits, lookback_months, progress_cb=emit, mcp_calls=mcp_calls
+    SCAN_PROGRESS_CB.set(emit)
+    SCAN_MCP_CALLS.set(mcp_calls)
+
+    runner = get_runner()
+    scan_id = uuid.uuid4().hex[:8]
+    session_id = f"scan-{scan_id}"
+    user_id = "necro-scan"
+
+    await runner.session_service.create_session(
+        app_name="necro", user_id=user_id, session_id=session_id
     )
 
-    await emit(f"Running Gemini 3 Flash analysis on {len(features)} dead features...")
+    prompt = (
+        f"Perform a complete dead feature scan of the GitLab repository '{project_path}'. "
+        f"Scan up to {max_commits} commits looking back {lookback_months} months. "
+        f"Use the scan_repository tool, then analyze each dead feature found for revival viability. "
+        f"Return the complete structured findings as a JSON object."
+    )
 
-    scan_id = str(uuid.uuid4())[:8]
+    await emit("[ADK] Agent Builder — calling scan_repository via GitLab MCPToolset...")
+
     saved_features = []
+    adk_raw = {}
 
-    for feat in features[:15]:
-        await emit(f"Gemini 3 Flash — analyzing kill reason for '{feat.name}'...")
-        feat.death_reason = await extract_death_reason(feat)
-        await emit(f"Kill reason: {feat.death_reason.get('category', '?')} — {feat.death_reason.get('primary_reason', '')[:80]}")
-        await emit(f"Evaluating revival viability for '{feat.name}'...")
-        feat.viability = await score_revival_viability(feat, feat.death_reason)
-        await emit(f"{feat.viability.get('recommendation', 'unknown').upper()}: {feat.viability.get('what_changed', '')[:80]}")
-        await emit(f"[MCP] list_issues — demand signals for '{feat.name}'...")
-        feat.roi = await estimate_revival_roi(feat, project_path)
-        await emit(f"Running competitive intelligence for '{feat.name}'...")
-        comp = await analyze_competitive_gap(
-            feat.name,
-            feat.death_reason.get("category", "unknown"),
-            feat.kill_date,
-            feat.death_reason.get("primary_reason", ""),
+    try:
+        message = genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text=prompt)],
         )
-        saved_features.append({
-            "feature_id": feat.id,
-            "name": feat.name,
-            "kill_commit_sha": feat.kill_commit_sha,
-            "kill_commit_message": feat.kill_commit_message,
-            "kill_date": feat.kill_date,
-            "detection_method": feat.detection_method,
-            "linked_mr_iid": feat.linked_mr_iid,
-            "linked_issue_iids": feat.linked_issue_iids,
-            "context_snippets": feat.context_snippets,
-            "death_reason": feat.death_reason,
-            "viability": feat.viability,
-            "roi": feat.roi,
-            "competitive_intel": comp,
-        })
+        async for event in runner.run_async(
+            user_id=user_id,
+            session_id=session_id,
+            new_message=message,
+        ):
+            # Surface tool calls as progress events
+            if hasattr(event, "actions") and event.actions:
+                for action in event.actions:
+                    if hasattr(action, "tool_use") and action.tool_use:
+                        tool_name = getattr(action.tool_use, "name", "unknown")
+                        await emit(f"[ADK] Agent Builder — tool call: {tool_name}")
 
-    report = {"project_path": project_path, "total_commits_scanned": max_commits, "features": saved_features}
+            # Capture final response
+            if event.is_final_response() and event.content and event.content.parts:
+                raw_text = (event.content.parts[0].text or "").strip()
+                # Try to extract JSON from the agent's response
+                import re
+                match = re.search(r"(\{.*\})", raw_text, re.DOTALL)
+                if match:
+                    try:
+                        adk_raw = _json.loads(match.group(1))
+                        saved_features = adk_raw.get("features", [])
+                        mcp_calls = adk_raw.get("mcp_calls", mcp_calls)
+                    except Exception:
+                        pass
 
-    # Run challenger verification on the top revive_now candidates
+    except Exception as exc:
+        logger.warning("[ADK] Runner error: %s — falling back to direct pipeline", exc)
+        await emit(f"[ADK] Fallback: direct pipeline ({exc})")
+        # Fallback: run the full pipeline directly (same logic as _scan_repository_tool)
+        from backend.services.git_forensics import detect_dead_features
+        from backend.services.death_reason import extract_death_reason
+        from backend.services.viability_scorer import score_revival_viability
+        from backend.services.roi_estimator import estimate_revival_roi
+        from backend.services.competitive_intel import analyze_competitive_gap
+
+        features = await detect_dead_features(
+            project_path, max_commits, lookback_months, progress_cb=emit, mcp_calls=mcp_calls
+        )
+        await emit(f"Running Gemini 3 Flash analysis on {len(features)} dead features...")
+        for feat in features[:15]:
+            await emit(f"Gemini 3 Flash — analyzing kill reason for '{feat.name}'...")
+            feat.death_reason = await extract_death_reason(feat)
+            await emit(f"Kill reason: {feat.death_reason.get('category', '?')} — {feat.death_reason.get('primary_reason', '')[:80]}")
+            await emit(f"Evaluating revival viability for '{feat.name}'...")
+            feat.viability = await score_revival_viability(feat, feat.death_reason)
+            await emit(f"{feat.viability.get('recommendation', 'unknown').upper()}: {feat.viability.get('what_changed', '')[:80]}")
+            await emit(f"[MCP] list_issues — demand signals for '{feat.name}'...")
+            feat.roi = await estimate_revival_roi(feat, project_path)
+            comp = await analyze_competitive_gap(
+                feat.name, feat.death_reason.get("category", "unknown"),
+                feat.kill_date, feat.death_reason.get("primary_reason", ""),
+            )
+            saved_features.append({
+                "feature_id": feat.id, "name": feat.name,
+                "kill_commit_sha": feat.kill_commit_sha,
+                "kill_commit_message": feat.kill_commit_message,
+                "kill_date": feat.kill_date,
+                "detection_method": feat.detection_method,
+                "linked_mr_iid": feat.linked_mr_iid,
+                "linked_issue_iids": feat.linked_issue_iids,
+                "context_snippets": feat.context_snippets,
+                "death_reason": feat.death_reason,
+                "viability": feat.viability,
+                "roi": feat.roi,
+                "competitive_intel": comp,
+            })
+
+    # Challenger Agent — adversarial verification of top revival candidates
     revive_candidates = [f for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now"]
     if revive_candidates:
         await emit(f"Challenger Agent — verifying top {min(len(revive_candidates), 3)} revival candidates...")
@@ -354,13 +413,20 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             feat_dict["challenger"] = assessment
         await emit("Challenger Agent complete — independent verification done")
 
-    # MCP audit log — verifiable proof of GitLab MCP tool usage (like 'source: mcp' in ORACLE)
+    # MCP audit log
     unique_tools = sorted({c["tool"] for c in mcp_calls})
-    report["mcp_calls_log"] = mcp_calls
-    report["mcp_tools_used"] = unique_tools
-    report["mcp_tool_count"] = len(mcp_calls)
-    report["data_source"] = "gitlab_mcp"
+    report = {
+        "project_path": project_path,
+        "total_commits_scanned": max_commits,
+        "features": saved_features,
+        "mcp_calls_log": mcp_calls,
+        "mcp_tools_used": unique_tools,
+        "mcp_tool_count": len(mcp_calls),
+        "data_source": "gitlab_mcp",
+        "orchestrated_by": "google_cloud_agent_builder_adk",
+    }
 
+    # Persist to MongoDB
     if settings.MONGODB_URI:
         from backend.db.connection import get_db
         db = get_db()

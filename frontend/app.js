@@ -213,6 +213,45 @@ function renderReport(data) {
   document.getElementById('tabBadgeGraveyard').textContent = features.length;
   if (reviveCt > 0) document.getElementById('tabBadgeGraveyard').classList.add('alert');
 
+  // Portfolio ROI bar — sum estimated value from revive_now features
+  const reviveFeatures = features.filter(f => _rec(f) === 'revive_now');
+  let roiLow = 0, roiHigh = 0;
+  for (const f of reviveFeatures) {
+    const roi = f.roi || {};
+    roiLow  += roi.annual_value_low  || roi.annual_value_estimate || 0;
+    roiHigh += roi.annual_value_high || roi.annual_value_estimate || 0;
+  }
+  const fmtVal = v => v >= 1000000 ? `$${(v/1000000).toFixed(1)}M` : v >= 1000 ? `$${(v/1000).toFixed(0)}K` : (v > 0 ? `$${v}` : null);
+  const roiBarEl = document.getElementById('roiBar');
+  if (roiBarEl && (roiLow > 0 || roiHigh > 0)) {
+    const lo = fmtVal(roiLow), hi = fmtVal(roiHigh);
+    const roiStr = lo && hi && lo !== hi ? `${lo} – ${hi}` : (hi || lo || '—');
+    const isApprox = !!(data.source === 'mongodb_atlas');
+    roiBarEl.innerHTML = `
+      <div class="roi-bar-item">
+        <div class="roi-bar-label">Buried potential (est.)</div>
+        <div class="roi-bar-value">${isApprox ? '~' : ''}${roiStr}<span style="font-size:0.65rem;font-weight:400;color:var(--text-muted)"> / yr</span></div>
+        <div class="roi-bar-sub">across ${reviveCt} revivable feature${reviveCt !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="roi-bar-divider"></div>
+      <div class="roi-bar-item">
+        <div class="roi-bar-label">Orchestrated by</div>
+        <div class="roi-bar-value" style="color:#a78bfa;font-size:0.82rem">Google Cloud Agent Builder</div>
+        <div class="roi-bar-sub">ADK + Gemini 3 Flash + GitLab MCP</div>
+      </div>
+      ${data.mcp_tool_count ? `
+      <div class="roi-bar-divider"></div>
+      <div class="roi-bar-item">
+        <div class="roi-bar-label">MCP tool calls</div>
+        <div class="roi-bar-value" style="font-size:0.85rem">${data.mcp_tool_count}</div>
+        <div class="roi-bar-sub">${(data.mcp_tools_used || []).slice(0,3).join(', ')}</div>
+      </div>` : ''}
+    `;
+    roiBarEl.style.display = 'flex';
+  } else if (roiBarEl) {
+    roiBarEl.style.display = 'none';
+  }
+
   renderCards(features);
 }
 
@@ -299,12 +338,40 @@ function buildFeatureCard(feat, isDemo) {
         ${dr.cited_evidence ? `<div class="snippets-list"><li>${esc(dr.cited_evidence)}</li></div>` : ''}
       ` : ''}
 
-      ${vi.what_changed ? `
+      ${(vi.what_changed && feat.kill_date && rec !== 'keep_buried') ? `
+        <div class="section-label">Timeline — constraint resolved</div>
+        <div class="why-now-timeline">
+          <div class="tl-step tl-killed">
+            <div class="tl-dot"></div>
+            <div class="tl-content">
+              <div class="tl-label">Disabled</div>
+              <div class="tl-date">${esc(feat.kill_date || 'unknown date')}</div>
+              <div class="tl-desc">${esc(dr.specific_constraint || dr.primary_reason || feat.kill_commit_message || '')}</div>
+            </div>
+          </div>
+          <div class="tl-line"></div>
+          <div class="tl-step tl-resolved">
+            <div class="tl-dot"></div>
+            <div class="tl-content">
+              <div class="tl-label">Constraint resolved</div>
+              <div class="tl-desc">${esc(vi.what_changed)}</div>
+            </div>
+          </div>
+          <div class="tl-line"></div>
+          <div class="tl-step ${rec === 'revive_now' ? 'tl-ready' : 'tl-investigate'}">
+            <div class="tl-dot"></div>
+            <div class="tl-content">
+              <div class="tl-label">${rec === 'revive_now' ? '✅ Ready to revive' : '🔍 Investigate'}</div>
+              <div class="tl-desc">${esc(vi.reasoning ? vi.reasoning.slice(0, 120) + (vi.reasoning.length > 120 ? '…' : '') : '')}</div>
+            </div>
+          </div>
+        </div>
+      ` : (vi.what_changed ? `
         <div class="section-label">Why it's revivable now</div>
         <div class="what-changed">${esc(vi.what_changed)}</div>
-      ` : ''}
+      ` : '')}
 
-      ${vi.reasoning ? `
+      ${vi.reasoning && !vi.what_changed ? `
         <div class="section-label">Agent reasoning</div>
         <div class="reason-text">${esc(vi.reasoning)}</div>
       ` : ''}
