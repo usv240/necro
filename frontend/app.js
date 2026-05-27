@@ -619,6 +619,72 @@ function renderCards(features) {
   }
 
   applyFilter();
+
+  // Load vitality sparklines asynchronously for all features
+  if (isDemo) {
+    requestAnimationFrame(() => loadVitalitySparklines(sorted));
+  }
+}
+
+// ── Feature EKG — Vitality Sparklines ───────────────────────────────────────
+async function loadVitalitySparklines(features) {
+  for (const feat of features) {
+    const featureId = feat.feature_id || feat.id || '';
+    const projectPath = feat.project_path || _reportMeta.project_path || '';
+    const container = document.getElementById(`sparkline-${featureId}`);
+    if (!container || !featureId) continue;
+
+    try {
+      const url = `/api/scan/vitality/${encodeURIComponent(featureId)}?project_path=${encodeURIComponent(projectPath)}`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (!r.ok) { container.innerHTML = ''; document.getElementById(`sparkline-row-${featureId}`)?.remove(); continue; }
+      const data = await r.json();
+      const sp = data.sparkline;
+      if (!sp || !sp.points || !sp.points.length) {
+        document.getElementById(`sparkline-row-${featureId}`)?.remove();
+        continue;
+      }
+      container.innerHTML = renderSparklineSVG(sp, feat);
+    } catch {
+      document.getElementById(`sparkline-row-${featureId}`)?.remove();
+    }
+  }
+}
+
+function renderSparklineSVG(sp, feat) {
+  const pts = sp.points || [];
+  if (!pts.length) return '';
+
+  const W = 180, H = 36;
+  const max = Math.max(...pts, 1);
+  const min = 0;
+  const range = max - min || 1;
+
+  // Build polyline points
+  const coords = pts.map((v, i) => {
+    const x = (i / (pts.length - 1)) * W;
+    const y = H - ((v - min) / range) * (H - 4) - 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  const trendColor = sp.trend === 'rising' ? '#10b981' : sp.trend === 'falling' ? '#ef4444' : '#6b7280';
+  const trendIcon = sp.trend === 'rising' ? '↑' : sp.trend === 'falling' ? '↓' : '→';
+  const rec = _rec(feat);
+  const strokeColor = rec === 'revive_now' ? '#10b981' : rec === 'investigate_further' ? '#f59e0b' : '#6b7280';
+
+  return `
+    <div class="sparkline-wrap" title="Demand curve: ${sp.current} issues now · peak: ${sp.peak} · trend: ${sp.trend}">
+      <svg class="sparkline-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+        <polyline points="${coords}" fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"/>
+        <circle cx="${W}" cy="${pts.length > 0 ? (H - ((pts[pts.length-1] - min) / range) * (H - 4) - 2) : H/2}" r="3" fill="${strokeColor}"/>
+      </svg>
+      <div class="sparkline-meta">
+        <span class="sparkline-trend" style="color:${trendColor}">${trendIcon} ${sp.trend}</span>
+        <span class="sparkline-current">${sp.current} now · peak ${sp.peak}</span>
+        <span class="sparkline-label">demand</span>
+      </div>
+    </div>
+  `;
 }
 
 function buildFeatureCard(feat, isDemo) {
@@ -829,6 +895,14 @@ function buildFeatureCard(feat, isDemo) {
           </ul>
         </div>
       ` : ''}
+
+      <!-- Feature EKG — Vitality Sparkline (demand over time) -->
+      <div class="vitality-sparkline-row" id="sparkline-row-${featureId}">
+        <div class="section-label" style="margin-top:0.6rem">Feature EKG — demand trend since kill</div>
+        <div class="sparkline-container" id="sparkline-${featureId}">
+          <span class="sparkline-loading">loading...</span>
+        </div>
+      </div>
 
       <div class="card-actions">
         ${rec !== 'keep_buried' ? `
@@ -1483,6 +1557,119 @@ function esc(str) {
     .replace(/"/g, '&quot;');
 }
 const escHtml = esc; // alias used by ADK synthesis panel
+
+// ── Group Scan — Cross-Repository Graveyard Federation ───────────────────────
+function toggleGroupScanInput() {
+  const panel = document.getElementById('groupScanInput');
+  const btn = document.getElementById('groupScanToggle');
+  if (!panel) return;
+  const open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  if (btn) {
+    btn.textContent = open ? '⛓ GROUP SCAN' : '⛓ HIDE GROUP SCAN';
+    btn.classList.toggle('active', !open);
+  }
+  if (!open) {
+    setTimeout(() => document.getElementById('groupNamespace')?.focus(), 50);
+  }
+}
+
+async function runGroupScan() {
+  const namespace = (document.getElementById('groupNamespace')?.value || '').trim();
+  if (!namespace) { toast('Enter a GitLab namespace (e.g. gitlab-org, inkscape, kde)', 'error'); return; }
+
+  const maxRepos = parseInt(document.getElementById('groupMaxRepos')?.value) || 8;
+  const btn = document.getElementById('groupScanBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Federating...'; }
+
+  const terminal = showTerminal();
+  addTerminalLine(terminal, `[GROUP SCAN] Federating graveyard: namespace=${namespace}, max_repos=${maxRepos}`);
+  addTerminalLine(terminal, `[MCP] list_projects_in_group → ${namespace}`);
+
+  try {
+    const r = await fetch('/api/scan/group', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ namespace, max_repos: maxRepos, max_commits_per_repo: 80, lookback_months: 24 }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+
+    addTerminalLine(terminal, `[GROUP SCAN] ${d.repos_scanned} repos · ${d.total_features} dead features · ${(d.cross_repo_chains || []).length} cross-repo chains`);
+    addTerminalLine(terminal, `[OK] Group scan complete — ${namespace}`, 'done');
+    renderGroupScanResults(d, namespace);
+    toast(`${namespace}: ${d.repos_scanned} repos scanned, ${(d.cross_repo_chains || []).length} cross-repo chains found`, 'success');
+  } catch (e) {
+    addTerminalLine(terminal, `ERROR: ${e.message}`, 'error');
+    toast(`Group scan failed: ${e.message}`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = 'FEDERATE GRAVEYARDS'; }
+  }
+}
+
+function renderGroupScanResults(data, namespace) {
+  const panel = document.getElementById('groupScanPanel');
+  if (!panel) return;
+
+  const chains = data.cross_repo_chains || [];
+  const repoBreakdowns = data.repo_breakdowns || [];
+  const totalFeats = data.total_features || 0;
+  const reposScanned = data.repos_scanned || 0;
+
+  if (!chains.length && !totalFeats) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  const chainsHtml = chains.map(chain => `
+    <div class="cross-chain-item">
+      <div class="cross-chain-head">
+        <span class="cross-chain-key">${escHtml(chain.constraint_key)}</span>
+        <span class="cross-chain-count">${chain.cross_repo_count} features across ${(chain.repos_affected || []).length} repos</span>
+        <span class="cross-chain-unlock">⚡ ${escHtml(chain.org_unlock || 'Fix once → unlock org-wide')}</span>
+      </div>
+      <div class="cross-chain-repos">
+        ${(chain.repos_affected || []).map(r => `<span class="cross-chain-repo">${escHtml(r.split('/').pop() || r)}</span>`).join('')}
+      </div>
+    </div>`).join('');
+
+  const topReposHtml = repoBreakdowns.slice(0, 6).map(rb => `
+    <div class="group-repo-row">
+      <span class="group-repo-name">${escHtml((rb.project_path || '').split('/').pop())}</span>
+      <span class="group-repo-stats">
+        ${rb.revive_now || 0} revive · ${rb.features_found || 0} total
+      </span>
+    </div>`).join('');
+
+  panel.innerHTML = `
+    <div class="group-scan-results">
+      <div class="group-scan-results-header">
+        <span class="group-scan-results-badge">⛓ Cross-Repository Graveyard Federation</span>
+        <span class="group-scan-namespace">${escHtml(namespace)}</span>
+        <span class="group-scan-summary">${reposScanned} repos · ${totalFeats} dead features · ${chains.length} cross-repo chain${chains.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      ${chains.length ? `
+        <div class="group-scan-section">
+          <div class="group-scan-section-label">Org-Level Resurrection Chains — same constraint killed features in multiple repos</div>
+          <div class="cross-chains-list">${chainsHtml}</div>
+        </div>
+      ` : `<div class="group-scan-no-chains">No cross-repo constraint patterns found — each repo appears to have unique kill reasons.</div>`}
+
+      ${topReposHtml ? `
+        <div class="group-scan-section">
+          <div class="group-scan-section-label">Repo Breakdown</div>
+          <div class="group-repos-grid">${topReposHtml}</div>
+        </div>
+      ` : ''}
+
+      <div class="group-scan-meta">
+        Scanned via GitLab MCP · <code>list_projects_in_group</code> + per-repo forensics
+      </div>
+    </div>
+  `;
+  panel.style.display = '';
+}
 
 // ── Keyboard shortcuts ─────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {

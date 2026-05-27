@@ -110,3 +110,43 @@ class IssueEmbeddingDoc(BaseModel):
     web_url: str = ""
     embedding: list[float] = []
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RevivalContractDoc(BaseModel):
+    """Persisted Feature Will — created at the moment of feature death."""
+    contract_id: str
+    project_path: str
+    mr_iid: int
+    mr_title: str
+    feature_name: str
+    kill_reason: str = ""
+    kill_category: str = "unknown"
+    is_temporary: bool = False
+    revival_condition: str = ""
+    revival_effort: str = ""
+    demand_signal: str = ""
+    confidence: str = "medium"
+    author_name: str = ""
+    author_gitlab_id: Optional[int] = None
+    issue_url: str = ""
+    issue_iid: Optional[int] = None
+    status: str = "active"   # active | fulfilled | abandoned
+    embedding: list[float] = []
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    fulfilled_at: Optional[datetime] = None
+    resolved_by: str = ""
+
+
+class VitalitySnapshot(BaseModel):
+    """
+    Time-series snapshot of a feature's vitality signals.
+    Stored in the 'feature_vitality' MongoDB time-series collection.
+    timeField: ts  |  metaField: feature_id
+    """
+    feature_id: str
+    project_path: str
+    ts: datetime = Field(default_factory=datetime.utcnow)
+    demand_count: int = 0        # open issues matching this feature name
+    revival_score: int = 0       # composite 0-100 revival priority score
+    days_since_kill: int = 0     # calendar days elapsed since kill_date
+    recommendation: str = "unknown"

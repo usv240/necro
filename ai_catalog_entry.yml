@@ -1,0 +1,219 @@
+##
+## NECRO — GitLab AI Catalog Entry (GA)
+##
+## This file registers NECRO as a discoverable AI capability in the GitLab
+## AI Catalog, making it available via:
+##   - GitLab Duo chat: "Hey Duo, scan my repo for dead features"
+##   - GitLab Duo Agent Platform: NECRO tools exposed as MCP endpoints
+##   - GitLab CI/CD: NECRO analysis steps in pipeline definitions
+##
+## Registration: GitLab Settings → AI Agents → AI Catalog → Import YAML
+## Documentation: https://docs.gitlab.com/ee/user/gitlab_duo/ai_catalog.html
+##
+
+name: NECRO — Code Necromancer
+version: "1.0.0"
+display_name: "NECRO: Dormant Feature Recovery"
+description: >
+  NECRO scans GitLab repositories for disabled/removed features and evaluates
+  whether they're ready to revive. Powered by Google Cloud Agent Builder (ADK)
+  with Gemini 3 Flash and GitLab MCP — two-way: NECRO calls GitLab MCP AND
+  exposes itself as an MCP server for Duo agents to call.
+
+category: code-analysis
+subcategory: technical-debt
+tags:
+  - feature-flags
+  - dead-code
+  - technical-debt
+  - revival
+  - gitlab-mcp
+  - google-cloud
+  - adk
+  - gemini
+
+author:
+  name: NECRO Team
+  contact: necro-agent@example.com
+
+capabilities:
+  - id: scan_repository
+    name: Scan Repository for Dead Features
+    description: >
+      Forensic archaeology of a GitLab repository's commit history.
+      Detects features that were disabled, removed, or flagged out.
+      Uses Gemini 3 Flash to analyze kill reasons and revival viability.
+      Returns structured revival candidates with feasibility scores.
+    input:
+      repo_url:
+        type: string
+        description: GitLab repository URL (e.g. https://gitlab.com/org/repo)
+        required: true
+      max_commits:
+        type: integer
+        description: Maximum commits to scan (default 300)
+        default: 300
+      lookback_months:
+        type: integer
+        description: How far back to scan in months (default 24)
+        default: 24
+    output:
+      features:
+        type: array
+        description: List of dead features with revival analysis
+      revive_now_count:
+        type: integer
+        description: Features ready to revive immediately
+      resurrection_chains:
+        type: array
+        description: Groups of features blocked by the same constraint
+    triggers:
+      - "scan {repo_url} for dead features"
+      - "find disabled features in {project}"
+      - "what features can we revive in {repo}"
+      - "show me the graveyard for {project}"
+      - "analyze {repo} for dormant code"
+
+  - id: get_revival_candidates
+    name: Get Revival Candidates
+    description: >
+      Retrieve pre-analyzed revival candidates for a project from NECRO's
+      MongoDB database. Returns features with revival_score, effort estimate,
+      ROI projection, and competitive intelligence.
+    input:
+      project_path:
+        type: string
+        description: GitLab project path (e.g. gitlab-org/gitlab-foss)
+        required: true
+      filter:
+        type: string
+        description: Filter by recommendation (revive_now | investigate_further | keep_buried | all)
+        default: revive_now
+    output:
+      features:
+        type: array
+        description: Revival candidates sorted by revival_score
+    triggers:
+      - "show revival candidates for {project}"
+      - "what should we revive in {project}"
+      - "list dead features in {project_path}"
+
+  - id: create_revival_issue
+    name: Create Revival Issue
+    description: >
+      Create a GitLab issue for a dead feature revival via Google Cloud
+      Agent Builder + GitLab MCP create_issue tool. Includes full revival
+      plan, effort estimate, technical risks, and assigns original author.
+    input:
+      feature_id:
+        type: string
+        description: Feature ID from a previous scan
+        required: true
+      project_path:
+        type: string
+        description: GitLab project path to create the issue in
+        required: true
+    output:
+      issue_url:
+        type: string
+        description: URL of the created GitLab issue
+      issue_iid:
+        type: integer
+        description: Issue IID
+    triggers:
+      - "create revival issue for {feature_name}"
+      - "revive {feature_name} in {project}"
+      - "create GitLab issue to revive {feature}"
+
+  - id: get_health
+    name: NECRO Health Check
+    description: >
+      Returns NECRO system health: MongoDB Atlas status, GitLab MCP
+      connection, ADK agent status, Slack notifications, and feature count.
+    triggers:
+      - "is NECRO running"
+      - "check NECRO health"
+      - "NECRO status"
+
+mcp_server:
+  description: >
+    NECRO exposes itself as an MCP server at /mcp (FastMCP, Streamable HTTP).
+    GitLab Duo agents can call NECRO's analytical pipeline as native MCP tools.
+    This creates a bidirectional integration: NECRO calls GitLab's MCP AND
+    GitLab's agents can call NECRO back.
+  endpoint_path: /mcp
+  transport: streamable-http
+  auth: none  # configure Bearer token via NECRO_API_KEY if needed
+  tools:
+    - name: scan_repository
+      description: Full forensic archaeology scan of a GitLab repo
+    - name: get_candidates
+      description: Get pre-analyzed revival candidates from database
+    - name: get_health
+      description: System health and integration status
+
+integration:
+  gitlab_mcp:
+    transport: SSE (official)
+    endpoint: "{GITLAB_URL}/-/ide/mcp"
+    tools_used:
+      - list_commits
+      - get_commit
+      - get_commit_diff
+      - list_merge_requests
+      - list_merge_request_notes
+      - list_issues
+      - list_issue_notes
+      - create_issue
+      - get_project
+      - list_branches
+      - search_code
+      - list_pipelines
+      - search_users
+      - create_branch
+      - create_file
+      - create_merge_request
+      - get_default_branch
+      - list_open_issues
+      - list_projects_in_group
+  google_cloud:
+    agent_builder: "Google Cloud Agent Builder (ADK 1.3.0)"
+    model: "gemini-3-flash-preview"
+    adversarial_model: "gemini-2.5-flash (Vertex AI)"
+  mongodb_atlas:
+    vector_search: "768-dim cosine, text-embedding-004"
+    time_series: "feature_vitality (Feature EKG)"
+    collections:
+      - features
+      - scans
+      - revival_contracts
+      - feature_vitality
+      - issue_embeddings
+      - revival_log
+      - watch_list
+  slack:
+    integration: Slack Bot + Webhook
+    alerts:
+      - revival_candidates_found
+      - weekly_digest
+      - autonomous_monitor_cycle
+
+webhook:
+  endpoint: /api/agent/webhook/gitlab
+  events:
+    - Push Hook
+    - Merge Request Hook
+  actions:
+    push: Re-evaluate graveyard when new commits resolve known blockers
+    merge_request_opened: Feature Will Generator — create Revival Contract
+    merge_request_merged: Activate Revival Contract monitoring
+
+examples:
+  - prompt: "Scan gitlab-org/gitlab-foss for features we could revive"
+    description: Full scan with ADK + Gemini analysis
+  - prompt: "Show me features in gitlab-foss killed by authentication constraints"
+    description: Semantic search via Atlas Vector Search
+  - prompt: "Create a revival issue for the Elasticsearch free-tier feature"
+    description: ADK agent creates GitLab issue via MCPToolset
+  - prompt: "What's NECRO's health status?"
+    description: System health check

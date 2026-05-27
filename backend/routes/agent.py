@@ -217,16 +217,25 @@ async def gitlab_webhook(
     x_gitlab_token: str = Header(None),
 ):
     """
-    GitLab webhook receiver. Re-evaluates the feature graveyard when new commits
-    are pushed to a watched repository.
+    GitLab webhook receiver — handles two event types:
 
-    This makes NECRO a persistent watching agent — not just a one-shot tool.
-    Configure in GitLab: Settings → Webhooks → Push events → point to this URL.
+    1. Push Hook (existing): re-evaluates the graveyard when new commits arrive.
+       May trigger revival contract fulfillment if push resolves a known condition.
 
-    Optional: set X-Gitlab-Token header in GitLab to NECRO_WEBHOOK_SECRET env var.
+    2. Merge Request Hook (NEW — Feature Will Generator):
+       When an MR is OPENED that kills a feature, NECRO intercepts in real-time:
+       - ADK Gemini 3 Flash analyzes the kill reason and revival conditions
+       - Creates a Revival Contract issue in GitLab (via MCP create_issue)
+       - Auto-assigns the engineer who opened the MR (engineer attribution)
+       - Stores the contract in MongoDB with vector embedding
+       This preserves institutional knowledge at 100% fidelity — the exact
+       moment it exists at maximum clarity, before any decay.
+
+    Configure in GitLab: Settings → Webhooks → Push events + Merge requests events
+    Optional: set X-Gitlab-Token header to NECRO_WEBHOOK_SECRET env var.
     """
     # Validate secret if configured
-    expected = settings.NECRO_WEBHOOK_SECRET if hasattr(settings, "NECRO_WEBHOOK_SECRET") else None
+    expected = getattr(settings, "NECRO_WEBHOOK_SECRET", None)
     if expected and x_gitlab_token != expected:
         raise HTTPException(status_code=401, detail="Invalid webhook token")
 
@@ -235,16 +244,57 @@ async def gitlab_webhook(
 
     project = payload.get("project", {})
     project_path = project.get("path_with_namespace", "")
+
+    logger.info("[WEBHOOK] %s — project: %s", event_type, project_path)
+
+    # ── Merge Request Hook: Feature Will Generator ────────────────────────────
+    if event_type in ("Merge Request Hook", "merge_request") and project_path:
+        mr = payload.get("object_attributes", {})
+        action = mr.get("action", "")
+        mr_iid = mr.get("iid") or mr.get("id")
+        mr_title = mr.get("title", "")
+        mr_description = mr.get("description", "") or ""
+        author = payload.get("user", {})
+        author_name = author.get("name", "") or author.get("username", "")
+        author_email = author.get("email", "")
+
+        # Trigger will generation on MR open — intercept at the moment of death
+        if action in ("open", "reopen") and mr_iid:
+            background_tasks.add_task(
+                _background_will_generation,
+                project_path, int(mr_iid), mr_title, mr_description,
+                author_name, author_email,
+            )
+            return {
+                "status": "will_generation_queued",
+                "event": event_type,
+                "project": project_path,
+                "mr_iid": mr_iid,
+                "mr_title": mr_title,
+                "action": "feature_will_generator_triggered",
+                "note": "NECRO will analyze this MR for feature kills and create a Revival Contract if applicable",
+            }
+
+        # On merge: update contract status to 'in_flight' (feature is now officially dead)
+        if action == "merge" and mr_iid and settings.MONGODB_URI:
+            background_tasks.add_task(
+                _background_contract_activate, project_path, int(mr_iid)
+            )
+            return {
+                "status": "contract_activated",
+                "event": event_type,
+                "project": project_path,
+                "mr_iid": mr_iid,
+                "action": "revival_contract_monitoring_active",
+            }
+
+        return {"status": "ignored", "event": event_type, "action": action}
+
+    # ── Push Hook: graveyard re-evaluation ───────────────────────────────────
     ref = payload.get("ref", "")
     commits = payload.get("commits", [])
     branch = ref.replace("refs/heads/", "") if ref else "unknown"
 
-    logger.info(
-        "[WEBHOOK] %s event — %s (branch: %s, %d commits)",
-        event_type, project_path, branch, len(commits)
-    )
-
-    # Queue background re-evaluation for push events on default branch
     if event_type in ("Push Hook", "push") and branch in ("main", "master") and project_path:
         background_tasks.add_task(_background_re_evaluate, project_path, commits)
         return {
@@ -255,7 +305,64 @@ async def gitlab_webhook(
             "action": "graveyard_re_evaluation_queued",
         }
 
-    return {"status": "ignored", "event": event_type, "reason": "not a main/master push event"}
+    return {"status": "ignored", "event": event_type, "reason": "unhandled event type"}
+
+
+async def _background_will_generation(
+    project_path: str,
+    mr_iid: int,
+    mr_title: str,
+    mr_description: str,
+    author_name: str,
+    author_email: str,
+) -> None:
+    """
+    Background: Feature Will Generator.
+    Analyzes the MR for feature kills and creates Revival Contract if applicable.
+    """
+    logger.info("[WEBHOOK] Will generation starting for MR !%d in %s", mr_iid, project_path)
+    try:
+        from backend.services.will_writer import generate_revival_will
+        contract = await generate_revival_will(
+            project_path=project_path,
+            mr_iid=mr_iid,
+            mr_title=mr_title,
+            mr_description=mr_description,
+            author_name=author_name,
+            author_email=author_email,
+        )
+        if contract:
+            logger.info(
+                "[WEBHOOK] ✅ Revival Contract created: '%s' → %s",
+                contract.get("feature_name"), contract.get("issue_url", "no issue URL")
+            )
+        else:
+            logger.info("[WEBHOOK] MR !%d — not a feature kill, no will generated", mr_iid)
+    except Exception as exc:
+        logger.error("[WEBHOOK] Will generation failed for MR !%d: %s", mr_iid, exc)
+
+
+async def _background_contract_activate(project_path: str, mr_iid: int) -> None:
+    """
+    Background: when an MR merges, confirm the kill is live — the contract is now actively monitoring.
+    """
+    if not settings.MONGODB_URI:
+        return
+    try:
+        from backend.db.connection import get_db
+        from datetime import datetime, timezone
+        db = get_db()
+        result = await db["revival_contracts"].update_many(
+            {"project_path": project_path, "mr_iid": mr_iid, "status": "active"},
+            {"$set": {"merged": True, "merged_at": datetime.now(timezone.utc)}},
+        )
+        if result.modified_count:
+            logger.info(
+                "[WEBHOOK] Contract activated (MR merged): %s !%d — %d contracts now live",
+                project_path, mr_iid, result.modified_count,
+            )
+    except Exception as exc:
+        logger.debug("[WEBHOOK] Contract activation failed: %s", exc)
 
 
 async def _background_re_evaluate(project_path: str, commits: list):

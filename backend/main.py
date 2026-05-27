@@ -38,6 +38,14 @@ async def lifespan(app: FastAPI):
             await ensure_vector_index()
         except Exception as e:
             logger.warning("[WARN] Atlas Vector Search index setup: %s", e)
+
+        # Feature Vitality Time-Series — Feature EKG (decay/recovery curves)
+        try:
+            from backend.services.vitality import ensure_vitality_collection, seed_vitality_snapshots
+            await ensure_vitality_collection()
+            await seed_vitality_snapshots()
+        except Exception as e:
+            logger.warning("[WARN] Vitality time-series setup: %s", e)
     else:
         logger.warning("[WARN] MONGODB_URI not set — running without persistence")
 

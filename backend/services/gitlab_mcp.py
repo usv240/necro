@@ -255,6 +255,51 @@ class GitLabClient:
             params=params,
         )
 
+    async def list_projects_in_group(
+        self, namespace: str, per_page: int = 50, page: int = 1
+    ) -> list[dict]:
+        """
+        List all projects in a GitLab group/namespace.
+        Used by Cross-Repository Group Scan to enumerate repos automatically.
+        Returns list of {id, name, path_with_namespace, web_url, default_branch}.
+        """
+        encoded = urllib.parse.quote(namespace, safe="")
+        logger.info("[MCP] list_projects_in_group → %s (page %d)", namespace, page)
+        result = await self._get(
+            f"/groups/{encoded}/projects",
+            params={
+                "per_page": per_page,
+                "page": page,
+                "include_subgroups": False,
+                "archived": False,
+                "order_by": "last_activity_at",
+                "sort": "desc",
+            },
+        )
+        return result if isinstance(result, list) else []
+
+    async def get_mr_changes(self, project_path: str, mr_iid: int) -> list[dict]:
+        """
+        Get file-level changes (diffs) for a Merge Request.
+        Used by the Feature Will Generator to understand what code is being removed.
+        Returns list of {old_path, new_path, diff, new_file, deleted_file, renamed_file}.
+        """
+        logger.info("[MCP] get_mr_changes → %s !%d", project_path, mr_iid)
+        result = await self._get(
+            f"/projects/{_encode(project_path)}/merge_requests/{mr_iid}/changes",
+        )
+        if isinstance(result, dict):
+            return result.get("changes", [])
+        return []
+
+    async def get_merge_request(self, project_path: str, mr_iid: int) -> Optional[dict]:
+        """Fetch full MR details including description, labels, author, and state."""
+        logger.info("[MCP] get_merge_request → %s !%d", project_path, mr_iid)
+        result = await self._get(
+            f"/projects/{_encode(project_path)}/merge_requests/{mr_iid}",
+        )
+        return result if isinstance(result, dict) else None
+
     # ── lifecycle stubs (no-ops — no subprocess to manage) ────────────────────
 
     async def start(self) -> None:

@@ -206,6 +206,9 @@
                 <button class="btn-cyber btn-demo" id="demoDataBtn" onclick="loadDemoData()">
                   LOAD PRE-ANALYZED FOSS REPORT
                 </button>
+                <button class="btn-cyber btn-group-scan" id="groupScanToggle" onclick="toggleGroupScanInput()" title="Scan an entire GitLab namespace to find cross-repo resurrection chains — features killed by the same constraint across multiple repos">
+                  ⛓ GROUP SCAN
+                </button>
               </div>
               
               <div class="scanner-quick-targets">
@@ -302,6 +305,28 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Group Scan — Cross-Repository Graveyard Federation -->
+              <div class="group-scan-input" id="groupScanInput" style="display:none">
+                <div class="group-scan-divider"></div>
+                <div class="group-scan-header">
+                  <span class="group-scan-badge">⛓ Cross-Repository Graveyard Federation</span>
+                  <span class="group-scan-desc">Scan an entire GitLab namespace to find features killed by the same constraint across multiple repos — fix once, unlock org-wide</span>
+                </div>
+                <div class="group-scan-form">
+                  <div class="cyber-field">
+                    <label for="groupNamespace">GitLab Namespace / Group</label>
+                    <input type="text" id="groupNamespace" class="cyber-input" placeholder="gitlab-org  or  inkscape  or  kde" />
+                  </div>
+                  <div class="cyber-field field-param">
+                    <label for="groupMaxRepos">Max Repos</label>
+                    <input type="number" id="groupMaxRepos" class="cyber-input" value="8" min="2" max="20" />
+                  </div>
+                  <button class="btn-neon btn-group-run" id="groupScanBtn" onclick="runGroupScan()">
+                    FEDERATE GRAVEYARDS
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -382,6 +407,8 @@
         <!-- Dynamic analysis panels -->
         <div id="adkSynthesisPanel" class="adk-synthesis-panel" style="display:none"></div>
         <div id="resurrectChainsPanel" class="resurrect-chains-panel" style="display:none"></div>
+        <!-- Cross-Repository Graveyard Federation — Group Scan results panel -->
+        <div id="groupScanPanel" class="group-scan-panel" style="display:none"></div>
         <div class="roi-bar" id="roiBar" style="display:none"></div>
 
         <!-- Live Scan Terminal Panel -->
