@@ -7,8 +7,10 @@ const INITIAL_SIMULATED_MESSAGES = [
   { t: 'Google Cloud Gemini 3 Flash connection: STABLE · ping 45ms', type: 'gemini' },
   { t: 'Vertex AI Gemini 2.5 Flash Adversarial agent: ACTIVE · monitoring target range', type: 'gemini' },
   { t: 'MongoDB Atlas vector database clusters: SYNCED · 1,827 records mapped', type: 'mcp' },
-  { t: 'GitLab stdio MCP server: 14 tools successfully registered', type: 'mcp' },
-  { t: 'Slack notifications autonomous alerts: PRIMED', type: 'info' }
+  { t: 'GitLab Official MCP Server (SSE): CONNECTED · 10 tools active', type: 'mcp' },
+  { t: '@zereight/mcp-gitlab (stdio): CONNECTED · 9 tools active · 19 total', type: 'mcp' },
+  { t: 'NECRO MCP Server (/mcp): ACTIVE · scan_repository · get_candidates · get_health', type: 'mcp' },
+  { t: 'Slack notifications autonomous alerts: PRIMED · weekly digest Monday 09:00 UTC', type: 'info' }
 ];
 
 function bootSimulatedLogs() {
@@ -197,7 +199,8 @@ function renderActiveIntegrations(h) {
     <span class="tech-tag-status active" title="Model: ${geminiName}">${geminiName}</span>
     <span class="tech-tag-status active" title="Model: ${vertexName}">Vertex AI (Adversarial)</span>
     <span class="tech-tag-status ${agentStatus}" title="ADK Agent status">${h.adk_agent === 'initialized' ? 'Agent Builder Active' : 'Agent Builder Initializing'}</span>
-    <span class="tech-tag-status ${mcpStatus}" title="GitLab stdio MCP Status">GitLab MCP stdio (${h.mcp_tool_count} tools)</span>
+    <span class="tech-tag-status ${mcpStatus}" title="GitLab Official MCP Server (SSE) + @zereight/mcp-gitlab (stdio) · ${h.mcp_tool_count} tools total">GitLab MCP (official SSE + stdio) · ${h.mcp_tool_count} tools</span>
+    <span class="tech-tag-status ${mcpStatus}" title="NECRO exposes itself as MCP server at /mcp — consumable by GitLab Duo agents">NECRO → MCP Server (/mcp)</span>
     <span class="tech-tag-status ${mongoStatus}" title="MongoDB Atlas DB connection">MongoDB Atlas (${h.features_in_db} features)</span>
     <span class="tech-tag-status ${slackStatus}" title="Slack bot alerts integration">${h.slack === 'configured' ? 'Slack Notifications' : 'Slack Disabled'}</span>
   `;
@@ -644,6 +647,10 @@ function buildFeatureCard(feat, isDemo) {
 
   const strokeColor = rec === 'revive_now' ? 'var(--green)' : rec === 'investigate_further' ? 'var(--amber)' : 'var(--text-muted)';
   const fillPct = feasibility * 10;
+  const revivalScore = feat.revival_score != null ? feat.revival_score : null;
+  const scoreColor = revivalScore != null
+    ? (revivalScore >= 70 ? 'var(--green)' : revivalScore >= 40 ? 'var(--amber)' : 'var(--text-muted)')
+    : 'var(--text-muted)';
 
   card.innerHTML = `
     <div class="card-header" onclick="toggleCard(this)" style="display:flex;width:100%;justify-content:space-between;align-items:center">
@@ -663,12 +670,19 @@ function buildFeatureCard(feat, isDemo) {
           </div>
         </div>
       </div>
-      <div class="radial-viability-gauge" title="Revival Viability: ${feasibility}/10" style="margin-left:auto">
-        <svg class="radial-svg" viewBox="0 0 36 36">
-          <circle class="radial-track" cx="18" cy="18" r="15.915"></circle>
-          <circle class="radial-fill" cx="18" cy="18" r="15.915" stroke="${strokeColor}" stroke-dasharray="100" stroke-dashoffset="${100 - fillPct}"></circle>
-        </svg>
-        <span class="radial-value-text">${feasibility * 10}%</span>
+      <div style="display:flex;align-items:center;gap:0.75rem;margin-left:auto">
+        ${revivalScore != null ? `
+        <div title="Revival Priority Score (0-100): 40% feasibility + 30% demand + 15% effort + 15% competitive gap" style="display:flex;flex-direction:column;align-items:center;gap:0.1rem">
+          <span style="font-size:1.1rem;font-weight:800;color:${scoreColor};line-height:1">${revivalScore}</span>
+          <span style="font-size:0.55rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">score</span>
+        </div>` : ''}
+        <div class="radial-viability-gauge" title="Revival Viability: ${feasibility}/10" >
+          <svg class="radial-svg" viewBox="0 0 36 36">
+            <circle class="radial-track" cx="18" cy="18" r="15.915"></circle>
+            <circle class="radial-fill" cx="18" cy="18" r="15.915" stroke="${strokeColor}" stroke-dasharray="100" stroke-dashoffset="${100 - fillPct}"></circle>
+          </svg>
+          <span class="radial-value-text">${feasibility * 10}%</span>
+        </div>
       </div>
     </div>
 

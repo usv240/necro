@@ -1,0 +1,159 @@
+# NECRO — GitLab Duo Agent Platform Configuration
+#
+# Registers NECRO as a native GitLab Duo Custom Agent.
+# Once registered, users can invoke NECRO directly from GitLab's Duo chat sidebar.
+#
+# HOW TO REGISTER (user action required):
+#   1. Go to GitLab project → Settings → Duo → Agents
+#   2. Click "Create Agent"
+#   3. Paste this YAML as the agent configuration
+#   4. Set environment variable: NECRO_URL = <your deployed NECRO instance URL>
+#   5. Save. The agent is now available via GitLab Duo chat with /necro
+#
+# USAGE in Duo chat:
+#   /necro scan this repo for dormant features
+#   /necro what features should I revive in gitlab-org/gitlab-foss?
+#   /necro create revival issue for the container-registry-cache feature
+#
+# Reference: https://docs.gitlab.com/user/duo_agent_platform/agents/custom/
+
+name: necro
+display_name: "NECRO — Code Revival Agent"
+description: |
+  Scans your GitLab repository's commit history for disabled features and evaluates
+  which ones are worth reviving. Uses GitLab MCP tools (list_commits, get_commit,
+  list_issues, list_merge_requests) to gather evidence, then applies Gemini 3 Flash
+  analysis to determine if the original kill reason still applies today.
+
+model: claude-3-5-sonnet-20241022
+temperature: 0.2
+
+system_prompt: |
+  You are NECRO — Code Forensics for Engineering Teams, running inside GitLab Duo.
+
+  The problem you solve: Engineering teams waste hundreds of thousands of dollars per year
+  reinventing features they already built. A feature gets disabled because of a constraint
+  that existed in 2022. That constraint disappears in 2023. Nobody notices. Code stays dead.
+
+  When a user asks you to scan a repository:
+  1. Call the NECRO scan endpoint with the repository URL
+  2. Parse the results and present:
+     - Which features are ready to revive NOW (with feasibility scores)
+     - Which need investigation
+     - Resurrection Chains (shared constraints that lock multiple features)
+  3. Offer to create GitLab revival issues for the top candidates
+  4. Always cite the kill commit SHA and date for every finding
+
+  Be specific and cite evidence. "Stripe didn't support X in 2021 but added it in 2023" is
+  better than "the constraint may no longer apply."
+
+context:
+  - type: repository
+    description: "Current repository's commit history and issue tracker"
+
+tools:
+  - name: scan_repository
+    description: |
+      Run a full NECRO forensic scan on a GitLab repository.
+      Returns dead features with kill reasons, viability scores, and revival recommendations.
+    type: http
+    method: POST
+    endpoint: "${NECRO_URL}/api/scan/quick"
+    headers:
+      Content-Type: application/json
+    body_template: |
+      {
+        "repo_url": "{{ repo_url }}",
+        "max_commits": {{ max_commits | default(200) }},
+        "lookback_months": {{ lookback_months | default(24) }}
+      }
+    parameters:
+      - name: repo_url
+        type: string
+        description: "Full GitLab repository URL (e.g. https://gitlab.com/org/repo)"
+        required: true
+      - name: max_commits
+        type: integer
+        description: "Number of commits to scan (50-500, default 200)"
+        required: false
+      - name: lookback_months
+        type: integer
+        description: "How many months back to look (3-60, default 24)"
+        required: false
+
+  - name: get_revival_candidates
+    description: |
+      Get the current list of revival candidates from NECRO's MongoDB database
+      for a specific repository. Returns features already analyzed and stored.
+    type: http
+    method: GET
+    endpoint: "${NECRO_URL}/api/graveyard/{{ project_path }}"
+    parameters:
+      - name: project_path
+        type: string
+        description: "GitLab project path (e.g. gitlab-org/gitlab-foss)"
+        required: true
+
+  - name: create_revival_issue
+    description: |
+      Create a GitLab issue for a specific revival candidate identified by NECRO.
+      The issue includes kill reason, revival plan, effort estimate, and technical risks.
+      Auto-assigns to the engineer who disabled the feature.
+    type: http
+    method: POST
+    endpoint: "${NECRO_URL}/api/revive/{{ feature_id }}"
+    headers:
+      Content-Type: application/json
+    body_template: |
+      {
+        "project_path": "{{ project_path }}"
+      }
+    parameters:
+      - name: feature_id
+        type: string
+        description: "Feature ID from a previous NECRO scan result"
+        required: true
+      - name: project_path
+        type: string
+        description: "GitLab project path to create the issue in"
+        required: true
+
+  - name: create_ghost_mr
+    description: |
+      Create a Draft GitLab Merge Request with a full revival scaffold.
+      Creates branch necro/revival/{slug}, commits NECRO_REVIVAL.md with
+      a step-by-step checklist, and opens a Draft MR mentioning @duo_code_review.
+    type: http
+    method: POST
+    endpoint: "${NECRO_URL}/api/revive/{{ feature_id }}/ghost-mr"
+    headers:
+      Content-Type: application/json
+    body_template: |
+      {
+        "project_path": "{{ project_path }}"
+      }
+    parameters:
+      - name: feature_id
+        type: string
+        description: "Feature ID to create the Ghost MR for"
+        required: true
+      - name: project_path
+        type: string
+        description: "GitLab project path"
+        required: true
+
+  - name: check_health
+    description: "Check NECRO system health and MCP server status"
+    type: http
+    method: GET
+    endpoint: "${NECRO_URL}/api/health"
+
+examples:
+  - user: "Scan this repo for dead features"
+    description: "Triggers a scan of the current repository"
+  - user: "What features should I revive in gitlab-org/gitaly?"
+    description: "Scans a specific public repo and returns prioritized revival candidates"
+  - user: "Create a revival issue for the container-registry-cache feature"
+    description: "Creates a GitLab issue with full revival context"
+  - user: "What's blocking the most features right now?"
+    description: "Shows Resurrection Chains — shared constraints locking multiple features"

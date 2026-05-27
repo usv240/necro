@@ -34,10 +34,13 @@ def get_scheduler() -> AsyncIOScheduler:
 
 
 def start_monitor() -> None:
+    from apscheduler.triggers.cron import CronTrigger
+
     scheduler = get_scheduler()
     if scheduler.running:
         return
 
+    # Continuous repo-change monitor — checks for new commits every N hours
     scheduler.add_job(
         _monitor_cycle,
         trigger=IntervalTrigger(hours=settings.MONITOR_INTERVAL_HOURS),
@@ -45,8 +48,20 @@ def start_monitor() -> None:
         replace_existing=True,
         next_run_time=datetime.now(timezone.utc) + timedelta(minutes=5),
     )
+
+    # Weekly digest — every Monday at 9:00 AM UTC
+    scheduler.add_job(
+        _weekly_digest_cycle,
+        trigger=CronTrigger(day_of_week="mon", hour=9, minute=0, timezone="UTC"),
+        id="necro_weekly_digest",
+        replace_existing=True,
+    )
+
     scheduler.start()
-    logger.info("[OK] Autonomous monitor started (interval: %dh)", settings.MONITOR_INTERVAL_HOURS)
+    logger.info(
+        "[OK] Autonomous monitor started (interval: %dh, weekly digest: Monday 9:00 UTC)",
+        settings.MONITOR_INTERVAL_HOURS,
+    )
 
 
 async def stop_monitor() -> None:
@@ -190,10 +205,46 @@ async def _check_repo(project_path: str, repo_doc: dict) -> dict:
     return {"project_path": project_path, "status": "scanned", "new_revive_now": new_revive_now, "features_checked": len(features)}
 
 
+async def _weekly_digest_cycle() -> None:
+    """
+    Weekly digest — every Monday 9 AM UTC.
+
+    Aggregates top revival candidates across ALL watched repos and sends
+    a single comprehensive Slack digest. Engineering leads use this to
+    prioritize the coming week's revival work.
+    """
+    logger.info("[digest] Weekly digest cycle starting...")
+    try:
+        from backend.db.connection import get_db
+        from backend.services.slack_client import send_weekly_digest
+
+        db = get_db()
+
+        # Collect top revive_now candidates across all watched repos
+        all_revive = await db["features"].find(
+            {"viability.recommendation": "revive_now"},
+            {"_id": 0, "name": 1, "project_path": 1, "kill_date": 1,
+             "viability": 1, "roi": 1, "revival_score": 1},
+        ).sort("revival_score", -1).limit(10).to_list(length=10)
+
+        # Get watched repo count
+        watched_count = await db["watch_list"].count_documents({})
+        total_features = await db["features"].count_documents({})
+
+        await send_weekly_digest(
+            revive_now_features=all_revive,
+            watched_repos=watched_count,
+            total_features=total_features,
+        )
+        logger.info("[digest] Weekly digest sent (%d revive_now candidates)", len(all_revive))
+    except Exception as exc:
+        logger.warning("[digest] Weekly digest failed: %s", exc)
+
+
 async def _notify_slack(project_path: str, count: int, features: list) -> None:
     """Send Slack notification when new revival candidates are found."""
     try:
         from backend.services.slack_client import send_revival_alert
-        await send_revival_alert(project_path, count, features)
+        await send_revival_alert(project_path, features, count=count)  # count is keyword-only
     except Exception as e:
         logger.warning("Slack notification failed: %s", e)

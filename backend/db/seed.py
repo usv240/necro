@@ -94,6 +94,7 @@ DEMO_FEATURES = [
             "summary": "Neither GitHub nor Bitbucket bundle a chat server. Mattermost now has its own cloud offering. Low competitive pressure to revive.",
             "sources_checked": ["GitHub feature list", "Bitbucket changelog", "Mattermost.com product"],
         },
+        "revival_score": 36,
     },
     {
         "feature_id": "pages-domain-verification-wildcard",
@@ -149,6 +150,7 @@ DEMO_FEATURES = [
             "summary": "GitHub Pages supports wildcard/apex domains with DNS verification. Netlify and Vercel have it as standard. This is a competitive gap vs. all major static hosting alternatives.",
             "sources_checked": ["GitHub Pages docs", "Netlify wildcard docs", "Vercel custom domains docs"],
         },
+        "revival_score": 87,
     },
     {
         "feature_id": "elasticsearch-free-tier",
@@ -203,6 +205,7 @@ DEMO_FEATURES = [
             "summary": "GitHub's exact code search (powered by Blackbird) is available on free tier. This is an ongoing competitive differentiation point for GitLab migrations.",
             "sources_checked": ["GitHub code search announcement", "GitLab Zoekt announcement"],
         },
+        "revival_score": 53,
     },
     {
         "feature_id": "built-in-container-registry-cache",
@@ -257,6 +260,7 @@ DEMO_FEATURES = [
             "summary": "Every major container registry supports pull-through caching. Docker Hub rate limits (2020) made this feature significantly more valuable than in 2021. Competitive gap is widening.",
             "sources_checked": ["Docker Hub pull-through cache docs", "GHCR docs", "ECR pull-through cache announcement (2023)"],
         },
+        "revival_score": 91,
     },
     {
         "feature_id": "omnibus-geo-replication-free",
@@ -311,6 +315,7 @@ DEMO_FEATURES = [
             "summary": "No major competitor offers enterprise-grade geo replication at their free tier. This is a premium differentiation feature across the industry.",
             "sources_checked": ["GitHub Enterprise features", "Bitbucket Data Center features"],
         },
+        "revival_score": 20,
     },
 ]
 
@@ -376,6 +381,7 @@ DEMO2_FEATURES = [
             "summary": "No competitor supports GTK2. The entire GNOME ecosystem has moved to GTK4. Zero competitive pressure.",
             "sources_checked": ["GIMP changelog", "Krita requirements", "GTK release notes"],
         },
+        "revival_score": 19,
     },
     {
         "feature_id": "windows-xp-support",
@@ -430,6 +436,7 @@ DEMO2_FEATURES = [
             "summary": "No modern creative software supports Windows XP or Vista. Zero competitive pressure.",
             "sources_checked": ["GIMP requirements", "Krita requirements", "LibreOffice requirements"],
         },
+        "revival_score": 19,
     },
     {
         "feature_id": "pdf-ghostscript-import",
@@ -485,6 +492,7 @@ DEMO2_FEATURES = [
             "summary": "Adobe Illustrator and Affinity Designer both support Ghostscript-compatible PDF import as a standard feature. This is a pain point for Inkscape users migrating complex AI/PDF workflows.",
             "sources_checked": ["Adobe Illustrator feature list", "Affinity Designer PDF import docs"],
         },
+        "revival_score": 60,
     },
     {
         "feature_id": "live-path-effects-preview",
@@ -539,6 +547,7 @@ DEMO2_FEATURES = [
             "summary": "Real-time effect preview is standard in Adobe Illustrator, Affinity Designer, and CorelDRAW. This is a consistent pain point cited by users migrating from commercial tools to Inkscape.",
             "sources_checked": ["Adobe Illustrator live effects docs", "Affinity Designer feature comparison", "Inkscape issue tracker"],
         },
+        "revival_score": 80,
     },
 ]
 
@@ -584,6 +593,7 @@ async def seed_demo_data() -> None:
                 viability=ViabilityDoc(**f["viability"]),
                 roi=ROIDoc(**f["roi"]),
                 competitive_intel=CompetitiveIntelDoc(**f["competitive_intel"]) if f.get("competitive_intel") else None,
+                revival_score=f.get("revival_score", 0),
             )
             await db["features"].insert_one(doc.model_dump())
 
@@ -637,6 +647,7 @@ async def seed_demo_data() -> None:
                 viability=ViabilityDoc(**f["viability"]),
                 roi=ROIDoc(**f["roi"]),
                 competitive_intel=CompetitiveIntelDoc(**f["competitive_intel"]) if f.get("competitive_intel") else None,
+                revival_score=f.get("revival_score", 0),
             )
             await db["features"].insert_one(doc.model_dump())
 

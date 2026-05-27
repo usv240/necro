@@ -61,6 +61,7 @@ class FeatureDoc(BaseModel):
     viability: ViabilityDoc = Field(default_factory=ViabilityDoc)
     roi: ROIDoc = Field(default_factory=ROIDoc)
     competitive_intel: Optional[CompetitiveIntelDoc] = None
+    revival_score: int = 0          # 0-100 composite priority score (40% feasibility + 30% demand + 15% effort + 15% competitive)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property

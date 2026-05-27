@@ -198,7 +198,7 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             match_note = f" (semantic score: {top_score:.2f})" if top_score else ""
             await emit(f"Open Requests Match: {len(open_matches)} open issues are asking for '{feat.name}'{match_note}")
 
-        return {
+        feature_dict = {
             "feature_id": feat.id,
             "name": feat.name,
             "kill_commit_sha": feat.kill_commit_sha,
@@ -214,6 +214,8 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             "competitive_intel": comp,
             "open_issue_matches": open_matches,
         }
+        feature_dict["revival_score"] = _compute_revival_score(feature_dict)
+        return feature_dict
 
     # Analyze features in parallel batches of 5
     _BATCH_SIZE = 5
@@ -530,6 +532,53 @@ async def queue_put_report(emit, report: dict):
         raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
     await emit(f"__REPORT__:{_json.dumps(report, default=_default)}")
+
+
+def _compute_revival_score(feature_dict: dict) -> int:
+    """
+    Composite 0–100 Revival Priority Score — shown on every feature card.
+
+    Weights:
+      40% — feasibility (1-10 Gemini assessment)
+      30% — demand level (high/medium/low from open issue count)
+      15% — effort (days < weeks < months — less effort = more points)
+      15% — competitive gap (how many competitors already have this)
+
+    "keep_buried" is capped at 20 so it never bubbles up to the top.
+    """
+    vi = feature_dict.get("viability") or {}
+    roi = feature_dict.get("roi") or {}
+    ci = feature_dict.get("competitive_intel") or {}
+
+    # Feasibility: 0-10 → 0-40 pts
+    feasibility = min(10, max(0, vi.get("revival_feasibility") or 0))
+    f_score = int(feasibility) * 4
+
+    # Demand: 0-30 pts
+    demand = (roi.get("demand_level") or "unknown").lower()
+    d_score = {"high": 30, "medium": 20, "low": 10, "unknown": 5}.get(demand, 5)
+
+    # Effort: 0-15 pts (less effort = more points)
+    effort_cat = (vi.get("effort_category") or "months").lower()
+    e_score = {"days": 15, "weeks": 10, "months": 5, "strategic": 0}.get(effort_cat, 5)
+
+    # Competitive gap: 0-15 pts
+    comp_count = len(ci.get("competitors_with_feature") or [])
+    urgency = (ci.get("market_urgency") or "unknown").lower()
+    if urgency in ("critical", "high"):
+        c_score = min(15, comp_count * 4)
+    elif urgency == "medium":
+        c_score = min(10, comp_count * 3)
+    else:
+        c_score = min(5, comp_count * 1)
+
+    total = f_score + d_score + e_score + c_score
+
+    # Keep Buried features capped at 20
+    if vi.get("recommendation") == "keep_buried":
+        total = min(total, 20)
+
+    return min(100, max(0, total))
 
 
 def _url_to_path(url: str) -> str:

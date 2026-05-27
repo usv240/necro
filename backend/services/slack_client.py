@@ -132,6 +132,65 @@ async def send_revival_alert(
     return ok
 
 
+async def send_weekly_digest(
+    revive_now_features: list,
+    watched_repos: int = 0,
+    total_features: int = 0,
+) -> bool:
+    """
+    Monday morning digest — top revival candidates across all watched repos.
+    Sent every Monday at 9 AM UTC by the autonomous monitor scheduler.
+    """
+    if not _is_configured():
+        return False
+
+    if not revive_now_features:
+        logger.debug("Weekly digest: no revive_now candidates — skipping")
+        return False
+
+    header = f":calendar: *NECRO Weekly Revival Digest* — {len(revive_now_features)} top candidates across {watched_repos} repos"
+    summary = f"*{total_features}* dormant features tracked · *{len(revive_now_features)}* ready to revive this week"
+
+    bullets = []
+    for f in revive_now_features[:5]:
+        name = f.get("name", "unknown")
+        project = f.get("project_path", "")
+        score = f.get("revival_score", 0)
+        effort = (f.get("viability") or {}).get("effort_estimate", "?")
+        demand_ct = (f.get("roi") or {}).get("request_count", 0)
+        bullets.append(
+            f"• *{name}* `{project}` — "
+            f"score: {score}/100 · effort: {effort} · {demand_ct} open requests"
+        )
+
+    if len(revive_now_features) > 5:
+        bullets.append(f"_…and {len(revive_now_features) - 5} more_")
+
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": "NECRO — Monday Revival Digest", "emoji": True}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": header}},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": summary}]},
+        {"type": "divider"},
+        {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(bullets)}},
+        {"type": "actions", "elements": [
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Open NECRO Dashboard", "emoji": True},
+                "url": settings.APP_URL,
+                "style": "primary",
+            },
+        ]},
+        {"type": "context", "elements": [
+            {"type": "mrkdwn", "text": "_Powered by Google Cloud Agent Builder + GitLab MCP + MongoDB Atlas_"}
+        ]},
+    ]
+
+    ok = await _send({"text": header, "blocks": blocks})
+    if ok:
+        logger.info("[Slack] Weekly digest sent (%d candidates)", len(revive_now_features))
+    return ok
+
+
 async def send_issue_created_alert(
     project_path: str,
     feature_name: str,

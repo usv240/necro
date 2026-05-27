@@ -31,6 +31,13 @@ async def lifespan(app: FastAPI):
             await seed_demo_data()
         except Exception as e:
             logger.warning("[WARN] MongoDB startup issue: %s", e)
+
+        # Atlas Vector Search index (required for semantic demand matching)
+        try:
+            from backend.services.atlas_setup import ensure_vector_index
+            await ensure_vector_index()
+        except Exception as e:
+            logger.warning("[WARN] Atlas Vector Search index setup: %s", e)
     else:
         logger.warning("[WARN] MONGODB_URI not set — running without persistence")
 
@@ -90,6 +97,19 @@ app.include_router(agent_route.router, prefix="/api/agent", tags=["agent"])
 app.include_router(watch.router, prefix="/api/watch", tags=["watch"])
 app.include_router(monitor_route.router, prefix="/api/monitor", tags=["monitor"])
 
+# ── NECRO as MCP Server — bidirectional GitLab integration ───────────────────
+# NECRO calls GitLab's MCP server (Phase 1) AND exposes its own MCP endpoint
+# so GitLab Duo agents can call NECRO's analytical pipeline as MCP tools.
+# Mounted at /mcp — configure as MCP endpoint in GitLab Duo Agent Platform.
+try:
+    from backend.routes.mcp_server import create_mcp_app
+    _necro_mcp_asgi = create_mcp_app()
+    if _necro_mcp_asgi:
+        app.mount("/mcp", _necro_mcp_asgi)
+        logger.info("[OK] NECRO MCP server mounted at /mcp (FastMCP, 3 tools)")
+except Exception as _mcp_err:
+    logger.warning("[WARN] NECRO MCP server not available: %s", _mcp_err)
+
 
 @app.get("/api/health")
 async def health():
@@ -147,6 +167,12 @@ async def health():
             "POST /api/agent/revive — create GitLab revival issue via ADK + MCPToolset",
             "POST /api/agent/webhook/gitlab — GitLab push webhook → re-evaluate graveyard",
         ],
+        "necro_mcp_server": {
+            "endpoint": "POST /mcp",
+            "transport": "Streamable HTTP (FastMCP)",
+            "tools": ["scan_repository", "get_candidates", "get_health"],
+            "usage": "Configure as MCP tool endpoint in GitLab Duo Agent Platform",
+        },
         "slack": "configured" if settings.SLACK_BOT_TOKEN else "not configured",
         "monitor": get_monitor_status(),
         "gemini_primary": "gemini-3-flash-preview",
