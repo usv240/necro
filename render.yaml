@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: necro-code-necromancer
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GITLAB_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: necro_db
+      - key: GITLAB_URL
+        value: https://gitlab.com
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: NECRO_WEBHOOK_SECRET
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.11"

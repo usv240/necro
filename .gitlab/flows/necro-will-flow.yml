@@ -1,120 +1,80 @@
 ##
-## NECRO — Feature Will Generator Custom Flow (GitLab Beta)
+## NECRO — Feature Will Generator (GitLab Duo Custom Flow)
 ##
-## Purpose:
-##   Intercepts Merge Requests that kill features at the moment of death —
-##   before any institutional knowledge decays. Automatically:
-##     1. Analyzes the MR diff for feature kill signals
-##     2. Generates a "Revival Contract" issue capturing:
-##        - Why the feature was disabled
-##        - What conditions would allow revival
-##        - Estimated effort and technical risks
-##        - Auto-assigns the engineer who killed it
-##     3. Stores the contract in MongoDB with vector embedding for
-##        future semantic search ("find me features killed by auth constraints")
+## What this does:
+##   When a Merge Request is opened that kills a feature, this flow fires.
+##   NECRO's ADK agent (Google Cloud Agent Builder + Gemini 3 Flash) analyzes
+##   the MR diff and creates a "Revival Contract" GitLab issue — preserving
+##   institutional knowledge at 100% fidelity at the exact moment of death.
 ##
-## This is a STRUCTURAL safeguard — not advisory AI.
-## Advisory AI: "You should document this." (nutritionist — ignored)
-## Custom Flow:  Automatically creates the Revival Contract. (seatbelt — always on)
+## Information Decay Curve (why this matters):
+##   Moment of kill  →  100% fidelity (exact constraint, engineer, context)
+##   6 months later  →   40% (engineer moved on, context faded)
+##   18 months later →    5% (archaeological guesswork)
+##   This flow captures at 100%. All other approaches capture at 5–40%.
 ##
-## Information Decay Curve:
-##   At moment of kill:  100% fidelity — exact constraint, exact engineer, exact context
-##   6 months later:      40% — engineer has moved on, context faded
-##   18 months later:      5% — archaeological guesswork required
-##   This flow captures at 100%. All other approaches capture at 5-40%.
+## Setup:
+##   1. Deploy NECRO backend (Railway / Render / Cloud Run)
+##   2. Set NECRO_WEBHOOK_URL in your GitLab project CI/CD variables
+##   3. Enable "Allow flow execution" in Settings → GitLab Duo (already on ✅)
 ##
-## Configure in GitLab:
-##   Settings → CI/CD → Custom Flows → Add flow → select this file
-##   Triggers: merge_request (opened, reopened)
-##
-## Environment Variables Required:
-##   NECRO_WEBHOOK_URL   — URL of your deployed NECRO backend (/api/agent/webhook/gitlab)
-##   NECRO_WEBHOOK_TOKEN — Optional secret token (NECRO_WEBHOOK_SECRET env var on backend)
-##   GITLAB_TOKEN        — Token for NECRO backend to create Revival Contract issues
-##
-## GitLab Custom Flows Documentation:
-##   https://docs.gitlab.com/ee/user/project/merge_requests/custom_flows.html
+## This is STRUCTURAL enforcement — not advisory AI.
+## Advisory AI: "You should document this." → ignored 80% of the time.
+## This flow: automatically creates the Revival Contract. Always.
 ##
 
-name: NECRO Feature Will Generator
-description: >
-  Captures institutional knowledge at maximum fidelity when a feature is killed.
-  Creates a Revival Contract issue in GitLab with full context, conditions,
-  effort estimate, and auto-assigns the engineer who disabled the feature.
-  Powered by Google Cloud Agent Builder (ADK) + Gemini 3 Flash + GitLab MCP.
+name: necro-feature-will-generator
 
 on:
   merge_request:
-    types:
+    events:
       - opened
       - reopened
-    # Only trigger on MRs that likely contain feature kills
-    # (the NECRO backend does deeper analysis via ADK + Gemini)
-    title_patterns:
-      - "remove *"
-      - "disable *"
-      - "revert *"
-      - "deprecate *"
-      - "drop *"
-      - "sunset *"
-      - "kill *"
-      - "retire *"
-      - "delete feature*"
+
+description: >
+  NECRO Feature Will Generator — preserves institutional knowledge at the
+  moment a feature is killed. Creates a Revival Contract issue via
+  Google Cloud Agent Builder + GitLab MCP.
 
 steps:
-  - name: necro-will-generation
-    description: >
-      NECRO Feature Will Generator — analyzes MR for feature kills and
-      creates a Revival Contract issue via GitLab MCP
-    uses: webhook
-    with:
-      url: "$NECRO_WEBHOOK_URL"
+  - name: trigger-necro-will-generation
+    action: http_request
+    inputs:
+      url: $NECRO_WEBHOOK_URL
       method: POST
       headers:
         Content-Type: application/json
-        X-Gitlab-Token: "$NECRO_WEBHOOK_TOKEN"
-      body:
-        object_kind: merge_request
-        project:
-          path_with_namespace: "$CI_PROJECT_PATH"
-          web_url: "$CI_PROJECT_URL"
-        object_attributes:
-          iid: "$CI_MERGE_REQUEST_IID"
-          title: "$CI_MERGE_REQUEST_TITLE"
-          description: "$CI_MERGE_REQUEST_DESCRIPTION"
-          action: opened
-        user:
-          name: "$GITLAB_USER_NAME"
-          username: "$GITLAB_USER_LOGIN"
-          email: "$GITLAB_USER_EMAIL"
-      success_if: "status_code == 200 || status_code == 201"
-      timeout: 30s
+        X-Gitlab-Token: $NECRO_WEBHOOK_SECRET
+      body: |
+        {
+          "object_kind": "merge_request",
+          "project": {
+            "path_with_namespace": "$CI_PROJECT_PATH"
+          },
+          "object_attributes": {
+            "iid": $CI_MERGE_REQUEST_IID,
+            "title": "$CI_MERGE_REQUEST_TITLE",
+            "description": "$CI_MERGE_REQUEST_DESCRIPTION",
+            "action": "open"
+          },
+          "user": {
+            "name": "$GITLAB_USER_NAME",
+            "username": "$GITLAB_USER_LOGIN"
+          }
+        }
 
-  - name: add-revival-contract-note
-    description: >
-      Add a note to the MR confirming a Revival Contract was created.
-      This closes the loop — the engineer knows their feature's future is preserved.
-    uses: gitlab-api
-    needs: [necro-will-generation]
-    with:
-      endpoint: "projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
-      method: POST
-      body:
-        body: >
-          🪦 **NECRO — Feature Will Created**
+  - name: add-revival-note
+    action: create_note
+    inputs:
+      noteable_type: MergeRequest
+      noteable_id: $CI_MERGE_REQUEST_IID
+      body: |
+        🪦 **NECRO — Feature Will Generator triggered**
 
-          This MR has been analyzed by the NECRO Feature Will Generator.
-          If a feature kill was detected, a Revival Contract issue has been automatically created
-          with full context, revival conditions, and effort estimate.
+        This MR was analyzed by NECRO's ADK agent (Google Cloud Agent Builder + Gemini 3 Flash).
+        If a feature kill was detected, a **Revival Contract** issue has been created automatically
+        with: kill reason, revival conditions, effort estimate, and engineer attribution.
 
-          > *Institutional knowledge captured at 100% fidelity — before any decay.*
-
-          Powered by Google Cloud Agent Builder + Gemini 3 Flash + GitLab MCP
-
-notifications:
-  on_success:
-    slack:
-      message: "🪦 NECRO: Revival Contract created for MR !$CI_MERGE_REQUEST_IID in $CI_PROJECT_PATH"
-  on_failure:
-    gitlab_comment:
-      message: "⚠️ NECRO Will Generator failed for this MR — revival contract not created automatically"
+        > *Institutional knowledge captured at 100% fidelity — before any decay.*
+        >
+        > Powered by Google Cloud Agent Builder + GitLab MCP + MongoDB Atlas

@@ -215,6 +215,15 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             "open_issue_matches": open_matches,
         }
         feature_dict["revival_score"] = _compute_revival_score(feature_dict)
+
+        # Feature EKG — take a vitality snapshot for real scans too
+        # (demo features have 12-month history; real scans get their first data point here)
+        try:
+            from backend.services.vitality import take_vitality_snapshot
+            asyncio.create_task(take_vitality_snapshot(feature_dict, project_path, open_issues))
+        except Exception:
+            pass
+
         return feature_dict
 
     # Analyze features in parallel batches of 5
