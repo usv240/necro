@@ -79,7 +79,7 @@ async def ensure_vector_index() -> bool:
         from pymongo.operations import SearchIndexModel
 
         client = AsyncIOMotorClient(settings.MONGODB_URI)
-        db = client.get_default_database() if "/" in settings.MONGODB_URI.split("@")[-1].split("/")[-1] else client["necro"]
+        db = client[settings.MONGODB_DB_NAME]
         collection = db[_COLLECTION]
 
         # List existing search indexes
@@ -134,7 +134,7 @@ async def check_vector_index_status() -> dict:
         from motor.motor_asyncio import AsyncIOMotorClient
 
         client = AsyncIOMotorClient(settings.MONGODB_URI)
-        db = client.get_default_database() if "/" in settings.MONGODB_URI.split("@")[-1].split("/")[-1] else client["necro"]
+        db = client[settings.MONGODB_DB_NAME]
         collection = db[_COLLECTION]
 
         async for idx in await collection.list_search_indexes():

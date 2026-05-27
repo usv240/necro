@@ -38,16 +38,19 @@ def create_mcp_app():
         logger.warning("[MCP Server] FastMCP not available — NECRO MCP server disabled")
         return None
 
-    mcp = FastMCP(
-        name="NECRO",
-        version="1.0.0",
-        instructions=(
-            "NECRO is a code forensics system that finds disabled features in GitLab "
-            "repositories and evaluates which ones are worth reviving. "
-            "Use scan_repository to analyze a repo. "
-            "Use get_candidates to retrieve stored analysis results."
-        ),
-    )
+    # FastMCP API varies by version — `version` kwarg removed in newer releases
+    try:
+        mcp = FastMCP(
+            name="NECRO",
+            instructions=(
+                "NECRO is a code forensics system that finds disabled features in GitLab "
+                "repositories and evaluates which ones are worth reviving. "
+                "Use scan_repository to analyze a repo. "
+                "Use get_candidates to retrieve stored analysis results."
+            ),
+        )
+    except TypeError:
+        mcp = FastMCP("NECRO")
 
     # ── Tool: scan_repository ─────────────────────────────────────────────────
 

@@ -315,12 +315,15 @@ def _build_agent() -> Agent:
 def get_runner() -> Runner:
     global _runner, _agent
     if _runner is None:
-        # ADK's genai client resolves the API key from GOOGLE_API_KEY env var.
-        # NECRO configures it as GEMINI_API_KEY — bridge the two here.
-        if not os.environ.get("GOOGLE_API_KEY"):
-            from backend.config import settings
-            if settings.GEMINI_API_KEY:
-                os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
+        # Bridge settings → os.environ so MCPToolset subprocesses inherit the values.
+        # settings reads from .env via pydantic; os.environ is what subprocess envs see.
+        from backend.config import settings
+        if not os.environ.get("GOOGLE_API_KEY") and settings.GEMINI_API_KEY:
+            os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
+        if not os.environ.get("GITLAB_TOKEN") and settings.GITLAB_TOKEN:
+            os.environ["GITLAB_TOKEN"] = settings.GITLAB_TOKEN
+        if not os.environ.get("GITLAB_URL") and settings.GITLAB_URL:
+            os.environ["GITLAB_URL"] = settings.GITLAB_URL
         _agent = _build_agent()
         _runner = Runner(
             agent=_agent,
