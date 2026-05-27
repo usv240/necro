@@ -2824,33 +2824,50 @@ body {
 .sparkline-current { font-size: 0.68rem; color: var(--text-secondary); }
 .sparkline-label { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
 
-/* ── Live scan chips ─────────────────────────────────────────────────────── */
-.quick-targets-row {
+/* ── Chip section rows (instant demo + live scan) ────────────────────────── */
+.chip-section {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.chip-row-label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   flex-wrap: wrap;
-  margin-top: 0.4rem;
 }
-.quick-label-live { color: #f87171; }
-[data-theme="light"] .quick-label-live { color: #dc2626; }
-[data-theme="light"] .chip-live {
-  background: rgba(220,38,38,0.06);
-  border-color: rgba(220,38,38,0.35);
-  color: #b91c1c;
+.chip-row-icon {
+  font-size: 0.78rem;
+  flex-shrink: 0;
 }
-[data-theme="light"] .chip-live:hover {
-  background: rgba(220,38,38,0.12);
-  border-color: #dc2626;
-  color: #7f1d1d;
+.chip-row-icon.live-icon {
+  color: #10b981;
+  font-size: 0.6rem;
+  animation: livepulse 1.5s ease-in-out infinite;
 }
+.chip-row-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.chip-row-desc {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+[data-theme="light"] .chip-row-desc { color: #64748b; }
+[data-theme="light"] .chip-row-title { color: #475569; }
+
+/* Live scan chips — green (active/live), not red (danger) */
 .chip-live {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  background: rgba(239,68,68,0.07);
-  border: 1px solid rgba(239,68,68,0.3);
-  color: #fca5a5;
+  background: rgba(16,185,129,0.07);
+  border: 1px solid rgba(16,185,129,0.3);
+  color: #6ee7b7;
   border-radius: 20px;
   padding: 0.3rem 0.75rem;
   font-size: 0.74rem;
@@ -2861,24 +2878,40 @@ body {
   white-space: nowrap;
 }
 .chip-live:hover {
-  background: rgba(239,68,68,0.18);
-  border-color: #f87171;
+  background: rgba(16,185,129,0.18);
+  border-color: #10b981;
   color: #fff;
-  box-shadow: 0 0 10px rgba(239,68,68,0.2);
+  box-shadow: 0 0 10px rgba(16,185,129,0.2);
 }
-.live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #ef4444;
-  flex-shrink: 0;
-  box-shadow: 0 0 5px #ef4444;
-  animation: livepulse 1.5s ease-in-out infinite;
+[data-theme="light"] .chip-live {
+  background: rgba(16,185,129,0.06);
+  border-color: rgba(16,185,129,0.35);
+  color: #065f46;
+}
+[data-theme="light"] .chip-live:hover {
+  background: rgba(16,185,129,0.15);
+  border-color: #10b981;
+  color: #022c22;
 }
 @keyframes livepulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.7); }
+  50% { opacity: 0.4; transform: scale(0.7); }
 }
+
+/* Button hint text below each action button */
+.btn-with-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+.btn-hint {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  padding-left: 0.2rem;
+  line-height: 1;
+}
+[data-theme="light"] .btn-hint { color: #94a3b8; }
 
 /* ── hidden utility ──────────────────────────────────────────────────────── */
 .hidden { display: none !important; }

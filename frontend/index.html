@@ -199,47 +199,55 @@
             
             <div class="scanner-actions-row">
               <div class="btn-group-scanner">
-                <button class="btn-neon btn-scan" id="scanBtn" onclick="startScan()">
-                  <span class="neon-glow-beam"></span>
-                  RUN FORENSIC ARCHAEOLOGY
-                </button>
-                <button class="btn-cyber btn-demo" id="demoDataBtn" onclick="loadDemoData()">
-                  LOAD PRE-ANALYZED FOSS REPORT
-                </button>
-                <button class="btn-cyber btn-group-scan" id="groupScanToggle" onclick="toggleGroupScanInput()" title="Scan an entire GitLab namespace to find cross-repo resurrection chains — features killed by the same constraint across multiple repos">
-                  ⛓ GROUP SCAN
-                </button>
+                <div class="btn-with-hint">
+                  <button class="btn-neon btn-scan" id="scanBtn" onclick="startScan()">
+                    <span class="neon-glow-beam"></span>
+                    RUN FORENSIC ARCHAEOLOGY
+                  </button>
+                  <span class="btn-hint">Paste any GitLab URL above → live ADK + Gemini scan</span>
+                </div>
+                <div class="btn-with-hint">
+                  <button class="btn-cyber btn-demo" id="demoDataBtn" onclick="loadDemoData()">
+                    LOAD PRE-ANALYZED FOSS REPORT
+                  </button>
+                  <span class="btn-hint">Instant results — no URL needed</span>
+                </div>
+                <div class="btn-with-hint">
+                  <button class="btn-cyber btn-group-scan" id="groupScanToggle" onclick="toggleGroupScanInput()">
+                    ⛓ GROUP SCAN
+                  </button>
+                  <span class="btn-hint">Scan entire GitLab namespace</span>
+                </div>
               </div>
               
               <div class="scanner-quick-targets">
-                <!-- Pre-analyzed: instant load, always looks great -->
-                <div class="quick-targets-row">
-                  <span class="quick-label">⚡ Pre-analyzed:</span>
+                <!-- Chip rows -->
+                <div class="chip-section">
+                  <div class="chip-row-label">
+                    <span class="chip-row-icon">⚡</span>
+                    <span class="chip-row-title">Instant demo</span>
+                    <span class="chip-row-desc">Pre-analyzed — loads in 1 second, no API calls needed</span>
+                  </div>
                   <div class="quick-buttons" id="quickRepoFeatured">
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab-foss')" title="GitLab FOSS — pre-analyzed, instant">gitlab-foss</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('inkscape/inkscape')" title="Inkscape — pre-analyzed, instant">inkscape</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('videolan/vlc')" title="VLC — pre-analyzed, instant">vlc</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('kde/krita')" title="Krita — pre-analyzed, instant">krita</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab-foss')">gitlab-foss</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('inkscape/inkscape')">inkscape</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('videolan/vlc')">vlc</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('kde/krita')">krita</button>
                   </div>
                 </div>
 
-                <!-- Live scan: real ADK + MCP + Gemini pipeline, ~90 seconds -->
-                <div class="quick-targets-row">
-                  <span class="quick-label quick-label-live">🔴 Live scan:</span>
+                <div class="chip-section">
+                  <div class="chip-row-label">
+                    <span class="chip-row-icon live-icon">●</span>
+                    <span class="chip-row-title">Live scan</span>
+                    <span class="chip-row-desc">Real GitLab MCP + ADK + Gemini pipeline — takes ~60–90 seconds</span>
+                  </div>
                   <div class="quick-buttons">
-                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-foss', 80, 12)" title="Live forensic scan — GitLab MCP + ADK + Gemini · ~90 sec">
-                      <span class="live-dot"></span>gitlab-foss
-                    </button>
-                    <button class="chip-live" onclick="quickScan('inkscape/inkscape', 60, 18)" title="Live forensic scan — Inkscape commit history · ~75 sec">
-                      <span class="live-dot"></span>inkscape
-                    </button>
-                    <button class="chip-live" onclick="quickScan('gitlab-org/gitaly', 60, 12)" title="Live forensic scan — GitLab Gitaly RPC service · ~60 sec">
-                      <span class="live-dot"></span>gitaly
-                    </button>
-                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-runner', 60, 12)" title="Live forensic scan — GitLab Runner · ~60 sec">
-                      <span class="live-dot"></span>gitlab-runner
-                    </button>
-                    <button class="chip-more" id="moreReposToggle" onclick="toggleMoreRepos()" title="Browse more repos">+ more</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-foss', 80, 12)">gitlab-foss</button>
+                    <button class="chip-live" onclick="quickScan('inkscape/inkscape', 60, 18)">inkscape</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitaly', 60, 12)">gitaly</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-runner', 60, 12)">gitlab-runner</button>
+                    <button class="chip-more" id="moreReposToggle" onclick="toggleMoreRepos()">+ more</button>
                   </div>
                 </div>
 
