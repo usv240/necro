@@ -177,22 +177,61 @@ def _feature_to_dict(feat) -> dict:
     }
 
 
-# ── MCP Toolset builder ───────────────────────────────────────────────────────
+# ── MCP Toolset builders ──────────────────────────────────────────────────────
+
+def _build_gitlab_official_mcp_toolset():
+    """
+    GitLab's own MCP server via SSE transport (PAT Bearer auth).
+
+    Endpoint: https://gitlab.com/-/ide/mcp
+    Auth: Authorization: Bearer <personal_access_token>
+    Transport: SseServerParams (HTTP/SSE — no subprocess needed)
+
+    This is GitLab's authoritative MCP implementation, introduced in GitLab 17.4.
+    Uses SSE transport rather than stdio, so no npx subprocess is required.
+    Preferred over the community @zereight server when available.
+    """
+    from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
+    from google.adk.tools.mcp_tool.mcp_session_manager import SseServerParams
+
+    token = os.environ.get("GITLAB_TOKEN", "")
+    gitlab_url = os.environ.get("GITLAB_URL", "https://gitlab.com").rstrip("/")
+
+    if not token:
+        logger.warning("[MCP Official] GITLAB_TOKEN not set — skipping official GitLab MCPToolset")
+        return None
+
+    try:
+        return MCPToolset(
+            connection_params=SseServerParams(
+                url=f"{gitlab_url}/-/ide/mcp",
+                headers={"Authorization": f"Bearer {token}"},
+            ),
+            tool_filter=[
+                "create_issue",
+                "list_issues",
+                "get_issue",
+                "list_commits",
+                "get_commit",
+                "list_merge_requests",
+                "get_merge_request",
+                "get_project",
+                "list_branches",
+                "search_code",
+            ],
+        )
+    except Exception as exc:
+        logger.warning("[MCP Official] Failed to build official GitLab MCPToolset: %s", exc)
+        return None
+
 
 def _build_gitlab_mcp_toolset():
     """
-    Build ADK MCPToolset for @zereight/mcp-gitlab.
+    @zereight/mcp-gitlab — community GitLab MCP server (stdio transport, PAT auth).
 
-    Uses StdioConnectionParams (stdio transport) with PAT auth — no OAuth
-    browser flow required, works server-side.
-
-    On Linux/Cloud Run: spawns `npx --yes @zereight/mcp-gitlab` directly.
-    On Windows localhost: same command via system Node (may fall back gracefully).
-
-    The official GitLab MCP server at /api/v4/mcp uses OAuth 2.0 and is
-    designed for interactive tools (Claude, Cursor, etc.) that can open a
-    browser. For server-side programmatic access, @zereight/mcp-gitlab with
-    PAT auth is the correct approach — same MCP protocol over stdio transport.
+    Supplementary to the official SSE server. Used as primary when the official
+    server is unavailable, or as backup for additional tool coverage.
+    Spawns `npx --yes @zereight/mcp-gitlab` as a subprocess.
     """
     from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
     from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
@@ -202,10 +241,9 @@ def _build_gitlab_mcp_toolset():
     gitlab_url = os.environ.get("GITLAB_URL", "https://gitlab.com")
 
     if not token:
-        logger.warning("[MCP] GITLAB_TOKEN not set — skipping MCPToolset")
+        logger.warning("[MCP Community] GITLAB_TOKEN not set — skipping @zereight MCPToolset")
         return None
 
-    # Build env for the MCP subprocess
     mcp_env = {
         **os.environ,
         "GITLAB_PERSONAL_ACCESS_TOKEN": token,
@@ -222,7 +260,6 @@ def _build_gitlab_mcp_toolset():
                     env=mcp_env,
                 )
             ),
-            # Expose the most useful GitLab tools to the agent
             tool_filter=[
                 "create_issue",
                 "list_issues",
@@ -237,7 +274,7 @@ def _build_gitlab_mcp_toolset():
             ],
         )
     except Exception as exc:
-        logger.warning("[MCP] Failed to build MCPToolset: %s — agent will use REST tools only", exc)
+        logger.warning("[MCP Community] Failed to build @zereight MCPToolset: %s", exc)
         return None
 
 
@@ -250,11 +287,21 @@ def _build_agent() -> Agent:
         FunctionTool(_create_revival_issue_tool),
     ]
 
-    mcp_toolset = _build_gitlab_mcp_toolset()
-    if mcp_toolset:
-        tools.append(mcp_toolset)
-        logger.info("[OK] GitLab MCPToolset added to agent (StdioConnectionParams)")
+    # Primary: GitLab's official MCP server (SSE transport — authoritative)
+    official_toolset = _build_gitlab_official_mcp_toolset()
+    if official_toolset:
+        tools.append(official_toolset)
+        logger.info("[OK] GitLab official MCP server (SSE transport) added to agent")
     else:
+        logger.warning("[WARN] Official GitLab MCP server unavailable")
+
+    # Secondary: @zereight community server (stdio transport — supplementary)
+    community_toolset = _build_gitlab_mcp_toolset()
+    if community_toolset:
+        tools.append(community_toolset)
+        logger.info("[OK] @zereight GitLab MCP community server (stdio) added as supplementary")
+
+    if not official_toolset and not community_toolset:
         logger.warning("[WARN] Agent running without MCPToolset — REST fallback active")
 
     return Agent(
@@ -280,5 +327,5 @@ def get_runner() -> Runner:
             app_name="necro",
             session_service=InMemorySessionService(),
         )
-        logger.info("[OK] NECRO ADK agent initialized (model: gemini-3-flash-preview)")
+        logger.info("[OK] NECRO ADK agent initialized (model: gemini-3-flash-preview, MCP: official SSE + @zereight stdio)")
     return _runner

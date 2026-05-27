@@ -100,3 +100,12 @@ class RevivalLogEntry(BaseModel):
     issue_iid: Optional[int] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     via: str = "gitlab_mcp"
+
+
+class IssueEmbeddingDoc(BaseModel):
+    project_path: str
+    issue_iid: int
+    title: str = ""
+    web_url: str = ""
+    embedding: list[float] = []
+    created_at: datetime = Field(default_factory=datetime.utcnow)

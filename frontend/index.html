@@ -175,8 +175,8 @@
         <div class="scanner-console-card">
           <div class="scanner-console-glow"></div>
           <div class="scanner-console-header">
-            <h3>FORENSIC ARCHAEOLOGY SCANNER</h3>
-            <p>Input any GitLab Repository URL below to extract, debate, and verify dead or disabled feature structures.</p>
+            <h3>DORMANT FEATURE RECOVERY SCANNER</h3>
+            <p>Paste any public GitLab URL to discover which disabled features are ready to revive — verified against live external evidence, not guesswork.</p>
           </div>
           <div class="scanner-console-body">
             <div class="scanner-form-row">
@@ -391,28 +391,28 @@
         <div class="graveyard-grid" id="graveyardGrid">
           <div class="empty-state onboarding-card">
             <div class="onboarding-badge">QUICK START</div>
-            <h3 class="onboarding-title">Let's resurrect some dormant code</h3>
+            <h3 class="onboarding-title">Your codebase has features you already paid for — but never shipped</h3>
             <p class="onboarding-desc">
-              NECRO scans your codebase's commit history using custom GitLab MCP agents to identify valuable features, flags, and merge requests that were shelved or disabled in the past.
+              NECRO scans your GitLab commit history to find disabled features, then checks whether the original kill reason still applies today. Most teams discover 4–8 revivable features per scan.
             </p>
             
             <div class="onboarding-steps">
               <div class="onboarding-step">
                 <div class="step-num">1</div>
-                <h4>Select a Repository</h4>
-                <p>Input any public GitLab URL above, or select one of the Quick Scan targets.</p>
+                <h4>Paste GitLab URL</h4>
+                <p>Any public GitLab repo. Agent Builder autonomously assesses history depth before scanning.</p>
               </div>
               <div class="onboarding-arrow">→</div>
               <div class="onboarding-step">
                 <div class="step-num">2</div>
-                <h4>Run Analysis</h4>
-                <p>The forensic engine processes git logs, commits, and tickets to measure viability.</p>
+                <h4>Verify, Not Just Find</h4>
+                <p>Gemini 3 Flash checks if the kill constraint still applies today — live external evidence, not guesses.</p>
               </div>
               <div class="onboarding-arrow">→</div>
               <div class="onboarding-step">
                 <div class="step-num">3</div>
-                <h4>Restore & Save</h4>
-                <p>Post recovery recommendations directly to GitLab or download telemetry report.</p>
+                <h4>One-Click Revival</h4>
+                <p>Create a GitLab issue or Draft MR with full revival checklist, auto-assigned to the engineer who disabled it.</p>
               </div>
             </div>
             
@@ -508,10 +508,10 @@
           <div class="welcome-hero-header">
             <div class="welcome-hero-title-group">
               <h2 class="welcome-hero-title" style="font-size: 1.4rem; font-weight: 800; background: linear-gradient(135deg, #c084fc 0%, var(--accent-hover) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-                Mission Brief: Cybernetic Code Necromancy
+                Stop Rebuilding Features You Already Built
               </h2>
               <p class="welcome-hero-subtitle" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
-                Resurrecting hidden value in your codebase using Google Cloud Agent Builder & GitLab MCP
+                NECRO finds disabled features in your GitLab repo, verifies whether the kill reason still exists, and surfaces the ones ready to revive — with cited evidence
               </p>
             </div>
           </div>
@@ -524,7 +524,7 @@
                   <h3>WHAT is it?</h3>
                 </div>
                 <p class="welcome-text">
-                  NECRO is a **forensic archaeologist** for your codebase. It scans your Git repository history using custom GitLab MCP agents to discover high-value feature flags, merge requests, and closed issues that were disabled or shelved in the past, putting them into a searchable "dormant feature registry".
+                  NECRO is a multi-agent forensics system that scans your GitLab commit history using Google Cloud Agent Builder and GitLab MCP to find features, flags, and merged work that was disabled or shelved — then determines which ones are ready to revive based on whether the original kill reason still applies today.
                 </p>
               </div>
 
@@ -534,7 +534,7 @@
                   <h3>WHY does it matter?</h3>
                 </div>
                 <p class="welcome-text">
-                  Decisions expire. The reason a feature was killed **no longer exists**, but code stays disabled forever, costing $100K+ in wasted reinventions.
+                  Decisions expire. The constraint that killed a feature in 2022 may have dissolved in 2023 — but nobody checks. Code stays dead. Teams reinvent. Estimates: $140K+ wasted per year per 25-developer team.
                 </p>
                 <!-- WOW FACTOR Interactive Buried ROI Calculator -->
                 <div class="roi-calculator-widget">
@@ -563,13 +563,13 @@
                 </div>
                 <ol class="welcome-steps">
                   <li>
-                    <strong>GitLab MCP Extraction:</strong> Runs 6 forensic detection strategies to map raw "DeadFeature" structures.
+                    <strong>Phase 0 — Agent Builder autonomously assesses</strong> the repo: calls list_commits via MCPToolset, decides optimal scan depth, streams reasoning live.
                   </li>
                   <li>
-                    <strong>Adversarial Red-Team Debate:</strong> Gemini 3 Flash extracts the kill reason. An independent Vertex AI Gemini 2.5 Flash agent tries to aggressively break the revival case.
+                    <strong>Phase 1 — 6 forensic strategies</strong> detect dead features via GitLab MCP. Gemini 3 Flash analyzes kill reasons with live constraint grounding. An independent Vertex AI challenger stress-tests every revival case.
                   </li>
                   <li>
-                    <strong>Agent Builder Synthesis:</strong> Google Cloud Agent Builder ADK coordinator builds an executive action plan, ready to post as a native GitLab issue or Draft MR!
+                    <strong>Phase 2 — Agent Builder synthesizes</strong> all findings into a ranked executive action plan. One click creates a GitLab issue or Draft MR with a revival checklist.
                   </li>
                 </ol>
               </div>

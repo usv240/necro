@@ -70,7 +70,12 @@ async def stream_scan(req: StreamScanRequest):
 
 async def _stream_live(emit, project_path: str, max_commits: int, lookback_months: int):
     """
-    Two-phase scan:
+    Three-phase scan:
+
+    Phase 0 — ADK Autonomous Assessment (Google Cloud Agent Builder)
+      The ADK agent calls list_commits via its MCPToolset, checks repo history
+      depth and commit frequency, then decides optimal scan parameters.
+      This is where the agent makes an autonomous decision based on live data.
 
     Phase 1 — Data collection via GitLab REST API (reliable, no subprocess dependency)
       list_commits, get_commit diffs, list_issues, list_merge_requests,
@@ -99,6 +104,16 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
     scan_id = uuid.uuid4().hex[:8]
     mcp_calls: list = []
 
+    # ── Phase 0: ADK Autonomous Repository Assessment ────────────────────────
+    await emit("[ADK] Phase 0: Google Cloud Agent Builder — assessing repository autonomously...")
+    try:
+        max_commits, lookback_months = await asyncio.wait_for(
+            _run_adk_pre_scan_assessment(emit, project_path, max_commits, lookback_months),
+            timeout=45.0,
+        )
+    except asyncio.TimeoutError:
+        await emit("[ADK Phase 0] Assessment timed out — using default scan parameters")
+
     # ── Phase 1: Data collection ─────────────────────────────────────────────
     await emit(f"[MCP] GitLab MCP — starting data collection for {project_path}...")
     features = await detect_dead_features(
@@ -107,7 +122,9 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
     )
 
     if not features:
-        await emit("No dead feature candidates found in the scanned range.")
+        await emit("Clean codebase — no dormant features detected in the scanned range.")
+        await emit("This is a healthy sign: features are being actively maintained rather than silently disabled.")
+        await emit("Try increasing max_commits or lookback_months for a deeper historical scan.")
         report = {
             "project_path": project_path,
             "total_commits_scanned": max_commits,
@@ -119,6 +136,7 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             "orchestrated_by": "google_cloud_agent_builder_adk",
             "adk_synthesis": None,
             "resurrection_chains": [],
+            "clean_scan": True,
         }
         await queue_put_report(emit, report)
         return
@@ -131,7 +149,14 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
     all_open_issues = await _mcp.list_open_issues(project_path, per_page=100)
     if all_open_issues:
         mcp_calls.append({"tool": "list_issues_open", "project": project_path})
-        await emit(f"[MCP] Found {len(all_open_issues)} open issues — matching to dead features...")
+        await emit(f"[MCP] Found {len(all_open_issues)} open issues — embedding for semantic demand matching...")
+        if settings.MONGODB_URI:
+            try:
+                from backend.services.vector_search import store_issue_embeddings
+                stored = await store_issue_embeddings(project_path, all_open_issues)
+                await emit(f"[VecSearch] text-embedding-004 — {stored} issue embeddings stored in MongoDB Atlas")
+            except Exception as exc:
+                logger.warning("[VecSearch] Embedding storage failed: %s — keyword matching active", exc)
 
     saved_features: list[dict] = []
     total = min(len(features), 15)
@@ -167,9 +192,11 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         rec = vi.get("recommendation", "unknown").upper().replace("_", " ")
         await emit(f"[{idx}/{total}] {rec}: {vi.get('what_changed', '')[:80]}")
 
-        open_matches = _match_open_requests(feat.name, all_open_issues, project_path)
+        open_matches = await _find_demand_signals(feat.name, all_open_issues, project_path)
         if open_matches:
-            await emit(f"🔥 Open Requests Match: {len(open_matches)} open issues are asking for '{feat.name}'")
+            top_score = open_matches[0].get("score", 0)
+            match_note = f" (semantic score: {top_score:.2f})" if top_score else ""
+            await emit(f"Open Requests Match: {len(open_matches)} open issues are asking for '{feat.name}'{match_note}")
 
         return {
             "feature_id": feat.id,
@@ -268,6 +295,118 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
     revive_ct = sum(1 for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now")
     await emit(f"SCAN COMPLETE — {revive_ct} features ready to revive")
     await queue_put_report(emit, report)
+
+async def _run_adk_pre_scan_assessment(
+    emit, project_path: str, default_max_commits: int, default_lookback: int
+) -> tuple[int, int]:
+    """
+    Phase 0 — ADK agent autonomously assesses the repository before scanning.
+
+    The agent uses its MCPToolset to call list_commits for the target repo,
+    examines history depth and commit frequency, then decides optimal scan
+    parameters. This is genuine autonomous agent decision-making based on
+    live GitLab data — not hardcoded logic.
+
+    Returns (max_commits, lookback_months) — adjusted from user defaults.
+    Falls back to defaults on any failure.
+    """
+    import json as _json
+    import uuid
+    from google.genai import types as genai_types
+
+    try:
+        from agent.agent import get_runner
+        runner = get_runner()
+
+        session_id = f"prescan-{uuid.uuid4().hex[:8]}"
+        await runner.session_service.create_session(
+            app_name="necro", user_id="necro-prescan", session_id=session_id
+        )
+
+        prompt = f"""You are assessing the GitLab repository: {project_path}
+
+Phase 0 task — autonomous repository assessment:
+1. Call list_commits for project '{project_path}' (limit=10) to sample recent activity
+2. Based on the commit dates and activity level, decide optimal scan parameters:
+   - max_commits: how many commits NECRO should analyze (range: 50–500, user default: {default_max_commits})
+   - lookback_months: how far back to look (range: 3–60 months, user default: {default_lookback})
+3. Reason explicitly about what you observe in the commit history
+
+Return ONLY a JSON object (no markdown, no explanation outside the JSON):
+{{
+  "max_commits": <integer>,
+  "lookback_months": <integer>,
+  "reasoning": "<1-2 sentences explaining your decision based on observed commit frequency>",
+  "recent_activity": "active|moderate|sparse",
+  "commit_sample_size": <how many commits you actually retrieved>
+}}"""
+
+        message = genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text=prompt)],
+        )
+
+        response_text = ""
+        async for event in runner.run_async(
+            user_id="necro-prescan",
+            session_id=session_id,
+            new_message=message,
+        ):
+            # Stream agent tool calls so reasoning is visible in the terminal
+            if hasattr(event, "content") and event.content and event.content.parts:
+                for part in event.content.parts:
+                    if hasattr(part, "function_call") and part.function_call:
+                        fc = part.function_call
+                        args_preview = _json.dumps(dict(fc.args))[:80] if fc.args else ""
+                        await emit(f"[ADK Phase 0] Agent calling: {fc.name}({args_preview})")
+                    elif hasattr(part, "function_response") and part.function_response:
+                        await emit("[ADK Phase 0] Tool response received — analyzing commit history...")
+            if event.is_final_response() and event.content and event.content.parts:
+                response_text = (event.content.parts[0].text or "").strip()
+
+        if response_text:
+            match = re.search(r"(\{.*?\})", response_text, re.DOTALL)
+            if match:
+                result = json.loads(match.group(1))
+                max_c = max(50, min(500, int(result.get("max_commits", default_max_commits))))
+                lookback = max(3, min(60, int(result.get("lookback_months", default_lookback))))
+                activity = result.get("recent_activity", "unknown")
+                reasoning = result.get("reasoning", "")
+                await emit(
+                    f"[ADK Phase 0] {activity.title()} repo — "
+                    f"agent selected {max_c} commits / {lookback} months"
+                )
+                if reasoning:
+                    await emit(f"[ADK Phase 0] {reasoning[:120]}")
+                return max_c, lookback
+
+    except Exception as exc:
+        logger.warning("[ADK Phase 0] Pre-scan assessment failed: %s — using defaults", exc)
+
+    await emit(f"[ADK Phase 0] Using defaults: {default_max_commits} commits, {default_lookback} months")
+    return default_max_commits, default_lookback
+
+
+async def _find_demand_signals(
+    feature_name: str, all_open_issues: list[dict], project_path: str
+) -> list[dict]:
+    """
+    Semantic demand matching — find open issues related to a dead feature.
+
+    Tries MongoDB Atlas vector search (text-embedding-004 cosine similarity)
+    first, then falls back to keyword token overlap if vector search is
+    unavailable or returns no results.
+    """
+    if settings.MONGODB_URI:
+        try:
+            from backend.services.vector_search import find_similar_issues
+            results = await find_similar_issues(project_path, feature_name)
+            if results:
+                return results
+        except Exception as exc:
+            logger.debug("[VecSearch] Demand signal search failed: %s — keyword fallback", exc)
+    return _match_open_requests(feature_name, all_open_issues, project_path)
+
 
 async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]) -> dict:
     """
