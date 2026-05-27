@@ -2833,6 +2833,17 @@ body {
   margin-top: 0.4rem;
 }
 .quick-label-live { color: #f87171; }
+[data-theme="light"] .quick-label-live { color: #dc2626; }
+[data-theme="light"] .chip-live {
+  background: rgba(220,38,38,0.06);
+  border-color: rgba(220,38,38,0.35);
+  color: #b91c1c;
+}
+[data-theme="light"] .chip-live:hover {
+  background: rgba(220,38,38,0.12);
+  border-color: #dc2626;
+  color: #7f1d1d;
+}
 .chip-live {
   display: inline-flex;
   align-items: center;
