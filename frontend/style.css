@@ -2824,5 +2824,50 @@ body {
 .sparkline-current { font-size: 0.68rem; color: var(--text-secondary); }
 .sparkline-label { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
 
+/* ── Live scan chips ─────────────────────────────────────────────────────── */
+.quick-targets-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+.quick-label-live { color: #f87171; }
+.chip-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(239,68,68,0.07);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: #fca5a5;
+  border-radius: 20px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.chip-live:hover {
+  background: rgba(239,68,68,0.18);
+  border-color: #f87171;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(239,68,68,0.2);
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+  flex-shrink: 0;
+  box-shadow: 0 0 5px #ef4444;
+  animation: livepulse 1.5s ease-in-out infinite;
+}
+@keyframes livepulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.7); }
+}
+
 /* ── hidden utility ──────────────────────────────────────────────────────── */
 .hidden { display: none !important; }

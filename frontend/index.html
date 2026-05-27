@@ -212,14 +212,35 @@
               </div>
               
               <div class="scanner-quick-targets">
-                <span class="quick-label">Quick Scan Targets:</span>
-                <div class="quick-buttons" id="quickRepoFeatured">
-                  <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab-foss')" title="GitLab's own FOSS — pre-analyzed">gitlab-foss</button>
-                  <button class="chip-neon chip-featured" onclick="loadDemoData('inkscape/inkscape')" title="Vector graphics editor — pre-analyzed">inkscape</button>
-                  <button class="chip-neon chip-featured" onclick="loadDemoData('videolan/vlc')" title="VLC media player — pre-analyzed">vlc</button>
-                  <button class="chip-neon chip-featured" onclick="loadDemoData('kde/krita')" title="Krita digital painting — pre-analyzed">krita</button>
-                  <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitaly')" title="GitLab's Git RPC service — pre-analyzed">gitaly</button>
-                  <button class="chip-more" id="moreReposToggle" onclick="toggleMoreRepos()" title="Browse 30+ repos by category">+ more</button>
+                <!-- Pre-analyzed: instant load, always looks great -->
+                <div class="quick-targets-row">
+                  <span class="quick-label">⚡ Pre-analyzed:</span>
+                  <div class="quick-buttons" id="quickRepoFeatured">
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab-foss')" title="GitLab FOSS — pre-analyzed, instant">gitlab-foss</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('inkscape/inkscape')" title="Inkscape — pre-analyzed, instant">inkscape</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('videolan/vlc')" title="VLC — pre-analyzed, instant">vlc</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('kde/krita')" title="Krita — pre-analyzed, instant">krita</button>
+                  </div>
+                </div>
+
+                <!-- Live scan: real ADK + MCP + Gemini pipeline, ~90 seconds -->
+                <div class="quick-targets-row">
+                  <span class="quick-label quick-label-live">🔴 Live scan:</span>
+                  <div class="quick-buttons">
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-foss', 80, 12)" title="Live forensic scan — GitLab MCP + ADK + Gemini · ~90 sec">
+                      <span class="live-dot"></span>gitlab-foss
+                    </button>
+                    <button class="chip-live" onclick="quickScan('inkscape/inkscape', 60, 18)" title="Live forensic scan — Inkscape commit history · ~75 sec">
+                      <span class="live-dot"></span>inkscape
+                    </button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitaly', 60, 12)" title="Live forensic scan — GitLab Gitaly RPC service · ~60 sec">
+                      <span class="live-dot"></span>gitaly
+                    </button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-runner', 60, 12)" title="Live forensic scan — GitLab Runner · ~60 sec">
+                      <span class="live-dot"></span>gitlab-runner
+                    </button>
+                    <button class="chip-more" id="moreReposToggle" onclick="toggleMoreRepos()" title="Browse more repos">+ more</button>
+                  </div>
                 </div>
 
                 <!-- Expanded repo browser -->
