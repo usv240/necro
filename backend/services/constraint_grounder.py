@@ -115,10 +115,19 @@ _PYPI_PACKAGES: dict[str, str] = {
 }
 
 
+# Per-process cache: constraint text → grounding result.
+# Multiple features sharing the same constraint (webpack, oauth, etc.) skip redundant API calls.
+_GROUNDER_CACHE: dict[str, dict] = {}
+
+
 async def ground_constraint(constraint_text: str, kill_date: str) -> dict:
     """
     Given a constraint description and kill date, query real external APIs to find
     evidence of whether that constraint has been resolved.
+
+    Results are cached per constraint text for the lifetime of the process so that
+    multiple features sharing the same root constraint (e.g. "webpack 4 incompatibility")
+    only trigger one external API call.
 
     Returns:
       grounded (bool)       — whether we found real API evidence
@@ -133,9 +142,16 @@ async def ground_constraint(constraint_text: str, kill_date: str) -> dict:
     if not constraint_text:
         return _unverified("No constraint text provided")
 
+    cache_key = constraint_text.lower().strip()[:120]
+    if cache_key in _GROUNDER_CACHE:
+        logger.debug("Grounder cache hit for: %s", cache_key[:60])
+        return _GROUNDER_CACHE[cache_key]
+
     tech, tech_type = _identify_technology(constraint_text)
     if not tech:
-        return _unverified("No specific technology identified in constraint text")
+        result = _unverified("No specific technology identified in constraint text")
+        _GROUNDER_CACHE[cache_key] = result
+        return result
 
     logger.info("Grounding constraint for '%s' (type=%s, kill=%s)", tech, tech_type, kill_date)
 
@@ -159,11 +175,13 @@ async def ground_constraint(constraint_text: str, kill_date: str) -> dict:
         result = await _check_npm(_NPM_CANONICAL[tech.lower()])
 
     if not result:
-        return _unverified(f"No release data found for '{tech}' via external APIs")
+        grounding = _unverified(f"No release data found for '{tech}' via external APIs")
+        _GROUNDER_CACHE[cache_key] = grounding
+        return grounding
 
     is_resolved = _released_after_kill(result.get("release_date", ""), kill_date)
 
-    return {
+    grounding = {
         "grounded": True,
         "technology": tech,
         "evidence_date": result.get("release_date", ""),
@@ -173,6 +191,8 @@ async def ground_constraint(constraint_text: str, kill_date: str) -> dict:
         "is_resolved": is_resolved,
         "source": result.get("source", "api"),
     }
+    _GROUNDER_CACHE[cache_key] = grounding
+    return grounding
 
 
 def _identify_technology(text: str) -> tuple[str, str]:

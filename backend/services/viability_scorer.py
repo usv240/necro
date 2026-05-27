@@ -16,14 +16,15 @@ from backend.services.gemini import generate_json
 logger = logging.getLogger(__name__)
 
 
-async def score_revival_viability(feature, death_reason: dict) -> dict:
+async def score_revival_viability(feature, death_reason: dict, project_path: str = "") -> dict:
     """
     Evaluate if the kill reason is still valid today.
 
     Steps:
     1. Call constraint_grounder to get real external evidence for the constraint
-    2. Inject that grounded evidence into the Gemini prompt
-    3. Ask Gemini to evaluate using the real evidence (not training data speculation)
+    2. Fetch live GitLab CI pipeline status via MCP (list_pipelines)
+    3. Inject grounded evidence + CI health into the Gemini prompt
+    4. Ask Gemini to evaluate using the real evidence (not training data speculation)
 
     Returns: is_still_valid, what_changed, revival_feasibility, effort_estimate,
              technical_risks, recommendation, reasoning, confidence, grounding.
@@ -38,6 +39,29 @@ async def score_revival_viability(feature, death_reason: dict) -> dict:
         constraint_text=specific_constraint or primary_reason,
         kill_date=kill_date,
     )
+
+    # Check GitLab CI health — a broken pipeline signals the codebase is unstable
+    ci_health_block = ""
+    ci_broken = False
+    if project_path:
+        from backend.services.gitlab_mcp import mcp as _gl
+        try:
+            pipelines = await _gl.list_pipelines(project_path, per_page=3)
+            if pipelines:
+                last_status = pipelines[0].get("status", "unknown")
+                all_statuses = [p.get("status", "unknown") for p in pipelines]
+                failing = sum(1 for s in all_statuses if s == "failed")
+                ci_broken = last_status == "failed"
+                ci_health_block = f"""
+GITLAB CI STATUS (live from GitLab MCP list_pipelines):
+- Most recent pipeline: {last_status.upper()}
+- Last {len(pipelines)} pipelines: {', '.join(all_statuses)}
+- Failing: {failing}/{len(pipelines)}
+{"- RISK: CI is currently broken — reviving code into a broken pipeline raises deployment risk" if ci_broken else "- CI healthy — safe environment to introduce revived code"}
+"""
+                logger.info("[MCP] CI health for %s: last=%s", project_path, last_status)
+        except Exception as exc:
+            logger.debug("CI pipeline check skipped: %s", exc)
 
     # Build evidence block for the prompt
     if grounding["grounded"]:
@@ -74,7 +98,7 @@ Specific constraint: {specific_constraint or "not specified"}
 Was it meant to be temporary: {death_reason.get("is_temporary", False)}
 
 {evidence_block}
-
+{ci_health_block}
 Evaluate whether this feature should be considered for revival today (May 2026).
 
 Return a JSON object with these exact fields:
@@ -97,17 +121,28 @@ Recommendation guide:
 
 IMPORTANT: Only cite specific version numbers or dates that appear in the VERIFIED EXTERNAL EVIDENCE block above."""
 
-    result = await generate_json(prompt)
+    result = await generate_json(prompt, thinking_budget=1024)
 
     if result and "recommendation" in result:
-        # Attach grounding metadata so the UI can show the source URL
         result["grounding"] = grounding
+        # Downgrade recommendation if CI is currently broken — revival into broken CI is risky
+        if ci_broken:
+            risks = result.get("technical_risks", [])
+            ci_risk = "CI pipeline is currently failing — fix CI before merging revived code"
+            if ci_risk not in risks:
+                risks.insert(0, ci_risk)
+            result["technical_risks"] = risks
+            if result.get("recommendation") == "revive_now":
+                result["recommendation"] = "investigate_further"
+                result["reasoning"] = (result.get("reasoning", "") +
+                    " Note: downgraded from 'revive now' because CI is currently broken.")
         logger.info(
-            "Viability: %s (feasibility=%s, recommendation=%s, grounded=%s)",
+            "Viability: %s (feasibility=%s, recommendation=%s, grounded=%s, ci_broken=%s)",
             feature.name,
             result.get("revival_feasibility"),
             result.get("recommendation"),
             grounding.get("grounded"),
+            ci_broken,
         )
         return result
 

@@ -37,6 +37,14 @@ async def lifespan(app: FastAPI):
     # GitLab REST client
     await mcp.start()
 
+    # ADK agent — initialize eagerly so health check shows "initialized"
+    try:
+        from backend.services.adk_runner import get_runner
+        get_runner()
+        logger.info("[OK] ADK agent runner initialized at startup")
+    except Exception as e:
+        logger.warning("[WARN] ADK agent startup: %s", e)
+
     # Autonomous monitoring loop
     start_monitor()
 

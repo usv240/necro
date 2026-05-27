@@ -364,7 +364,7 @@ def _detect_from_mrs(mrs: list[dict], commits: list[dict]) -> list[DeadFeature]:
 async def _enrich_feature(feat: DeadFeature, project_path: str, emit, log_mcp=None) -> None:
     if feat.linked_mr_iid:
         await emit(f"[MCP] list_merge_request_notes — MR #{feat.linked_mr_iid} for '{feat.name}'...")
-        notes = await mcp.list_mr_notes(project_path, feat.linked_mr_iid)
+        notes = await mcp.list_merge_request_notes(project_path, feat.linked_mr_iid)
         if log_mcp:
             log_mcp("list_merge_request_notes", repo=project_path, mr_iid=feat.linked_mr_iid, result_count=len(notes))
         for note in notes[:5]:
@@ -381,6 +381,20 @@ async def _enrich_feature(feat: DeadFeature, project_path: str, emit, log_mcp=No
             body = note.get("body", "")
             if body and len(body) > 10:
                 feat.context_snippets.append(f"Issue #{iid} comment: {body[:300]}")
+
+    # Enrich with actual commit diff — real code lines removed at kill time
+    if feat.kill_commit_sha and not feat.diff_excerpt:
+        await emit(f"[MCP] get_commit_diff {feat.kill_commit_sha[:8]} — extracting code evidence for '{feat.name}'...")
+        diffs = await mcp.get_commit_diff(project_path, feat.kill_commit_sha)
+        if log_mcp:
+            log_mcp("get_commit_diff", repo=project_path, sha=feat.kill_commit_sha[:8], file_count=len(diffs))
+        if diffs:
+            snippets = _extract_diff_snippets(diffs)
+            if snippets:
+                feat.diff_excerpt = snippets[0]
+                for s in snippets[:2]:
+                    if s not in feat.context_snippets:
+                        feat.context_snippets.append(s)
 
     # Limit context snippets
     feat.context_snippets = feat.context_snippets[:8]
@@ -426,3 +440,30 @@ def _parse_date(dt_str: str) -> str:
         return dt.strftime("%B %d, %Y")
     except ValueError:
         return dt_str[:10]
+
+
+def _extract_diff_snippets(diffs: list[dict]) -> list[str]:
+    """
+    Pull the most informative removed lines from a commit's file diffs.
+    Returns short human-readable strings like "[auth.rb] removed: user.session_token = nil"
+    that become context_snippets and diff_excerpt on the DeadFeature.
+    """
+    snippets = []
+    for file_diff in diffs[:4]:
+        old_path = file_diff.get("old_path") or file_diff.get("new_path", "unknown")
+        diff_text = file_diff.get("diff", "")
+        if not diff_text:
+            continue
+        removed = []
+        for ln in diff_text.split("\n"):
+            if ln.startswith("-") and not ln.startswith("---"):
+                code = ln[1:].strip()
+                # Skip blank lines, pure comment lines, and trivial whitespace
+                if code and not code.startswith("#") and not code.startswith("//") and len(code) > 4:
+                    removed.append(code)
+            if len(removed) >= 4:
+                break
+        if removed:
+            preview = " | ".join(removed[:3])
+            snippets.append(f"[{old_path}] removed: {preview[:200]}")
+    return snippets

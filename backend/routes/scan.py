@@ -134,7 +134,7 @@ async def _run_scan(
             await emit(f"Gemini 3 Flash — analyzing kill reason for '{feat.name}'...")
             feat.death_reason = await extract_death_reason(feat)
             await emit(f"Evaluating revival viability for '{feat.name}'...")
-            feat.viability = await score_revival_viability(feat, feat.death_reason)
+            feat.viability = await score_revival_viability(feat, feat.death_reason, project_path)
             await emit(f"Estimating demand signals for '{feat.name}'...")
             feat.roi = await estimate_revival_roi(feat, project_path)
             await emit(f"Running competitive intelligence for '{feat.name}'...")
@@ -190,6 +190,16 @@ async def _run_scan(
         await write_graveyard_report(report)
         await emit("Graveyard report saved to outputs/necro/")
         await emit(f"SCAN COMPLETE — {scan_doc.revive_now_count} features ready to revive" if settings.MONGODB_URI else "SCAN COMPLETE")
+
+        # Auto-fire Slack alert when revival candidates are found
+        try:
+            from backend.services.slack_client import send_revival_alert
+            if saved_features:
+                slack_ok = await send_revival_alert(project_path, saved_features, count=len(saved_features))
+                if slack_ok:
+                    await emit("[Slack] Revival alert sent to your workspace")
+        except Exception as _slack_err:
+            logger.debug("Slack alert skipped: %s", _slack_err)
 
         _scans[scan_id]["status"] = "done"
         _scans[scan_id]["result"] = report

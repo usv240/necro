@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # Slack (optional — enables autonomous notifications)
     SLACK_BOT_TOKEN: str = ""
     SLACK_CHANNEL_ID: str = ""
+    SLACK_WEBHOOK_URL: str = ""   # simpler alternative — Incoming Webhook URL
 
     # App
     APP_PORT: int = 8080

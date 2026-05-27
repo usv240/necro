@@ -268,6 +268,12 @@ def _build_agent() -> Agent:
 def get_runner() -> Runner:
     global _runner, _agent
     if _runner is None:
+        # ADK's genai client resolves the API key from GOOGLE_API_KEY env var.
+        # NECRO configures it as GEMINI_API_KEY — bridge the two here.
+        if not os.environ.get("GOOGLE_API_KEY"):
+            from backend.config import settings
+            if settings.GEMINI_API_KEY:
+                os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
         _agent = _build_agent()
         _runner = Runner(
             agent=_agent,

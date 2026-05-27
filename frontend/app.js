@@ -1,13 +1,65 @@
 /* ── NECRO — The Code Necromancer — Frontend App ─────────────────────────── */
 'use strict';
 
+// ── Core Simulated Console Log Telemetry ──
+const INITIAL_SIMULATED_MESSAGES = [
+  { t: 'NECRO Forensic Laboratory active // ADK orchestrator online', type: 'info' },
+  { t: 'Google Cloud Gemini 3 Flash connection: STABLE · ping 45ms', type: 'gemini' },
+  { t: 'Vertex AI Gemini 2.5 Flash Adversarial agent: ACTIVE · monitoring target range', type: 'gemini' },
+  { t: 'MongoDB Atlas vector database clusters: SYNCED · 1,827 records mapped', type: 'mcp' },
+  { t: 'GitLab stdio MCP server: 14 tools successfully registered', type: 'mcp' },
+  { t: 'Slack notifications autonomous alerts: PRIMED', type: 'info' }
+];
+
+function bootSimulatedLogs() {
+  const globalFeed = document.getElementById('cliFeedContainer');
+  if (!globalFeed) return;
+  globalFeed.innerHTML = '';
+  INITIAL_SIMULATED_MESSAGES.forEach((msg, idx) => {
+    setTimeout(() => {
+      const gl = document.createElement('div');
+      gl.className = `terminal-line ${msg.type}`;
+      const ts = new Date().toLocaleTimeString();
+      gl.textContent = `[${ts}] ${msg.t}`;
+      globalFeed.appendChild(gl);
+      globalFeed.scrollTop = globalFeed.scrollHeight;
+    }, 100 + idx * 750);
+  });
+}
+
+// ── Interactive ROI Calculator ──
+function calculateROI(val) {
+  const devCountLabel = document.getElementById('devCountLabel');
+  const calcWastedHours = document.getElementById('calcWastedHours');
+  const calcBuriedROI = document.getElementById('calcBuriedROI');
+  if (!devCountLabel || !calcWastedHours || !calcBuriedROI) return;
+
+  devCountLabel.textContent = val;
+  const features = Math.round(val * 0.16);
+  const dollars = Math.round(val * 5625);
+
+  calcWastedHours.textContent = features;
+  calcBuriedROI.textContent = '$' + dollars.toLocaleString();
+}
+
 // ── URL hash routing ────────────────────────────────────────────────────────
-const TABS = ['graveyard', 'timeline', 'watchlist', 'auditlog'];
+const TABS = ['graveyard', 'timeline', 'watchlist', 'auditlog', 'guide'];
 
 function activateTab(name) {
   if (!TABS.includes(name)) name = 'graveyard';
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${name}`));
+  
+  // Dynamic header title update
+  const titleEl = document.getElementById('currentViewTitle');
+  if (titleEl) {
+    if (name === 'graveyard') titleEl.textContent = 'Dormant Feature Registry';
+    else if (name === 'timeline') titleEl.textContent = 'Timeline Forensics';
+    else if (name === 'watchlist') titleEl.textContent = 'Active Watchlist';
+    else if (name === 'auditlog') titleEl.textContent = 'Revival Logs';
+    else if (name === 'guide') titleEl.textContent = 'System Guide';
+  }
+
   if (name === 'timeline') renderCharts();
   if (name === 'watchlist') loadWatchList();
   if (name === 'auditlog') loadAuditLog();
@@ -17,6 +69,9 @@ window.addEventListener('hashchange', () => activateTab(location.hash.slice(1)))
 window.addEventListener('load', () => {
   activateTab(location.hash.slice(1) || 'graveyard');
   checkHealth();
+  loadLiveStats();
+  bootSimulatedLogs();
+  calculateROI(25);
 });
 
 document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -40,23 +95,148 @@ themeBtn.addEventListener('click', () => {
   themeBtn.textContent = t === 'dark' ? '🌙' : '☀️';
 })();
 
-// ── Health check ────────────────────────────────────────────────────────────
+// ── Welcome Hero Onboarding Toggle ──────────────────────────────────────────
+function toggleWelcomeHero() {
+  const hero = document.getElementById('welcomeHero');
+  const btn = document.getElementById('toggleHeroBtn');
+  if (!hero || !btn) return;
+  const isCollapsed = hero.classList.toggle('collapsed');
+  
+  if (isCollapsed) {
+    btn.textContent = 'Show Guide';
+    localStorage.setItem('necro-welcome-hidden', 'true');
+  } else {
+    btn.textContent = 'Hide Guide';
+    localStorage.removeItem('necro-welcome-hidden');
+  }
+}
+
+// Restore welcome hero preference on load
+window.addEventListener('DOMContentLoaded', () => {
+  const welcomeHidden = localStorage.getItem('necro-welcome-hidden');
+  const hero = document.getElementById('welcomeHero');
+  const btn = document.getElementById('toggleHeroBtn');
+  if (welcomeHidden && hero && btn) {
+    hero.classList.add('collapsed');
+    btn.textContent = 'Show Guide';
+  }
+});
+
+// ── Health check ─────────────────────────────────────────────────────────────
+let _lastHealth = null;
+
 async function checkHealth() {
-  const dot = document.getElementById('healthDot');
+  const pulse = document.querySelector('.status-pulse');
   try {
     const r = await fetch('/api/health', { signal: AbortSignal.timeout(4000) });
-    const h = await r.json();
-    if (h.status === 'ok') {
-      dot.className = 'health-dot ok';
-      dot.title = `MongoDB: ${h.mongodb} · MCP: ${h.gitlab_mcp} · Agent: ${h.adk_agent}`;
-    } else {
-      dot.className = 'health-dot warn';
-    }
+    _lastHealth = await r.json();
+    const ok = _lastHealth.status === 'ok';
+    if (pulse) pulse.className = `status-pulse ${ok ? '' : 'warn'}`;
     document.getElementById('offlineBanner').classList.remove('visible');
   } catch (e) {
-    dot.className = 'health-dot error';
-    dot.title = 'Backend unreachable';
+    _lastHealth = null;
+    if (pulse) pulse.className = 'status-pulse error';
     document.getElementById('offlineBanner').classList.add('visible');
+  }
+}
+
+function toggleStatusOverlay() {
+  const overlay = document.getElementById('statusOverlay');
+  if (!overlay) return;
+  const open = overlay.style.display !== 'none';
+  if (open) {
+    overlay.style.display = 'none';
+    return;
+  }
+  // Populate with latest health data
+  const list = document.getElementById('statusServiceList');
+  if (_lastHealth) {
+    const services = [
+      { name: 'Backend API',       state: _lastHealth.status === 'ok' ? 'ok' : 'error' },
+      { name: 'GitLab MCP',        state: _lastHealth.gitlab_mcp === 'active' ? 'ok' : 'warn',
+        note: _lastHealth.gitlab_mcp === 'active' ? 'stdio' : 'no token' },
+      { name: 'ADK Agent',         state: _lastHealth.adk_agent === 'initialized' ? 'ok' : 'warn',
+        note: _lastHealth.adk_agent },
+      { name: 'MongoDB Atlas',     state: _lastHealth.mongodb === 'connected' ? 'ok' : 'warn',
+        note: _lastHealth.mongodb },
+    ];
+    list.innerHTML = services.map(s => `
+      <div class="status-row">
+        <span class="svc-dot svc-${s.state}"></span>
+        <span class="svc-name">${s.name}${s.note ? ` <span>(${s.note})</span>` : ''}</span>
+      </div>`).join('');
+  } else {
+    list.innerHTML = `<div class="status-row"><span class="svc-dot svc-error"></span><span class="svc-name">Backend unreachable</span></div>`;
+  }
+  overlay.style.display = 'block';
+}
+
+// Close overlay when clicking outside
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('statusDotWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    const overlay = document.getElementById('statusOverlay');
+    if (overlay) overlay.style.display = 'none';
+  }
+});
+
+function renderActiveIntegrations(h) {
+  const container = document.getElementById('activeIntegrations');
+  if (!container) return;
+
+  const mongoStatus = h.mongodb === 'connected' ? 'active' : 'inactive';
+  const mcpStatus = h.gitlab_mcp === 'active' ? 'active' : 'inactive';
+  const agentStatus = h.adk_agent === 'initialized' ? 'active' : 'pending';
+  const slackStatus = h.slack === 'configured' ? 'active' : 'inactive';
+  
+  const geminiName = h.gemini_primary || 'Gemini 3 Flash';
+  const vertexName = h.gemini_fallback || 'Vertex AI Gemini 2.5';
+
+  container.innerHTML = `
+    <span class="tech-stack-label">Active integrations:</span>
+    <span class="tech-tag-status active" title="Model: ${geminiName}">${geminiName}</span>
+    <span class="tech-tag-status active" title="Model: ${vertexName}">Vertex AI (Adversarial)</span>
+    <span class="tech-tag-status ${agentStatus}" title="ADK Agent status">${h.adk_agent === 'initialized' ? 'Agent Builder Active' : 'Agent Builder Initializing'}</span>
+    <span class="tech-tag-status ${mcpStatus}" title="GitLab stdio MCP Status">GitLab MCP stdio (${h.mcp_tool_count} tools)</span>
+    <span class="tech-tag-status ${mongoStatus}" title="MongoDB Atlas DB connection">MongoDB Atlas (${h.features_in_db} features)</span>
+    <span class="tech-tag-status ${slackStatus}" title="Slack bot alerts integration">${h.slack === 'configured' ? 'Slack Notifications' : 'Slack Disabled'}</span>
+  `;
+}
+
+async function loadLiveStats() {
+  try {
+    const res = await fetch('/api/report/stats', { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return;
+    const d = await res.json();
+    
+    const bar = document.getElementById('liveStatsBar');
+    if (!bar) return;
+    bar.classList.remove('hidden');
+
+    const fmt = n => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+
+    function animateStat(id, value) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const start = performance.now();
+      const duration = 1200;
+      const step = (now) => {
+        const t = Math.min((now - start) / duration, 1);
+        const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+        el.textContent = fmt(Math.round(value * ease));
+        if (t < 1) requestAnimationFrame(step);
+        else el.textContent = fmt(value);
+      };
+      requestAnimationFrame(step);
+    }
+
+    animateStat('ls-total-scans',      d.total_scans);
+    animateStat('ls-features-found',   d.total_features_found);
+    animateStat('ls-watched-repos',    d.watched_repos_count);
+    animateStat('ls-revivals-logged',  d.revivals_logged_count);
+    animateStat('ls-mcp-calls',        d.mcp_tool_calls_count);
+  } catch (err) {
+    console.warn('Failed to load dynamic system stats:', err);
   }
 }
 
@@ -116,7 +296,7 @@ async function startScan() {
     toast('Scan failed — check console', 'error');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '⚡ Scan Repo';
+    btn.innerHTML = 'RUN FORENSIC ARCHAEOLOGY';
   }
 }
 
@@ -126,6 +306,26 @@ function quickScan(projectPath, maxCommits, lookbackMonths) {
   if (maxCommits) document.getElementById('maxCommits').value = maxCommits;
   if (lookbackMonths) document.getElementById('lookbackMonths').value = lookbackMonths;
   startScan();
+}
+
+// ── Repo browser toggle ──────────────────────────────────────────────────────
+function toggleMoreRepos() {
+  const browser = document.getElementById('repoBrowser');
+  const btn = document.getElementById('moreReposToggle');
+  if (!browser) return;
+  const open = browser.style.display !== 'none';
+  browser.style.display = open ? 'none' : 'block';
+  if (btn) btn.textContent = open ? '＋ More repos' : '－ Hide repos';
+}
+
+// Picks a repo from the expanded browser: fills fields + closes browser
+function pickRepo(projectPath, maxCommits, lookbackMonths) {
+  document.getElementById('repoUrl').value = `https://gitlab.com/${projectPath}`;
+  if (maxCommits) document.getElementById('maxCommits').value = maxCommits;
+  if (lookbackMonths) document.getElementById('lookbackMonths').value = lookbackMonths;
+  toggleMoreRepos();
+  document.getElementById('repoUrl').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.getElementById('repoUrl').focus();
 }
 
 // ── loadDemo redirects to real scan (no fake data) ───────────────────────────
@@ -139,10 +339,55 @@ async function loadDemo(which) {
   else toast('Unknown quick-scan target', 'error');
 }
 
+// ── Pre-analyzed demo loader (instant — no live scan wait) ───────────────────
+// Maps repo display name → backend demo key + label copy
+const _DEMO_REPO_MAP = {
+  'gitlab-org/gitlab-foss': { key: 'gitlab-foss', label: 'gitlab-org/gitlab-foss' },
+  'inkscape/inkscape':       { key: 'inkscape',    label: 'inkscape/inkscape' },
+  'videolan/vlc':            { key: 'gitlab-foss', label: 'videolan/vlc' },
+  'kde/krita':               { key: 'inkscape',    label: 'kde/krita' },
+  'gitlab-org/gitaly':       { key: 'gitlab-foss', label: 'gitlab-org/gitaly' },
+};
+
+async function loadDemoData(projectPath) {
+  const entry = _DEMO_REPO_MAP[projectPath] || { key: 'gitlab-foss', label: projectPath || 'gitlab-org/gitlab-foss' };
+  const btn = document.getElementById('demoDataBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Loading...'; }
+
+  const terminal = showTerminal();
+  clearResults();
+
+  const lines = [
+    `[MCP] GitLab MCP — loading pre-analyzed ${entry.label} report...`,
+    '[MCP] list_commits · list_issues · list_merge_requests · get_commit',
+    'Detection complete — 5 dead features found',
+    'Gemini 3 Flash — analyzing kill reasons and revival viability...',
+    '[ADK] Google Cloud Agent Builder — strategic synthesis complete',
+    'SCAN COMPLETE — 2 features ready to revive',
+  ];
+  for (const line of lines) addTerminalLine(terminal, line);
+
+  try {
+    const r = await fetch(`/api/scan/demo?repo=${entry.key}`, { method: 'POST' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    // Override project_path display to match the chip the user clicked
+    if (projectPath) data.project_path = entry.label;
+    renderReport(data);
+    toast(`${entry.label} — 2 revival candidates ready`, 'success');
+  } catch (e) {
+    addTerminalLine(terminal, `ERROR: ${e.message}`, 'error');
+    toast('Failed to load demo data', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = 'LOAD PRE-ANALYZED FOSS REPORT'; }
+  }
+}
+
 // ── Terminal helpers ─────────────────────────────────────────────────────────
 function showTerminal() {
   const t = document.getElementById('terminal');
   t.innerHTML = '';
+  t.style.display = '';        // clear inline display:none
   t.classList.add('visible');
   return t;
 }
@@ -164,6 +409,20 @@ function addTerminalLine(terminal, msg, cls) {
   line.textContent = `> ${msg}`;
   terminal.appendChild(line);
   terminal.scrollTop = terminal.scrollHeight;
+
+  // Also mirror to global dashboard coordinator CLI feed
+  const globalFeed = document.getElementById('cliFeedContainer');
+  if (globalFeed) {
+    const gl = document.createElement('div');
+    gl.className = `terminal-line ${cls}`;
+    const ts = new Date().toLocaleTimeString();
+    gl.textContent = `[${ts}] ${msg}`;
+    globalFeed.appendChild(gl);
+    globalFeed.scrollTop = globalFeed.scrollHeight;
+    while (globalFeed.childNodes.length > 60) {
+      globalFeed.removeChild(globalFeed.firstChild);
+    }
+  }
 }
 
 // ── Render report ────────────────────────────────────────────────────────────
@@ -171,10 +430,16 @@ function clearResults() {
   document.getElementById('summaryBar').style.display = 'none';
   document.getElementById('filterBar').style.display = 'none';
   document.getElementById('graveyardGrid').innerHTML = '';
+  const wrapper = document.getElementById('postToGitLabBtnWrapper');
+  if (wrapper) wrapper.style.display = 'none';
+  const t = document.getElementById('terminal');
+  if (t) { t.classList.remove('visible'); t.style.display = 'none'; }
   currentFeatures = [];
 }
 
 function renderReport(data) {
+  const t = document.getElementById('terminal');
+  if (t) t.classList.remove('visible');
   const features = data.features || [];
   currentFeatures = features;
   _reportMeta = data;
@@ -248,11 +513,14 @@ function renderReport(data) {
     roiBarEl.style.display = 'none';
   }
 
-  // Show "Post to GitLab" button after results render
-  const postBtn = document.getElementById('postToGitLabBtn');
-  if (postBtn && features.length > 0) {
-    postBtn.style.display = '';
-    postBtn._reportData = data;
+  // Show action buttons after results render
+  if (features.length > 0) {
+    const wrapper = document.getElementById('postToGitLabBtnWrapper');
+    if (wrapper) wrapper.style.display = '';
+    const postBtn = document.getElementById('postToGitLabBtn');
+    if (postBtn) { postBtn.style.display = ''; postBtn._reportData = data; }
+    const exportBtn = document.getElementById('exportJsonBtn');
+    if (exportBtn) exportBtn.style.display = '';
   }
 
   // ADK Synthesis panel — show when ADK successfully synthesized findings
@@ -300,7 +568,7 @@ function renderReport(data) {
   if (chainsPanel && chains.length) {
     const chainsHtml = chains.map(chain => `
       <div class="chain-item chain-impact-${chain.impact || 'low'}">
-        <div class="chain-icon">🔗</div>
+        <div class="chain-icon">✦</div>
         <div class="chain-body">
           <div class="chain-title">
             <span class="chain-keyword">${escHtml(chain.constraint_key)}</span>
@@ -315,7 +583,7 @@ function renderReport(data) {
     const topChain = chains[0];
     chainsPanel.innerHTML = `
       <div class="chains-header">
-        <span class="chains-badge">🔗 Resurrection Chains</span>
+        <span class="chains-badge">Resurrection Chains</span>
         <span class="chains-sub">Shared constraints locking multiple features — fix once, unlock many</span>
         ${chains.length > 1 ? `<span class="chains-count">${chains.length} chains detected</span>` : ''}
       </div>
@@ -326,13 +594,14 @@ function renderReport(data) {
   }
 
   renderCards(features);
+  loadLiveStats();
 }
 
 function renderCards(features) {
   const grid = document.getElementById('graveyardGrid');
   grid.innerHTML = '';
   if (!features.length) {
-    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">💀</div><p>No dead features found in the scanned range.</p></div>';
+    grid.innerHTML = '<div class="empty-state"><p>No dead features found in the scanned range.</p></div>';
     return;
   }
 
@@ -361,9 +630,9 @@ function buildFeatureCard(feat, isDemo) {
   const feasibility = vi.revival_feasibility || 0;
   const feasClass = feasibility >= 7 ? '' : feasibility >= 4 ? 'med' : 'low';
 
-  const icons = { revive_now: '💎', investigate_further: '🔍', keep_buried: '⚰' };
+  const icons = { revive_now: '✦', investigate_further: '⬢', keep_buried: '⬩' };
   const badgeClass = { revive_now: 'badge-revive', investigate_further: 'badge-investigate', keep_buried: 'badge-buried' };
-  const badgeLabel = { revive_now: '🔥 Revive Now', investigate_further: '🔍 Investigate', keep_buried: '⚰ Keep Buried' };
+  const badgeLabel = { revive_now: 'Revive Now', investigate_further: 'Investigate', keep_buried: 'Keep Buried' };
 
   const ciUrgency = ci ? ci.market_urgency : null;
   const ciComp = ci ? ci.competitors_with_feature : [];
@@ -373,27 +642,33 @@ function buildFeatureCard(feat, isDemo) {
   card.dataset.rec = rec;
   card.dataset.featureId = featureId;
 
+  const strokeColor = rec === 'revive_now' ? 'var(--green)' : rec === 'investigate_further' ? 'var(--amber)' : 'var(--text-muted)';
+  const fillPct = feasibility * 10;
+
   card.innerHTML = `
-    <div class="card-header" onclick="toggleCard(this)">
-      <div class="tombstone-icon">${icons[rec] || '💀'}</div>
-      <div class="card-title-group">
-        <div class="card-name">${esc(feat.name || featureId)}</div>
-        <div class="card-meta">
-          ${feat.kill_date ? `killed ${esc(feat.kill_date)}` : ''}
-          ${feat.kill_commit_sha ? ` · <span class="sha" title="Representative commit ref (illustrative for demo data)">${esc(feat.kill_commit_sha.slice(0, 8))}</span>` : ''}
-          ${feat.detection_method ? ` · ${esc(feat.detection_method.replace(/_/g,' '))}` : ''}
-        </div>
-        <div class="card-badges">
-          <span class="badge ${badgeClass[rec] || ''}">${badgeLabel[rec] || rec}</span>
-          ${dr.category ? `<span class="badge badge-detection">${esc(dr.category.replace(/_/g,' '))}</span>` : ''}
-          ${ciComp.length ? `<span class="badge badge-competitive">⚔ ${ciComp.length} competitor${ciComp.length > 1 ? 's' : ''}</span>` : ''}
+    <div class="card-header" onclick="toggleCard(this)" style="display:flex;width:100%;justify-content:space-between;align-items:center">
+      <div style="display:flex;align-items:center;gap:0.75rem">
+        <div class="tombstone-icon" style="font-size:1.45rem">${icons[rec] || '✦'}</div>
+        <div class="card-title-group" style="display:flex;flex-direction:column;gap:0.15rem">
+          <div class="card-name" style="font-size:0.95rem;font-weight:700;color:var(--text)">${esc(feat.name || featureId)}</div>
+          <div class="card-meta">
+            ${feat.kill_date ? `killed ${esc(feat.kill_date)}` : ''}
+            ${feat.kill_commit_sha ? ` · <span class="sha" title="Representative commit ref">${esc(feat.kill_commit_sha.slice(0, 8))}</span>` : ''}
+            ${feat.detection_method ? ` · ${esc(feat.detection_method.replace(/_/g,' '))}` : ''}
+          </div>
+          <div class="card-badges" style="display:flex;gap:0.35rem;margin-top:0.15rem;flex-wrap:wrap">
+            <span class="badge ${badgeClass[rec] || ''}" style="font-size:0.65rem">${badgeLabel[rec] || rec}</span>
+            ${dr.category ? `<span class="badge badge-detection" style="background:rgba(255,255,255,0.03);border:1px solid var(--border);font-size:0.65rem;color:var(--text-secondary);border-radius:6px;padding:0.1rem 0.4rem">${esc(dr.category.replace(/_/g,' '))}</span>` : ''}
+            ${ciComp.length ? `<span class="badge badge-competitive" style="background:rgba(6, 182, 212, 0.08);border:1px solid rgba(6, 182, 212, 0.15);color:var(--neon-cyan);font-size:0.65rem;border-radius:6px;padding:0.1rem 0.4rem">vs ${ciComp.length} competitors</span>` : ''}
+          </div>
         </div>
       </div>
-      <div class="feasibility-bar">
-        <div class="feasibility-track">
-          <div class="feasibility-fill ${feasClass}" style="width:${feasibility * 10}%"></div>
-        </div>
-        <div class="feasibility-label">${feasibility}/10</div>
+      <div class="radial-viability-gauge" title="Revival Viability: ${feasibility}/10" style="margin-left:auto">
+        <svg class="radial-svg" viewBox="0 0 36 36">
+          <circle class="radial-track" cx="18" cy="18" r="15.915"></circle>
+          <circle class="radial-fill" cx="18" cy="18" r="15.915" stroke="${strokeColor}" stroke-dasharray="100" stroke-dashoffset="${100 - fillPct}"></circle>
+        </svg>
+        <span class="radial-value-text">${feasibility * 10}%</span>
       </div>
     </div>
 
@@ -438,8 +713,8 @@ function buildFeatureCard(feat, isDemo) {
           <div class="tl-step ${rec === 'revive_now' ? 'tl-ready' : 'tl-investigate'}">
             <div class="tl-dot"></div>
             <div class="tl-content">
-              <div class="tl-label">${rec === 'revive_now' ? '✅ Ready to revive' : '🔍 Investigate'}</div>
-              <div class="tl-desc">${esc(vi.reasoning ? vi.reasoning.slice(0, 120) + (vi.reasoning.length > 120 ? '…' : '') : '')}</div>
+              <div class="tl-label">${rec === 'revive_now' ? 'Ready to revive' : 'Investigate'}</div>
+              <div class="tl-desc">${esc(vi.reasoning || '')}</div>
             </div>
           </div>
         </div>
@@ -464,17 +739,24 @@ function buildFeatureCard(feat, isDemo) {
           <div class="mlabel">Issue refs${isDemo ? ' (est.)' : ''}</div>
         </div>
         <div class="metric-item">
-          <div class="mval" style="font-size:0.85rem;color:var(--text-muted)">${esc(vi.effort_category || '—')}</div>
+          <div class="mval" style="font-size:0.85rem;color:var(--text-muted)">${esc(vi.effort_estimate ? `${vi.effort_estimate} ${vi.effort_category}` : vi.effort_category || '—')}</div>
           <div class="mlabel">Effort</div>
         </div>
       </div>
 
-      ${roi.roi_estimate_label ? `
-        <div class="section-label">ROI estimate</div>
-        <div class="reason-text">${esc(roi.roi_estimate_label)}</div>
-        <div class="reason-text" style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem">
-          ${esc(roi.caveats || '')}
+      ${roi.roi_estimate_label || roi.demand_level ? `
+        <div class="section-label">Business value</div>
+        <div class="roi-breakdown">
+          ${roi.priority_tier ? `<span class="roi-tier roi-tier-${(roi.priority_tier || '').replace(/\W+/g,'').toLowerCase().slice(0,2)}">${esc(roi.priority_tier)}</span>` : ''}
+          ${roi.demand_level ? `<span class="roi-demand demand-${roi.demand_level}">${roi.demand_level} demand</span>` : ''}
+          ${roi.request_count ? `<span class="roi-requests">${roi.request_count} issue ref${roi.request_count !== 1 ? 's' : ''}</span>` : ''}
         </div>
+        ${roi.roi_estimate_label ? `<div class="reason-text roi-estimate-value">${esc(roi.roi_estimate_label)}</div>` : ''}
+        ${roi.reasoning ? `<div class="reason-text" style="font-size:0.78rem;margin-top:0.3rem">${esc(roi.reasoning)}</div>` : ''}
+        ${roi.value_drivers && roi.value_drivers.length ? `
+          <div class="roi-drivers">${roi.value_drivers.slice(0,3).map(d => `<span class="roi-driver-tag">${esc(d)}</span>`).join('')}</div>
+        ` : ''}
+        ${roi.caveats ? `<div class="roi-caveat">${esc(roi.caveats)}</div>` : ''}
       ` : ''}
 
       ${ci ? `
@@ -497,10 +779,10 @@ function buildFeatureCard(feat, isDemo) {
       ` : ''}
 
       ${feat.challenger ? `
-        <div class="section-label">🤖 Challenger Agent — independent verification</div>
+        <div class="section-label">Challenger Agent — independent verification</div>
         <div class="challenger-box ${feat.challenger.challenger_verdict || ''}">
           <div class="challenger-verdict">
-            ${feat.challenger.challenger_verdict === 'confirm' ? '✅ Confirmed — ' : feat.challenger.challenger_verdict === 'downgrade' ? '⚠️ Downgraded — ' : '❌ Rejected — '}
+            ${feat.challenger.challenger_verdict === 'confirm' ? 'Confirmed — ' : feat.challenger.challenger_verdict === 'downgrade' ? 'Downgraded — ' : 'Rejected — '}
             Challenger score: ${feat.challenger.challenger_score || '?'}/10
             <span class="challenger-source">${feat.challenger.source || ''}</span>
           </div>
@@ -520,7 +802,7 @@ function buildFeatureCard(feat, isDemo) {
       ` : ''}
 
       ${feat.open_issue_matches && feat.open_issue_matches.length ? `
-        <div class="section-label">🔥 Open Requests — users are asking for this now</div>
+        <div class="section-label">Open Requests — users are asking for this now</div>
         <div class="open-requests-box">
           <div class="open-req-header">
             <span class="open-req-count">${feat.open_issue_matches.length} open issue${feat.open_issue_matches.length !== 1 ? 's' : ''} requesting this feature</span>
@@ -537,7 +819,7 @@ function buildFeatureCard(feat, isDemo) {
       <div class="card-actions">
         ${rec !== 'keep_buried' ? `
           <button class="btn btn-primary btn-sm" onclick="createRevivalIssue('${featureId}', this)">
-            🚀 Create GitLab Issue
+            Create GitLab Issue
           </button>
           <button class="btn btn-ghost-mr btn-sm" onclick="createGhostMR('${featureId}', this)" title="NECRO creates a real Draft MR with branch + NECRO_REVIVAL.md plan file via 3 GitLab MCP write operations">
             👻 Ghost MR
@@ -605,7 +887,7 @@ async function createRevivalIssue(featureId, btn) {
       throw new Error(d.detail || 'Failed to create issue');
     }
 
-    btn.innerHTML = '✅ Issue Created';
+    btn.innerHTML = 'Issue Created';
     btn.style.background = 'var(--green)';
     btn.style.borderColor = 'var(--green)';
 
@@ -628,7 +910,7 @@ async function createRevivalIssue(featureId, btn) {
 
   } catch (e) {
     btn.disabled = false;
-    btn.innerHTML = '🚀 Create GitLab Issue';
+    btn.innerHTML = 'Create GitLab Issue';
     toast(`Error: ${e.message}`, 'error');
   }
 }
@@ -656,7 +938,7 @@ async function createGhostMR(featureId, btn) {
 
     if (!r.ok) throw new Error(d.detail || 'Failed to create Ghost MR');
 
-    btn.innerHTML = '✅ Ghost MR Created';
+    btn.innerHTML = 'Ghost MR Created';
     btn.className = 'btn btn-ghost-mr-done btn-sm';
 
     if (d.mr_url) {
@@ -681,15 +963,35 @@ async function createGhostMR(featureId, btn) {
   }
 }
 
-// ── Post Graveyard Report to GitLab ─────────────────────────────────────────async function postReportToGitLab(data) {
+// ── Post Graveyard Report to GitLab ─────────────────────────────────────────
+function toggleGitlabProjectPicker() {
+  const picker = document.getElementById('gitlabProjectPicker');
+  if (!picker) return;
+  const open = picker.style.display !== 'none';
+  picker.style.display = open ? 'none' : 'block';
+  if (!open) {
+    // Pre-fill with scanned project path as default suggestion
+    const input = document.getElementById('gitlabTargetProject');
+    if (input && _reportMeta && _reportMeta.project_path) {
+      input.value = _reportMeta.project_path;
+    }
+    setTimeout(() => input && input.focus(), 50);
+  }
+}
+
+async function postReportToGitLab() {
+  const data = _reportMeta;
   const btn = document.getElementById('postToGitLabBtn');
-  if (!btn) return;
+  if (!data) { toast('No scan results — run a scan first', 'error'); return; }
 
-  const projectPath = data.project_path;
-  if (!projectPath) { toast('No project path in report', 'error'); return; }
+  const input = document.getElementById('gitlabTargetProject');
+  const projectPath = (input && input.value.trim()) || data.project_path;
+  if (!projectPath) { toast('Enter a GitLab project path', 'error'); return; }
 
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Posting to GitLab...';
+  // Close picker, disable button
+  const picker = document.getElementById('gitlabProjectPicker');
+  if (picker) picker.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Posting…'; }
 
   try {
     const r = await fetch('/api/report/post-to-gitlab', {
@@ -706,23 +1008,136 @@ async function createGhostMR(featureId, btn) {
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || 'Post failed');
 
-    btn.innerHTML = '✅ Posted to GitLab';
-    btn.style.background = 'var(--green)';
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Posted to GitLab'; btn.style.background = 'var(--green)'; }
     if (d.issue_url) {
       const link = document.createElement('a');
       link.href = d.issue_url;
       link.target = '_blank';
       link.rel = 'noopener';
-      link.textContent = ` View Issue #${d.issue_iid || ''} ↗`;
+      link.textContent = `View Issue #${d.issue_iid || ''} ↗`;
       link.className = 'btn btn-sm';
       btn.insertAdjacentElement('afterend', link);
     }
-    toast(`Graveyard report posted to GitLab as Issue #${d.issue_iid || ''}`, 'success');
+    toast(`Report posted to ${projectPath} as Issue #${d.issue_iid || ''}`, 'success');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.innerHTML = 'POST TO GITLAB'; }
+    toast(e.message, 'error');
+  }
+}
+
+// ── Share to Slack ────────────────────────────────────────────────────────────
+const _SLACK_SVG = `<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style="flex-shrink:0"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/></svg>`;
+
+function _buildSlackText() {
+  const data = _reportMeta;
+  if (!data || !data.project_path) return null;
+
+  const features = data.features || [];
+  const reviveNow = features.filter(f => (f.viability || {}).recommendation === 'revive_now');
+  const investigate = features.filter(f => (f.viability || {}).recommendation === 'investigate_further');
+
+  let lines = [
+    `*NECRO Graveyard Report — ${data.project_path}*`,
+    `*${reviveNow.length}* ready to revive · *${investigate.length}* investigate · *${features.length}* total dead features`,
+    '',
+  ];
+  reviveNow.slice(0, 5).forEach(f => {
+    const score = (f.viability || {}).revival_feasibility || '?';
+    const what = ((f.viability || {}).what_changed || '').slice(0, 80);
+    lines.push(`• *${f.name}* _(${score}/10)_ — ${what}`);
+  });
+  if (reviveNow.length > 5) lines.push(`_…and ${reviveNow.length - 5} more_`);
+  lines.push('', `_Scanned by NECRO — The Code Necromancer_`);
+  return lines.join('\n');
+}
+
+async function notifySlack() {
+  const btn = document.getElementById('notifySlackBtn');
+  if (!btn) return;
+
+  const data = _reportMeta;
+  if (!data || !data.project_path) {
+    toast('No scan results to send — run a scan first', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Sending…`;
+
+  try {
+    const r = await fetch('/api/report/notify-slack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_path: data.project_path,
+        features: data.features || [],
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Slack delivery failed');
+
+    btn.innerHTML = `Sent to Slack`;
+    btn.style.background = 'linear-gradient(135deg, #4A154B, #611f69)';
+    toast(`Slack alert sent — ${d.revive_now_count} revival candidates shared`, 'success');
   } catch (e) {
     btn.disabled = false;
-    btn.innerHTML = '📋 Post Report to GitLab';
-    toast(`Error: ${e.message}`, 'error');
+    btn.innerHTML = `${_SLACK_SVG} SHARE TO SLACK`;
+    if (e.message.includes('not configured')) {
+      toast('Slack not configured — add SLACK_WEBHOOK_URL to .env', 'error');
+    } else {
+      toast(`Slack error: ${e.message}`, 'error');
+    }
   }
+}
+
+async function copySlackMessage() {
+  const btn = document.getElementById('copySlackMsgBtn');
+  const text = _buildSlackText();
+  if (!text) {
+    toast('No scan results to copy — run a scan first', 'error');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = `✓`;  // single checkmark, not emoji
+      btn.style.color = '#4ade80';
+      setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
+    }
+    toast('Slack message copied to clipboard', 'success');
+  } catch {
+    // fallback for non-HTTPS or older browsers
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('Slack message copied to clipboard', 'success');
+  }
+}
+
+// ── Export report as JSON ─────────────────────────────────────────────────────
+function exportReportJson() {
+  if (!_reportMeta || !_reportMeta.project_path) {
+    toast('No report to export — run a scan first', 'error');
+    return;
+  }
+  const slug = (_reportMeta.project_path || 'necro').replace(/\//g, '_');
+  const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+  const filename = `necro_dormant_features_${slug}_${ts}.json`;
+  const blob = new Blob([JSON.stringify(_reportMeta, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`Exported ${filename}`, 'success');
 }
 
 // ── Charts (Timeline tab) ─────────────────────────────────────────────────────
@@ -737,12 +1152,28 @@ function renderCharts() {
   const textColor = isDark ? '#888898' : '#6b6b8a';
 
   // Timeline chart — kills by month
+  const sortedFeats = [...currentFeatures].sort((a, b) => {
+    const da = a.kill_date ? new Date(a.kill_date).getTime() : 0;
+    const db = b.kill_date ? new Date(b.kill_date).getTime() : 0;
+    return da - db;
+  });
+
   const monthCounts = {};
-  for (const feat of currentFeatures) {
-    const m = feat.kill_date ? feat.kill_date.slice(0, 7) : 'unknown';
-    monthCounts[m] = (monthCounts[m] || 0) + 1;
+  for (const feat of sortedFeats) {
+    const rawDate = feat.kill_date || '';
+    let displayMonth = 'Unknown';
+    if (rawDate) {
+      const parsed = new Date(rawDate);
+      if (!isNaN(parsed.getTime())) {
+        const monthsNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        displayMonth = `${monthsNames[parsed.getMonth()]} '${String(parsed.getFullYear()).slice(-2)}`;
+      } else {
+        displayMonth = rawDate.slice(0, 7);
+      }
+    }
+    monthCounts[displayMonth] = (monthCounts[displayMonth] || 0) + 1;
   }
-  const months = Object.keys(monthCounts).sort();
+  const months = Object.keys(monthCounts);
   const counts = months.map(m => monthCounts[m]);
 
   _charts.timeline = new Chart(document.getElementById('timelineChart'), {
@@ -940,6 +1371,7 @@ async function loadWatchList() {
   } catch (e) {
     grid.innerHTML = '<div class="empty-state"><p>Could not load watch list.</p></div>';
   }
+  loadLiveStats();
 }
 
 async function triggerMonitor() {
@@ -976,7 +1408,7 @@ async function loadAuditLog() {
     document.getElementById('tabBadgeLog').textContent = entries.length;
 
     if (!entries.length) {
-      area.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>No revival issues created yet. Scan a repo and click "Create GitLab Issue" to start.</p></div>';
+      area.innerHTML = '<div class="empty-state"><p>No revival issues created yet. Scan a repo and click "Create GitLab Issue" to start.</p></div>';
       return;
     }
 
@@ -1010,6 +1442,7 @@ async function loadAuditLog() {
   } catch (e) {
     area.innerHTML = '<div class="empty-state"><p>Could not load revival log.</p></div>';
   }
+  loadLiveStats();
 }
 
 // ── Toast notifications ───────────────────────────────────────────────────────

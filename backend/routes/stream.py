@@ -134,38 +134,44 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         await emit(f"[MCP] Found {len(all_open_issues)} open issues — matching to dead features...")
 
     saved_features: list[dict] = []
-    for feat in features[:15]:
-        await emit(f"Gemini 3 Flash — kill reason for '{feat.name}'...")
+    total = min(len(features), 15)
+
+    async def _analyze_one(feat, idx: int) -> dict:
+        """Analyze a single feature. Viability, ROI, and competitive run in parallel after death_reason."""
+        await emit(f"[{idx}/{total}] Gemini — kill reason for '{feat.name}'...")
         feat.death_reason = await extract_death_reason(feat)
         dr = feat.death_reason
-        await emit(f"Kill reason: {dr.get('category', '?')} — {dr.get('primary_reason', '')[:80]}")
+        await emit(
+            f"[{idx}/{total}] Kill reason: {dr.get('category', '?')} — {dr.get('primary_reason', '')[:80]}"
+        )
 
-        await emit(f"Evaluating viability for '{feat.name}' (grounding via external APIs)...")
-        feat.viability = await score_revival_viability(feat, feat.death_reason)
+        # Viability, ROI, and competitive intel are independent of each other — run in parallel
+        await emit(f"[{idx}/{total}] Grounding '{feat.name}' (viability + ROI + competitive in parallel)...")
+        viability_coro = score_revival_viability(feat, dr)
+        roi_coro = estimate_revival_roi(feat, project_path)
+        comp_coro = analyze_competitive_gap(
+            feat.name, dr.get("category", "unknown"),
+            feat.kill_date, dr.get("primary_reason", ""),
+        )
+        feat.viability, feat.roi, comp = await asyncio.gather(
+            viability_coro, roi_coro, comp_coro
+        )
+
         vi = feat.viability
         grounding = vi.get("grounding", {})
         if grounding.get("grounded"):
             await emit(
-                f"✓ Verified: {grounding.get('technology')} {grounding.get('latest_version')} "
+                f"[{idx}/{total}] ✓ Verified: {grounding.get('technology')} {grounding.get('latest_version')} "
                 f"({grounding.get('source')}) — {grounding.get('evidence_date')}"
             )
         rec = vi.get("recommendation", "unknown").upper().replace("_", " ")
-        await emit(f"{rec}: {vi.get('what_changed', '')[:80]}")
+        await emit(f"[{idx}/{total}] {rec}: {vi.get('what_changed', '')[:80]}")
 
-        await emit(f"[MCP] list_issues — demand signals for '{feat.name}'...")
-        feat.roi = await estimate_revival_roi(feat, project_path)
-
-        comp = await analyze_competitive_gap(
-            feat.name, dr.get("category", "unknown"),
-            feat.kill_date, dr.get("primary_reason", ""),
-        )
-
-        # Match open issues against this dead feature (Open Requests Match)
         open_matches = _match_open_requests(feat.name, all_open_issues, project_path)
         if open_matches:
             await emit(f"🔥 Open Requests Match: {len(open_matches)} open issues are asking for '{feat.name}'")
 
-        saved_features.append({
+        return {
             "feature_id": feat.id,
             "name": feat.name,
             "kill_commit_sha": feat.kill_commit_sha,
@@ -180,7 +186,20 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             "roi": feat.roi,
             "competitive_intel": comp,
             "open_issue_matches": open_matches,
-        })
+        }
+
+    # Analyze features in parallel batches of 5
+    _BATCH_SIZE = 5
+    for batch_start in range(0, total, _BATCH_SIZE):
+        batch = features[batch_start:batch_start + _BATCH_SIZE]
+        await emit(
+            f"Analyzing features {batch_start + 1}–{min(batch_start + _BATCH_SIZE, total)} of {total} "
+            f"(parallel batch)..."
+        )
+        batch_results = await asyncio.gather(
+            *[_analyze_one(feat, batch_start + i + 1) for i, feat in enumerate(batch)]
+        )
+        saved_features.extend(batch_results)
 
     # Adversarial Challenger (Vertex AI Gemini 2.5 — different model)
     revive_candidates = [f for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now"]

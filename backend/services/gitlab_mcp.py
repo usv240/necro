@@ -67,6 +67,11 @@ class GitLabClient:
             f"/projects/{_encode(project_path)}/merge_requests/{mr_iid}/notes",
         )
 
+    async def list_issue_notes(self, project_path: str, issue_iid: int) -> list[dict]:
+        return await self._get(
+            f"/projects/{_encode(project_path)}/issues/{issue_iid}/notes",
+        )
+
     async def list_issues(self, project_path: str, state: str = "closed",
                           per_page: int = 50) -> list[dict]:
         return await self._get(
@@ -87,14 +92,32 @@ class GitLabClient:
         )
 
     async def create_issue(self, project_path: str, title: str,
-                           description: str = "", labels: list[str] | None = None) -> Optional[dict]:
-        """Create a GitLab issue via REST API."""
+                           description: str = "", labels: list[str] | None = None,
+                           assignee_ids: list[int] | None = None) -> Optional[dict]:
+        """Create a GitLab issue via REST API. assignee_ids auto-assigns to engineers."""
         labels = labels or []
+        assignee_ids = assignee_ids or []
         logger.info("[REST] create_issue → %s: %s", project_path, title)
+        payload: dict = {"title": title, "description": description, "labels": ",".join(labels)}
+        if assignee_ids:
+            payload["assignee_ids"] = assignee_ids
         return await self._post(
             f"/projects/{_encode(project_path)}/issues",
-            json={"title": title, "description": description, "labels": ",".join(labels)},
+            json=payload,
         )
+
+    async def search_users(self, query: str, per_page: int = 5) -> list[dict]:
+        """
+        Search GitLab users by name, username, or email.
+        Used to resolve a kill commit author to a GitLab user ID for auto-assignment.
+        """
+        logger.info("[MCP] search_users → %s", query)
+        result = await self._get("/users", params={"search": query, "per_page": per_page})
+        return result if isinstance(result, list) else []
+
+    # Alias used in git_forensics.py
+    async def list_mr_notes(self, project_path: str, mr_iid: int) -> list[dict]:
+        return await self.list_merge_request_notes(project_path, mr_iid)
 
     async def get_project(self, project_path: str) -> Optional[dict]:
         """Fetch project metadata (incl. default_branch)."""
@@ -160,6 +183,78 @@ class GitLabClient:
             params={"state": "opened", "per_page": per_page},
         )
 
+    async def search_code(self, project_path: str, query: str, per_page: int = 20) -> list[dict]:
+        """Search project issues for demand signals mentioning query (feature requests, bug reports)."""
+        return await self._get(
+            f"/projects/{_encode(project_path)}/search",
+            params={"scope": "issues", "search": query, "per_page": per_page},
+        )
+
+    async def get_file(self, project_path: str, file_path: str, ref: str = "HEAD") -> Optional[dict]:
+        """
+        Fetch a single file from the repository at a given ref.
+        Returns dict with 'content' (base64), 'size', 'encoding', 'last_commit_id'.
+        Decodes content to plain text automatically.
+        """
+        logger.info("[MCP] get_file → %s:%s@%s", project_path, file_path, ref)
+        result = await self._get(
+            f"/projects/{_encode(project_path)}/repository/files/{_encode(file_path)}",
+            params={"ref": ref},
+        )
+        if isinstance(result, dict) and result.get("encoding") == "base64" and result.get("content"):
+            import base64
+            try:
+                result["decoded_content"] = base64.b64decode(result["content"]).decode("utf-8", errors="replace")
+            except Exception:
+                result["decoded_content"] = ""
+        return result if isinstance(result, dict) else None
+
+    async def get_commit_diff(self, project_path: str, sha: str) -> list[dict]:
+        """
+        Fetch the file diffs for a single commit.
+        Returns list of diffs with 'old_path', 'new_path', 'diff' (unified diff text).
+        """
+        logger.info("[MCP] get_commit_diff → %s@%s", project_path, sha)
+        result = await self._get(
+            f"/projects/{_encode(project_path)}/repository/commits/{sha}/diff",
+        )
+        return result if isinstance(result, list) else []
+
+    async def list_project_members(self, project_path: str, per_page: int = 50) -> list[dict]:
+        """
+        List project members with their access levels.
+        Used to find the original author of a dead feature and auto-assign revival issues.
+        """
+        logger.info("[MCP] list_project_members → %s", project_path)
+        return await self._get(
+            f"/projects/{_encode(project_path)}/members/all",
+            params={"per_page": per_page},
+        )
+
+    async def get_user_by_username(self, username: str) -> Optional[dict]:
+        """Look up a GitLab user by username — used to resolve commit author to member ID."""
+        logger.info("[MCP] get_user → %s", username)
+        result = await self._get("/users", params={"username": username})
+        if isinstance(result, list) and result:
+            return result[0]
+        return None
+
+    async def list_pipelines(self, project_path: str, ref: str = "HEAD",
+                              per_page: int = 5) -> list[dict]:
+        """
+        List recent CI pipelines for the project.
+        Used to check whether the codebase is in a healthy state before recommending revival.
+        Returns status: 'success' | 'failed' | 'running' | 'pending' | 'canceled'.
+        """
+        logger.info("[MCP] list_pipelines → %s (ref=%s)", project_path, ref)
+        params: dict = {"per_page": per_page, "order_by": "id", "sort": "desc"}
+        if ref and ref != "HEAD":
+            params["ref"] = ref
+        return await self._get(
+            f"/projects/{_encode(project_path)}/pipelines",
+            params=params,
+        )
+
     # ── lifecycle stubs (no-ops — no subprocess to manage) ────────────────────
 
     async def start(self) -> None:
@@ -196,9 +291,15 @@ class GitLabClient:
                 r = await client.post(url, headers=self._headers, json=json or {})
                 if r.status_code in (200, 201):
                     return r.json()
-                logger.debug("POST %s → %d %s", path, r.status_code, r.text[:200])
+                logger.warning("POST %s → %d: %s", path, r.status_code, r.text[:300])
+                try:
+                    body = r.json()
+                except Exception:
+                    body = {"message": r.text[:200]}
+                body["_status_code"] = r.status_code
+                return {"_error": True, **body}
         except Exception as exc:
-            logger.debug("REST POST %s failed: %s", path, exc)
+            logger.warning("REST POST %s failed: %s", path, exc)
         return None
 
 

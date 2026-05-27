@@ -129,7 +129,10 @@ async def _check_repo(project_path: str, repo_doc: dict) -> dict:
 
     # If last scan was recent and no new commits, skip
     if last_scanned and isinstance(last_scanned, datetime):
-        hours_since = (datetime.now(timezone.utc) - last_scanned).total_seconds() / 3600
+        now_utc = datetime.now(timezone.utc)
+        if last_scanned.tzinfo is None:
+            last_scanned = last_scanned.replace(tzinfo=timezone.utc)
+        hours_since = (now_utc - last_scanned).total_seconds() / 3600
         if hours_since < settings.MONITOR_INTERVAL_HOURS * 0.8:
             return {"project_path": project_path, "status": "skipped_recent", "new_revive_now": 0}
 

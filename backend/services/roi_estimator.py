@@ -27,11 +27,31 @@ async def estimate_revival_roi(feature, project_path: str) -> dict:
     demand_signals: list[str] = []
 
     if project_path:
-        logger.info("[MCP] search_code — searching for '%s' feature requests in issues...", feature.name)
-        results = await mcp.search_code(project_path, feature.name, per_page=20)
-        if results:
-            request_count = len(results)
-            demand_signals.append(f"{request_count} code/issue references found for '{feature.name}'")
+        # Signal 1: issues mentioning the feature name (open + closed)
+        logger.info("[MCP] list_issues — demand signals for '%s'...", feature.name)
+        open_issues = await mcp.list_issues(project_path, state="opened", per_page=50)
+        closed_issues = await mcp.list_issues(project_path, state="closed", per_page=50)
+        name_lower = feature.name.lower()
+        mentioning_open = [i for i in open_issues if name_lower in (i.get("title", "") + i.get("description", "")).lower()]
+        mentioning_closed = [i for i in closed_issues if name_lower in (i.get("title", "") + i.get("description", "")).lower()]
+        request_count = len(mentioning_open) + len(mentioning_closed)
+
+        if mentioning_open:
+            demand_signals.append(f"{len(mentioning_open)} open issues mention '{feature.name}' (active user demand)")
+        if mentioning_closed:
+            demand_signals.append(f"{len(mentioning_closed)} closed issues mention '{feature.name}' (historical demand)")
+
+        # Signal 2: MR comments/notes mentioning the feature
+        logger.info("[MCP] search_code — MR references for '%s'...", feature.name)
+        code_refs = await mcp.search_code(project_path, feature.name, per_page=20)
+        if code_refs:
+            demand_signals.append(f"{len(code_refs)} code/MR references found for '{feature.name}' in repository")
+
+        # Signal 3: any linked MRs from detection
+        if feature.linked_mr_iid:
+            demand_signals.append(f"Linked MR !{feature.linked_mr_iid} — engineer attention already recorded")
+        if feature.linked_issue_iids:
+            demand_signals.append(f"Linked issues: #{', #'.join(str(i) for i in feature.linked_issue_iids[:3])}")
 
     # Add context snippets as demand signals
     for snippet in feature.context_snippets[:4]:

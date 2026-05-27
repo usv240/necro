@@ -1,6 +1,12 @@
 """
-Slack notifications for NECRO — fires when revival candidates are found.
-Uses the Slack Web API (slack-sdk) with a bot token.
+Slack notifications for NECRO.
+
+Supports two auth methods (first configured one wins):
+  1. SLACK_WEBHOOK_URL  — Incoming Webhook (simplest, just one URL)
+  2. SLACK_BOT_TOKEN + SLACK_CHANNEL_ID — Slack SDK bot token
+
+Fires automatically after a scan completes with revival candidates,
+and on demand via POST /api/report/notify-slack.
 """
 
 import logging
@@ -11,57 +17,140 @@ from backend.config import settings
 logger = logging.getLogger(__name__)
 
 
-async def send_revival_alert(project_path: str, count: int, features: list) -> bool:
-    """Send a Slack message when new revival candidates are found."""
-    if not settings.SLACK_BOT_TOKEN or not settings.SLACK_CHANNEL_ID:
-        logger.debug("Slack not configured — skipping notification")
-        return False
+def _is_configured() -> bool:
+    return bool(settings.SLACK_WEBHOOK_URL) or bool(
+        settings.SLACK_BOT_TOKEN and settings.SLACK_CHANNEL_ID
+    )
 
+
+async def _send_via_webhook(payload: dict) -> bool:
+    """POST a Block Kit payload to a Slack Incoming Webhook URL."""
+    import httpx
+
+    async with httpx.AsyncClient(timeout=8) as client:
+        r = await client.post(settings.SLACK_WEBHOOK_URL, json=payload)
+        r.raise_for_status()
+    return True
+
+
+async def _send_via_sdk(payload: dict) -> bool:
+    """Post using slack-sdk AsyncWebClient."""
+    from slack_sdk.web.async_client import AsyncWebClient
+
+    client = AsyncWebClient(token=settings.SLACK_BOT_TOKEN)
+    await client.chat_postMessage(
+        channel=settings.SLACK_CHANNEL_ID,
+        **payload,
+    )
+    return True
+
+
+async def _send(payload: dict) -> bool:
     try:
-        from slack_sdk.web.async_client import AsyncWebClient
-
-        client = AsyncWebClient(token=settings.SLACK_BOT_TOKEN)
-
-        feature_lines = []
-        for f in features[:3]:
-            name = f.name if hasattr(f, "name") else f.get("name", "unknown")
-            what = ""
-            if hasattr(f, "viability") and f.viability:
-                what = f.viability.get("what_changed", "")[:80] if isinstance(f.viability, dict) else ""
-            feature_lines.append(f"• *{name}* — {what}" if what else f"• *{name}*")
-
-        text = (
-            f":coffin: *NECRO found {count} new revival candidate{'s' if count != 1 else ''}* "
-            f"in `{project_path}`\n\n"
-            + "\n".join(feature_lines)
-            + f"\n\nView the full graveyard report at {settings.APP_URL}/#{project_path}"
-        )
-
-        await client.chat_postMessage(channel=settings.SLACK_CHANNEL_ID, text=text)
-        logger.info("[Slack] Revival alert sent for %s (%d candidates)", project_path, count)
-        return True
-
+        if settings.SLACK_WEBHOOK_URL:
+            return await _send_via_webhook(payload)
+        if settings.SLACK_BOT_TOKEN and settings.SLACK_CHANNEL_ID:
+            return await _send_via_sdk(payload)
     except Exception as e:
         logger.warning("Slack send failed: %s", e)
+    return False
+
+
+# ── Public API ────────────────────────────────────────────────────────────────
+
+async def send_revival_alert(
+    project_path: str,
+    features: list,
+    *,
+    count: Optional[int] = None,
+) -> bool:
+    """
+    Send a Slack message when a NECRO scan finds revival candidates.
+    Called automatically after every scan that finds ≥1 revive_now feature.
+    """
+    if not _is_configured():
+        logger.debug("Slack not configured — skipping revival alert")
         return False
 
+    revive_now = [
+        f for f in features
+        if (f.get("viability") or {}).get("recommendation") == "revive_now"
+    ]
+    investigate = [
+        f for f in features
+        if (f.get("viability") or {}).get("recommendation") == "investigate_further"
+    ]
+    total = count if count is not None else len(features)
 
-async def send_issue_created_alert(project_path: str, feature_name: str, issue_url: str) -> bool:
+    # Build Block Kit message
+    feature_bullets = []
+    for f in revive_now[:5]:
+        name = f.get("name", "unknown")
+        what = (f.get("viability") or {}).get("what_changed", "")[:80]
+        score = (f.get("viability") or {}).get("revival_feasibility", "?")
+        line = f"• *{name}* — {what}" if what else f"• *{name}*"
+        line += f"  _(feasibility: {score}/10)_"
+        feature_bullets.append(line)
+
+    if len(revive_now) > 5:
+        feature_bullets.append(f"_…and {len(revive_now) - 5} more_")
+
+    header = (
+        f":coffin: *NECRO found {len(revive_now)} feature{'s' if len(revive_now) != 1 else ''} "
+        f"ready to revive* in `{project_path}`"
+    )
+    summary = (
+        f"*{len(revive_now)}* revive now · "
+        f"*{len(investigate)}* investigate · "
+        f"*{total - len(revive_now) - len(investigate)}* keep buried"
+    )
+
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": "NECRO — Feature Revival Alert", "emoji": True}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": header}},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": summary}]},
+    ]
+    if feature_bullets:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "\n".join(feature_bullets)},
+        })
+    blocks.append({
+        "type": "actions",
+        "elements": [{
+            "type": "button",
+            "text": {"type": "plain_text", "text": "View Full Report", "emoji": True},
+            "url": settings.APP_URL,
+            "style": "primary",
+        }],
+    })
+
+    payload = {"text": header, "blocks": blocks}
+    ok = await _send(payload)
+    if ok:
+        logger.info("[Slack] Revival alert sent for %s (%d candidates)", project_path, len(revive_now))
+    return ok
+
+
+async def send_issue_created_alert(
+    project_path: str,
+    feature_name: str,
+    issue_url: str,
+) -> bool:
     """Notify Slack when a revival issue is created in GitLab."""
-    if not settings.SLACK_BOT_TOKEN or not settings.SLACK_CHANNEL_ID:
+    if not _is_configured():
         return False
 
-    try:
-        from slack_sdk.web.async_client import AsyncWebClient
-
-        client = AsyncWebClient(token=settings.SLACK_BOT_TOKEN)
-        text = (
-            f":rocket: *Revival issue created* for `{feature_name}` in `{project_path}`\n"
-            f"GitLab issue: {issue_url}"
-        )
-        await client.chat_postMessage(channel=settings.SLACK_CHANNEL_ID, text=text)
-        return True
-
-    except Exception as e:
-        logger.warning("Slack issue alert failed: %s", e)
-        return False
+    header = f":rocket: *Revival issue created* for `{feature_name}`"
+    blocks = [
+        {"type": "section", "text": {"type": "mrkdwn", "text": header}},
+        {"type": "context", "elements": [
+            {"type": "mrkdwn", "text": f"Repository: `{project_path}`"},
+            {"type": "mrkdwn", "text": f"<{issue_url}|Open GitLab issue>"},
+        ]},
+    ]
+    payload = {"text": header, "blocks": blocks}
+    ok = await _send(payload)
+    if ok:
+        logger.info("[Slack] Issue created alert sent for %s — %s", feature_name, issue_url)
+    return ok

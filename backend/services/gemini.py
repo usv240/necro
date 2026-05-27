@@ -75,10 +75,14 @@ async def generate_text(prompt: str, thinking_budget: int = 0) -> str:
     return ""
 
 
-async def generate_json(prompt: str) -> dict | None:
-    """Generate a JSON response from Gemini. Strips markdown fences if present."""
+async def generate_json(prompt: str, thinking_budget: int = 0) -> dict | None:
+    """Generate a JSON response from Gemini. Strips markdown fences if present.
+
+    Pass thinking_budget > 0 (e.g. 1024) for complex reasoning tasks like viability
+    scoring and ADK synthesis where deeper chain-of-thought improves output quality.
+    """
     full_prompt = prompt + "\n\nReturn ONLY valid JSON. No markdown fences, no explanation outside the JSON."
-    text = await generate_text(full_prompt)
+    text = await generate_text(full_prompt, thinking_budget=thinking_budget)
     if not text:
         return None
 

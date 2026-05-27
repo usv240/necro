@@ -1,12 +1,77 @@
-.env
-deploy_env.yaml
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment & secrets
+.env
+deploy_env.yaml
+*.env.local
+*.env.*.local
+
+# Test & coverage artifacts
 .pytest_cache/
-outputs/necro/
-!outputs/.gitkeep
-*.log
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.suo
+*.user
 .DS_Store
-node_modules/
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# Planning & internal docs
 plan/
+DEVPOST_SUBMISSION.md
+PROBLEMS_AND_SOLUTIONS.md
+
+# Contest rules / resource pages
+*Rules
+*Rules*
+GitLab Rules
+Main Rules
+
+# Runtime outputs (preserve the directory via .gitkeep)
+outputs/necro/
+outputs/*.md
+outputs/*.json
+!outputs/.gitkeep
+
+# Logs
+*.log
+*.log.*
+logs/
+
+# Node (for @zereight/mcp-gitlab)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+ehthumbs.db
+Desktop.ini

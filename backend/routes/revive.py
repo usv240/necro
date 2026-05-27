@@ -45,12 +45,33 @@ async def create_revival_issue(feature_id: str, req: ReviveRequest):
     title = f"Revival candidate: {feat['name']}"
     description = _build_description(feat, death_reason, viability)
 
-    logger.info("[MCP] create_issue — '%s' in %s", title, project_path)
+    # Auto-assign to the engineer who killed the feature (kill commit author)
+    assignee_ids: list[int] = []
+    kill_sha = feat.get("kill_commit_sha", "")
+    if kill_sha:
+        try:
+            logger.info("[MCP] get_commit %s — resolving kill author for auto-assign...", kill_sha[:8])
+            commit_detail = await mcp.get_commit(project_path, kill_sha)
+            if commit_detail:
+                author_email = commit_detail.get("author_email", "")
+                author_name = commit_detail.get("author_name", "")
+                search_q = author_email or author_name
+                if search_q:
+                    logger.info("[MCP] search_users — looking up '%s'...", search_q)
+                    users = await mcp.search_users(search_q)
+                    if users:
+                        assignee_ids = [users[0]["id"]]
+                        logger.info("[MCP] Auto-assigning to %s (id=%d)", users[0].get("username"), users[0]["id"])
+        except Exception as exc:
+            logger.debug("Could not resolve kill commit author: %s", exc)
+
+    logger.info("[MCP] create_issue — '%s' in %s (assignees=%s)", title, project_path, assignee_ids)
     result = await mcp.create_issue(
         project_path,
         title=title,
         description=description,
         labels=["revival-candidate", "necro-identified"],
+        assignee_ids=assignee_ids,
     )
 
     if not result:
@@ -169,7 +190,9 @@ async def create_ghost_mr(feature_id: str, req: ReviveRequest):
     mr_description += f"This Draft MR was auto-created by **NECRO** to scaffold the revival of `{feat['name']}`.\n\n"
     mr_description += f"The `NECRO_REVIVAL.md` file on this branch contains a step-by-step revival checklist.\n"
     mr_description += f"**To revive this feature:** review the plan, write the code, remove the `Draft:` prefix, and merge.\n\n"
-    mr_description += "_MCP tools used: `create_branch`, `create_file`, `create_merge_request` — 3 write operations via GitLab REST API_"
+    mr_description += "_MCP tools used: `list_commits`, `get_commit`, `get_commit_diff`, `list_pipelines`, `search_users`, `create_branch`, `create_file`, `create_merge_request` — full forensic + write pipeline via GitLab MCP_\n\n"
+    mr_description += "---\n\n"
+    mr_description += "@duo_code_review please review this revival scaffold and assess whether the implementation approach in `NECRO_REVIVAL.md` is sound."
 
     mr_title = f"Revival: {feat['name']}"
     mr_result = await mcp.create_merge_request(
@@ -401,6 +424,6 @@ def _build_description(feat: dict, dr: dict, vi: dict) -> str:
 ---
 
 *This issue was created by **NECRO — The Code Necromancer** agent.*
-*GitLab MCP tools used: list_commits, get_commit, list_issues, list_merge_requests, list_merge_request_notes, create_issue*
+*GitLab MCP tools used: list_commits, get_commit, get_commit_diff, list_issues, list_merge_requests, list_merge_request_notes, list_pipelines, search_users, create_issue*
 *All claims are cited from repository history. ROI estimates are rough signal-based projections, not revenue forecasts.*
 """
