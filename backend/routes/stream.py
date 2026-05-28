@@ -1,4 +1,4 @@
-﻿"""
+"""
 POST /api/scan/stream â€” SSE streaming scan endpoint.
 
 Two-phase architecture:
@@ -186,25 +186,26 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         )
 
         vi = feat.viability
-        grounding = vi.get(“grounding”, {})
-        # Emit [SEARCH:] line for every constraint — shows live verification in terminal
-        _tech = grounding.get(“technology”, “”)
-        _src = grounding.get(“source”, “unverified”)
-        _dr_reason = dr.get(“primary_reason”, “”)
-        if _tech and _src != “unverified”:
-            _url = grounding.get(“evidence_url”, “”)
-            _ver = grounding.get(“latest_version”, “”)
-            await emit(f”[SEARCH] {_src.replace('_', ' ').title()} → {_tech} v{_ver} — {_url[:60]}”)
+        grounding = vi.get("grounding", {})
+        # Emit [SEARCH:] line for every constraint -- shows live verification in terminal
+        _tech = grounding.get("technology", "")
+        _src = grounding.get("source", "unverified")
+        _dr_reason = dr.get("primary_reason", "")
+        if _tech and _src != "unverified":
+            _url = grounding.get("evidence_url", "")
+            _ver = grounding.get("latest_version", "")
+            _src_label = _src.replace("_", " ").title()
+            await emit(f"[SEARCH] {_src_label} query: {_tech} v{_ver} -- {_url[:60]}")
         elif _dr_reason:
-            _cat = dr.get(“category”, “constraint”)
-            await emit(f”[SEARCH] Constraint check: '{_dr_reason[:60]}' — AI-inferred ({_cat})”)
-        if grounding.get(“grounded”):
+            _cat = dr.get("category", "constraint")
+            await emit(f"[SEARCH] Constraint check: {_dr_reason[:60]!r} -- AI-inferred ({_cat})")
+        if grounding.get("grounded"):
             await emit(
-                f”[{idx}/{total}] ✓ Verified: {grounding.get('technology')} {grounding.get('latest_version')} “
-                f”({grounding.get('source')}) — {grounding.get('evidence_date')}”
+                f"[{idx}/{total}] âœ“ Verified: {grounding.get('technology')} {grounding.get('latest_version')} "
+                f"({grounding.get('source')}) â€” {grounding.get('evidence_date')}"
             )
-        rec = vi.get(“recommendation”, “unknown”).upper().replace(“_”, “ “)
-        await emit(f”[{idx}/{total}] {rec}: {vi.get('what_changed', '')[:80]}”)
+        rec = vi.get("recommendation", "unknown").upper().replace("_", " ")
+        await emit(f"[{idx}/{total}] {rec}: {vi.get('what_changed', '')[:80]}")
 
         open_matches = await _find_demand_signals(feat.name, all_open_issues, project_path)
         if open_matches:
@@ -491,94 +492,101 @@ async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]
                 "challenger_score": challenger.get("challenger_score"),
             })
 
-        # Build a targeted search list for revive_now features to force google_search calls
+        # Build targeted search queries for revive_now features to guide google_search calls
         revive_search_targets = []
-        for f in revive_now[:3]:
-            dr = f.get(“death_reason”, {})
-            reason = dr.get(“primary_reason”, “”)[:80]
-            cat = dr.get(“category”, “”)
-            tech = f.get(“viability”, {}).get(“grounding”, {}).get(“technology”, “”)
-            name = f.get(“name”, “”)
-            if tech:
-                revive_search_targets.append(f”'{name}': search '{tech} latest release changelog'”)
-            elif reason:
-                revive_search_targets.append(f”'{name}': search '{reason[:50]} resolved'”)
+        for _sf in revive_now[:3]:
+            _sdr = _sf.get("death_reason", {})
+            _sreason = _sdr.get("primary_reason", "")[:80]
+            _stech = _sf.get("viability", {}).get("grounding", {}).get("technology", "")
+            _sname = _sf.get("name", "")
+            if _stech:
+                revive_search_targets.append(
+                    repr(_sname) + ": search '" + _stech + " latest release changelog'"
+                )
+            elif _sreason:
+                revive_search_targets.append(
+                    repr(_sname) + ": search '" + _sreason[:50] + " resolved'"
+                )
 
-        search_instructions = “”
+        _search_instructions = ""
         if revive_search_targets:
-            targets_str = “\n”.join(f”  {i+1}. {t}” for i, t in enumerate(revive_search_targets))
-            search_instructions = f”””
-MANDATORY FIRST STEP — use google_search for each revive_now feature before ranking:
-{targets_str}
+            _targets_str = chr(10).join(
+                "  " + str(i + 1) + ". " + t
+                for i, t in enumerate(revive_search_targets)
+            )
+            _search_instructions = (
+                chr(10)
+                + "MANDATORY FIRST STEP -- use google_search for each revive_now feature:"
+                + chr(10) + _targets_str + chr(10)
+                + "Format each result as: [SEARCH: <query>] -> <finding with date and URL>"
+                + chr(10)
+                + "Only after completing these searches, produce the JSON synthesis."
+                + chr(10)
+            )
 
-Call google_search for each target above. Format your result as:
-[SEARCH: <query>] → <one-line finding with date and URL>
+        findings_json = _json.dumps(findings_summary, indent=2)
+        prompt = (
+            "You are the strategic synthesis agent for NECRO, analyzing dead feature "
+            "findings from '" + project_path + "'." + chr(10) + chr(10)
+            + str(len(revive_now)) + " features recommended for immediate revival, "
+            + str(len(investigate)) + " for investigation." + chr(10)
+            + _search_instructions + chr(10)
+            + "Here are all " + str(len(saved_features)) + " findings:" + chr(10) + chr(10)
+            + findings_json + chr(10) + chr(10)
+            + "Your job:" + chr(10)
+            + "1. Use google_search to verify top revive_now candidates (MANDATORY -- see above)" + chr(10)
+            + "2. Identify the TOP 3 highest-priority revival candidates with specific reasoning" + chr(10)
+            + "3. Flag inconsistencies where challenger downgraded a revive_now recommendation" + chr(10)
+            + "4. Identify the dominant graveyard pattern" + chr(10)
+            + "5. Write a 3-sentence executive action plan" + chr(10) + chr(10)
+            + 'Return a JSON object:' + chr(10)
+            + '{' + chr(10)
+            + '  "status": "success",' + chr(10)
+            + '  "top_3_priorities": [' + chr(10)
+            + '    {"rank": 1, "feature": "name", "reason": "why most urgent", "first_action": "next step"},' + chr(10)
+            + '    {"rank": 2, "feature": "name", "reason": "...", "first_action": "..."},' + chr(10)
+            + '    {"rank": 3, "feature": "name", "reason": "...", "first_action": "..."}' + chr(10)
+            + '  ],' + chr(10)
+            + '  "graveyard_pattern": "1-2 sentence pattern observed",' + chr(10)
+            + '  "executive_summary": "3-sentence action plan for engineering lead",' + chr(10)
+            + '  "challenger_disagreements": ["features where challenger downgraded vs primary"],' + chr(10)
+            + '  "verification_quality": "high/medium/low"' + chr(10)
+            + '}'
+        )
 
-Only after completing these searches, produce the JSON synthesis below.
-“””
-
-        prompt = f”””You are the strategic synthesis agent for NECRO, analyzing dead feature findings from '{project_path}'.
-
-{len(revive_now)} features recommended for immediate revival, {len(investigate)} for investigation.
-{search_instructions}
-Here are all {len(saved_features)} findings:
-
-{_json.dumps(findings_summary, indent=2)}
-
-Your job:
-1. Use google_search to verify the top revive_now candidates (MANDATORY — see above)
-2. Identify the TOP 3 highest-priority revival candidates with specific reasoning
-3. Flag inconsistencies where the challenger downgraded a revive_now recommendation
-4. Identify the dominant graveyard pattern (e.g., “4 of 6 features share the same infrastructure constraint”)
-5. Write a 3-sentence executive action plan
-
-Return a JSON object:
-{{
-  “status”: “success”,
-  “top_3_priorities”: [
-    {{“rank”: 1, “feature”: “name”, “reason”: “why most urgent”, “first_action”: “specific next step”}},
-    {{“rank”: 2, “feature”: “name”, “reason”: “...”, “first_action”: “...”}},
-    {{“rank”: 3, “feature”: “name”, “reason”: “...”, “first_action”: “...”}}
-  ],
-  “graveyard_pattern”: “1-2 sentence pattern observed across all findings”,
-  “executive_summary”: “3-sentence action plan for the engineering lead”,
-  “challenger_disagreements”: [“features where challenger downgraded vs primary”],
-  “verification_quality”: “high/medium/low — based on how many claims have verified external evidence”
-}}”””
-
-        await emit(“[ADK] Agent Builder — reasoning over all findings...”)
+        await emit("[ADK] Agent Builder -- reasoning over all findings...")
 
         message = genai_types.Content(
-            role=”user”,
+            role="user",
             parts=[genai_types.Part(text=prompt)],
         )
 
-        synthesis_text = “”
+        synthesis_text = ""
         async for event in runner.run_async(
-            user_id=”necro-synthesis”,
+            user_id="necro-synthesis",
             session_id=session_id,
             new_message=message,
         ):
-            # Capture google_search tool calls → emit as [SEARCH:] lines in terminal
-            if hasattr(event, “content”) and event.content and event.content.parts:
+            # Capture google_search tool calls and emit as [SEARCH:] lines in terminal
+            if hasattr(event, "content") and event.content and event.content.parts:
                 for part in event.content.parts:
-                    if hasattr(part, “function_call”) and part.function_call:
+                    if hasattr(part, "function_call") and part.function_call:
                         fc = part.function_call
-                        fc_name = fc.name or “”
-                        if “google_search” in fc_name or “search” in fc_name.lower():
+                        fc_name = fc.name or ""
+                        if "google_search" in fc_name or fc_name.endswith("search"):
                             args = dict(fc.args) if fc.args else {}
-                            query = args.get(“query”, args.get(“q”, str(args)[:80]))
+                            query = args.get("query", args.get("q", str(args)[:80]))
                             if query:
-                                await emit(f”[SEARCH] Google Search (ADK) → {query}”)
-                        elif any(x in fc_name for x in (“list_”, “get_”, “search_”)):
-                            args_preview = str(dict(fc.args))[:60] if fc.args else “”
-                            await emit(f”[ADK] Agent calling: {fc_name}({args_preview})”)
-                    elif hasattr(part, “function_response”) and part.function_response:
-                        resp_name = str(part.function_response.name or “”)
-                        if “google_search” in resp_name or “search” in resp_name.lower():
-                            await emit(“[SEARCH] Search results received — updating verification...”)
+                                await emit("[SEARCH] Google Search (ADK) -> " + str(query))
+                        elif any(x in fc_name for x in ("list_", "get_", "search_")):
+                            _ap = str(dict(fc.args))[:60] if fc.args else ""
+                            await emit("[ADK] Agent calling: " + fc_name + "(" + _ap + ")")
+                    elif hasattr(part, "function_response") and part.function_response:
+                        _rn = str(part.function_response.name or "")
+                        if "google_search" in _rn or _rn.endswith("search"):
+                            await emit("[SEARCH] Search results received -- updating verification...")
             if event.is_final_response() and event.content and event.content.parts:
-                synthesis_text = (event.content.parts[0].text or “”).strip()
+                synthesis_text = (event.content.parts[0].text or "").strip()
 
         if synthesis_text:
             import re
