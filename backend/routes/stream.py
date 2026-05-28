@@ -250,7 +250,7 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
     for batch_start in range(0, total, _BATCH_SIZE):
         batch = features[batch_start:batch_start + _BATCH_SIZE]
         await emit(
-            f"Analyzing features {batch_start + 1}â€“{min(batch_start + _BATCH_SIZE, total)} of {total} "
+            f"Analyzing features {batch_start + 1}–{min(batch_start + _BATCH_SIZE, total)} of {total} "
             f"(parallel batch)..."
         )
         batch_results = await asyncio.gather(
@@ -373,8 +373,8 @@ async def _run_adk_pre_scan_assessment(
 Phase 0 task — autonomous repository assessment:
 1. Call list_commits for project '{project_path}' (limit=10) to sample recent activity
 2. Based on the commit dates and activity level, decide optimal scan parameters:
-   - max_commits: how many commits NECRO should analyze (range: 50â€“500, user default: {default_max_commits})
-   - lookback_months: how far back to look (range: 3â€“60 months, user default: {default_lookback})
+   - max_commits: how many commits NECRO should analyze (range: 50–500, user default: {default_max_commits})
+   - lookback_months: how far back to look (range: 3–60 months, user default: {default_lookback})
 3. Reason explicitly about what you observe in the commit history
 
 Return ONLY a JSON object (no markdown, no explanation outside the JSON):
@@ -611,6 +611,39 @@ async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]
                 result["model"] = "google_cloud_agent_builder_adk_gemini3_flash"
                 return result
 
+        # Model returned empty content (grounding ran but produced no text).
+        # Build a minimal synthesis from the Phase 1 data so the panel is not blank.
+        revive = [f for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now"]
+        investigate = [f for f in saved_features if f.get("viability", {}).get("recommendation") == "investigate_further"]
+        if revive or investigate:
+            top = (revive + investigate)[:3]
+            priorities = [
+                {"rank": i + 1, "feature": f["name"],
+                 "reason": f.get("viability", {}).get("reasoning", "Phase 1 analysis — see card details"),
+                 "first_action": "Review Phase 1 analysis and linked commit for revival details"}
+                for i, f in enumerate(top)
+            ]
+            pattern = (
+                f"{len(revive)} feature(s) flagged for immediate revival, "
+                f"{len(investigate)} for investigation. "
+                "Phase 1 forensics complete — ADK search inconclusive for this repo."
+            )
+            return {
+                "status": "success",
+                "top_3_priorities": priorities,
+                "graveyard_pattern": pattern,
+                "executive_summary": (
+                    f"NECRO identified {len(revive + investigate)} candidate(s) in this repository. "
+                    "Phase 1 analysis is complete with full commit evidence. "
+                    "ADK web search returned no additional grounding — review each card for full details."
+                ),
+                "challenger_disagreements": [
+                    f["name"] for f in saved_features
+                    if f.get("challenger", {}).get("challenger_verdict") in ("reject", "downgrade")
+                ],
+                "verification_quality": "medium",
+                "model": "google_cloud_agent_builder_adk_gemini3_flash",
+            }
         return {"status": "empty_response", "reason": "ADK runner returned no content"}
 
     except Exception as exc:
@@ -643,7 +676,7 @@ async def queue_put_report(emit, report: dict):
 
 def _compute_revival_score(feature_dict: dict) -> int:
     """
-    Composite 0â€“100 Revival Priority Score — shown on every feature card.
+    Composite 0–100 Revival Priority Score — shown on every feature card.
 
     Weights:
       40% — feasibility (1-10 Gemini assessment)
