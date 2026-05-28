@@ -248,10 +248,10 @@ body {
   gap: 0.4rem;
 }
 .cyber-field label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;   /* was uppercase — readable sentence case now */
   color: var(--text-muted);
 }
 .input-glow-wrapper {
@@ -619,8 +619,8 @@ body {
 .ls-label {
   font-size: 0.65rem;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
+  letter-spacing: 0.01em;
 }
 .ls-card-integration {
   background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(99, 102, 241, 0.04));
@@ -946,8 +946,8 @@ body {
 .stat-label {
   font-size: 0.65rem;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
+  letter-spacing: 0.01em;
   margin-top: 0.15rem;
 }
 .revive-stat .stat-value { color: var(--green); text-shadow: 0 0 6px var(--green-glow); }
