@@ -3,7 +3,9 @@
 **NECRO finds the features your team already built, paid for, and accidentally buried — then tells you which ones are worth digging up.**
 
 > Built for the Google Cloud Rapid Agent Hackathon · GitLab Track  
-> Powered by Google Cloud Agent Builder · Gemini 3 Flash · GitLab MCP · MongoDB Atlas
+> Powered by Google Cloud Agent Builder · Gemini 3 Flash · Google Search · GitLab MCP · MongoDB Atlas
+
+🚀 **Live demo:** [https://necro-agent-38381883054.us-central1.run.app](https://necro-agent-38381883054.us-central1.run.app)
 
 ---
 
@@ -109,9 +111,11 @@ Once detection completes, each dead feature passes through five concurrent analy
 Gemini 3 Flash reads the kill commit message, linked MR notes, and issue threads and classifies the death into one of nine categories: `api_limitation`, `infrastructure`, `performance`, `resource_constraint`, `low_adoption`, `strategic_pivot`, `regulatory`, `technical_debt`, or `security`. It identifies the specific constraint and whether the kill was meant to be temporary.
 
 ### Viability scoring with live external verification
-This is the step most AI tools get wrong. Rather than asking Gemini to guess whether a constraint is still valid from training data, NECRO queries live external APIs first.
+This is the step most AI tools get wrong. Rather than asking Gemini to guess whether a constraint is still valid from training data, NECRO verifies constraints through two independent live sources:
 
-`constraint_grounder.py` identifies the technology in the kill reason and calls the appropriate registry:
+**Google Search (ADK built-in tool):** The ADK agent calls `google_search` for every feature during the EVALUATE step. It searches for "[library] [capability] release notes" or "CVE-XXXX patch fix" and cites the result URL directly in the viability score. Every "what changed" claim has a live URL and date — not a training-data guess.
+
+**Registry APIs (`constraint_grounder.py`):** Identifies the technology in the kill reason and calls the appropriate registry:
 
 | Technology identified | API called | Evidence returned |
 |-----------------------|------------|-------------------|
