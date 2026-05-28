@@ -141,14 +141,50 @@ IMPORTANT: Only cite specific version numbers or dates that appear in the VERIFI
     if result and "recommendation" in result:
         result["grounding"] = grounding
 
+        # ── Graduation detector (runs FIRST, overrides everything else) ──────────
+        # A feature flag removed because the feature BECAME THE DEFAULT is a
+        # graduation event — the feature is live and active, NOT dead.
+        # These must never be surfaced as revival candidates.
+        _GRADUATION_SIGNALS = [
+            "already enabled by default",
+            "enabled by default",
+            "default-enabled",
+            "became default",
+            "rolled out to all",
+            "fully rolled out",
+            "standard lifecycle",
+            "lifecycle completion",
+            "already active by default",
+            "removed as it is now default",
+        ]
+        _primary_lower = primary_reason.lower()
+        _name_lower = feature.name.lower()
+        _is_graduated = category == "feature_flag" and (
+            any(sig in _primary_lower for sig in _GRADUATION_SIGNALS)
+            or _name_lower.startswith("default-enabled")
+            or _name_lower.startswith("enable-by-default")
+        )
+        if _is_graduated:
+            result["recommendation"] = "keep_buried"
+            result["confidence"] = "high"
+            result["is_still_valid"] = True
+            result["reasoning"] = (
+                "This feature flag was removed because the feature was already enabled "
+                "by default — a graduation event, not a death. The feature is currently "
+                "active in production and does not need revival."
+            )
+            result["what_changed"] = "Feature graduated to default — flag cleanup only, feature is live."
+
         # Post-processing guarantee: feature flags are explicitly temporary by design.
         # If Gemini assessed feasibility ≥ 7 but didn't say revive_now (e.g. because
         # no external evidence was found), upgrade it — the flag's existence as a
         # dead feature is itself the evidence that it should be reconsidered.
+        # SKIP if already marked graduated (keep_buried + high confidence = graduation).
         if (
             category == "feature_flag"
             and result.get("revival_feasibility", 0) >= 7
             and result.get("recommendation") == "investigate_further"
+            and not _is_graduated
         ):
             result["recommendation"] = "revive_now"
             result["reasoning"] = (
@@ -176,11 +212,14 @@ IMPORTANT: Only cite specific version numbers or dates that appear in the VERIFI
         # feature_flag_removal detection, the model likely contradicted itself. A feasibility
         # of 8-10 means "trivially revivable" which cannot coexist with "keep buried" unless
         # the kill reason is ironclad. Upgrade to investigate_further so a human can decide.
+        # SKIP for graduated flags — high feasibility is CORRECT for graduated flags (they
+        # are trivially "revivable" since the feature is already live, but should stay buried).
         if (
             feature.detection_method == "feature_flag_removal"
             and result.get("revival_feasibility", 0) >= 8
             and result.get("recommendation") == "keep_buried"
             and result.get("confidence") != "high"
+            and not _is_graduated
         ):
             result["recommendation"] = "investigate_further"
             result["reasoning"] = (
