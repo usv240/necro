@@ -1,5 +1,5 @@
-﻿##
-## NECRO â€” GitLab AI Catalog Entry (GA)
+##
+## NECRO — GitLab AI Catalog Entry (GA)
 ##
 ## This file registers NECRO as a discoverable AI capability in the GitLab
 ## AI Catalog, making it available via:
@@ -7,17 +7,17 @@
 ##   - GitLab Duo Agent Platform: NECRO tools exposed as MCP endpoints
 ##   - GitLab CI/CD: NECRO analysis steps in pipeline definitions
 ##
-## Registration: GitLab Settings â†’ AI Agents â†’ AI Catalog â†’ Import YAML
+## Registration: GitLab Settings → AI Agents → AI Catalog → Import YAML
 ## Documentation: https://docs.gitlab.com/ee/user/gitlab_duo/ai_catalog.html
 ##
 
-name: NECRO â€” Code Necromancer
+name: NECRO — Code Necromancer
 version: "1.0.0"
 display_name: "NECRO: Dormant Feature Recovery"
 description: >
   NECRO scans GitLab repositories for disabled/removed features and evaluates
   whether they're ready to revive. Powered by Google Cloud Agent Builder (ADK)
-  with Gemini 3 Flash and GitLab MCP â€” two-way: NECRO calls GitLab MCP AND
+  with Gemini 3 Flash and GitLab MCP — two-way: NECRO calls GitLab MCP AND
   exposes itself as an MCP server for Duo agents to call.
 
 category: code-analysis
@@ -205,7 +205,7 @@ webhook:
     - Merge Request Hook
   actions:
     push: Re-evaluate graveyard when new commits resolve known blockers
-    merge_request_opened: Feature Will Generator â€” create Revival Contract
+    merge_request_opened: Feature Will Generator — create Revival Contract
     merge_request_merged: Activate Revival Contract monitoring
 
 examples:

@@ -1,16 +1,16 @@
-﻿# NECRO â€” GitLab Duo Agent Platform configuration
+# NECRO — GitLab Duo Agent Platform configuration
 #
 # Registers NECRO as a GitLab Duo Custom Agent in the AI Catalog.
 # Enables native Duo Chat integration: "NECRO, what can we revive here?"
 #
 # Three integration modes:
-#   1. GitLab.com Custom Agent  â€” system prompt + GitLab built-in tools
-#   2. Self-Managed External    â€” full API access via NECRO Cloud Run endpoint
-#   3. GitLab CI                â€” see ../../.gitlab-ci.yml for automated scans
+#   1. GitLab.com Custom Agent  — system prompt + GitLab built-in tools
+#   2. Self-Managed External    — full API access via NECRO Cloud Run endpoint
+#   3. GitLab CI                — see ../../.gitlab-ci.yml for automated scans
 #
 # Docs: https://docs.gitlab.com/user/duo_agent_platform/agents/custom/
 
-name: "NECRO â€” Code Necromancer"
+name: "NECRO — Code Necromancer"
 version: "2.0.0"
 
 description: >
@@ -21,25 +21,25 @@ description: >
   Challenger adversarial agent, and Resurrection Chain analysis to find shared
   constraints unlocking multiple features at once.
 
-  New in v2: Ghost MR â€” NECRO creates a real Draft MR with a full revival plan.
-  New in v2: Open Requests Match â€” surfaces open issues asking for dead features.
-  New in v2: Resurrection Chains â€” one fix, multiple feature unlocks.
+  New in v2: Ghost MR — NECRO creates a real Draft MR with a full revival plan.
+  New in v2: Open Requests Match — surfaces open issues asking for dead features.
+  New in v2: Resurrection Chains — one fix, multiple feature unlocks.
 
-# â”€â”€ Duo Chat system prompt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Duo Chat system prompt ────────────────────────────────────────────────────
 system_prompt: |
   You are NECRO, the Code Necromancer. You find dead features in GitLab
-  repositories that are worth reviving â€” features killed for reasons that no
+  repositories that are worth reviving — features killed for reasons that no
   longer exist.
 
   ## What you know
 
   NECRO has analyzed this repository. Here are the detection strategies:
-  1. **Revert commits** â€” `git revert` operations on feature branches
-  2. **Feature flag diffs** â€” code changes disabling flags (`.enabled = false`)
-  3. **Disable-keyword commits** â€” messages with "disable", "kill", "remove feature"
-  4. **Closed shelved issues** â€” issues closed as "won't fix" or "deferred"
-  5. **Feature-branch MRs** â€” merged MRs with disable keywords in title/description
-  6. **GitLab native feature flags** â€” `/api/v4/projects/:id/feature_flags` (active=false)
+  1. **Revert commits** — `git revert` operations on feature branches
+  2. **Feature flag diffs** — code changes disabling flags (`.enabled = false`)
+  3. **Disable-keyword commits** — messages with "disable", "kill", "remove feature"
+  4. **Closed shelved issues** — issues closed as "won't fix" or "deferred"
+  5. **Feature-branch MRs** — merged MRs with disable keywords in title/description
+  6. **GitLab native feature flags** — `/api/v4/projects/:id/feature_flags` (active=false)
 
   ## Your capabilities
 
@@ -71,24 +71,24 @@ system_prompt: |
   - Data: GitLab MCP tools (list_commits, list_issues, list_merge_requests, list_feature_flags)
   - Constraint verification: npm registry, GitHub releases, PyPI API
   - Storage: MongoDB Atlas Vector Search
-  - Resurrection Chains: groups features by shared constraint â€” fix once, unlock many
+  - Resurrection Chains: groups features by shared constraint — fix once, unlock many
 
-# â”€â”€ Built-in GitLab tools (Custom Agent mode â€” GitLab.com) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Built-in GitLab tools (Custom Agent mode — GitLab.com) ───────────────────
 tools:
   - create_issue
   - search_code
   - list_files
   - create_note
 
-# â”€â”€ Quick-start prompts for Duo Chat sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Quick-start prompts for Duo Chat sidebar ─────────────────────────────────
 suggested_prompts:
   - "NECRO, scan this repository for dead features"
   - "What features were disabled in the last 2 years that could be revived now?"
-  - "Show me the Resurrection Chains â€” shared constraints locking multiple features"
+  - "Show me the Resurrection Chains — shared constraints locking multiple features"
   - "Are there any open issues requesting features we already built and disabled?"
   - "Create a revival plan for the highest-priority dead feature"
 
-# â”€â”€ External agent configuration (Self-Managed only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── External agent configuration (Self-Managed only) ─────────────────────────
 # When deployed on GitLab Self-Managed, NECRO runs as a full external agent
 # with access to the Cloud Run API for live scanning.
 external_api:
@@ -98,7 +98,7 @@ external_api:
     type: bearer
     token: "${NECRO_AGENT_TOKEN}"
 
-# â”€â”€ Environment variables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Environment variables ─────────────────────────────────────────────────────
 environment:
   NECRO_URL:
     description: "NECRO Cloud Run endpoint URL"
@@ -116,19 +116,19 @@ environment:
     description: "Bearer token for NECRO agent API authentication (external mode)"
     required: false
 
-# â”€â”€ Trigger configuration (Self-Managed â€” External Agent mode) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Trigger configuration (Self-Managed — External Agent mode) ───────────────
 triggers:
   - type: mention
     pattern: "@necro"
     description: "Triggered when @necro is mentioned in an issue or MR comment"
   - type: assign
-    description: "Triggered when NECRO is assigned to an issue â€” runs a full scan"
+    description: "Triggered when NECRO is assigned to an issue — runs a full scan"
   - type: label
     label: "necro-scan"
     description: "Triggered when the necro-scan label is applied to an issue or MR"
 
-# â”€â”€ Related files â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# ../../.gitlab-ci.yml           â€” self-dogfooding CI scan on every push
-# ../../backend/routes/revive.py â€” Ghost MR endpoint (POST /api/revive/{id}/ghost-mr)
-# ../../backend/routes/stream.py â€” Main scan pipeline with ADK synthesis
+# ── Related files ─────────────────────────────────────────────────────────────
+# ../../.gitlab-ci.yml           — self-dogfooding CI scan on every push
+# ../../backend/routes/revive.py — Ghost MR endpoint (POST /api/revive/{id}/ghost-mr)
+# ../../backend/routes/stream.py — Main scan pipeline with ADK synthesis
 
