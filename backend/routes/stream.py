@@ -593,7 +593,11 @@ async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]
                         if "google_search" in _rn or _rn.endswith("search"):
                             await emit("[SEARCH] Search results received -- updating verification...")
             if event.is_final_response() and event.content and event.content.parts:
-                synthesis_text = (event.content.parts[0].text or "").strip()
+                # Concatenate ALL text parts — model may split prose + JSON into multiple parts
+                synthesis_text = " ".join(
+                    (p.text or "") for p in event.content.parts
+                    if hasattr(p, "text") and p.text
+                ).strip()
 
         if synthesis_text:
             import re
