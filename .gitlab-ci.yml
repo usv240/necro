@@ -1,64 +1,45 @@
 # NECRO — GitLab CI/CD Pipeline
 #
-# Full pipeline mirroring the GitLab + Gemini best-practice workflow:
-#   build → test → security → upload (Artifact Registry) → deploy (Cloud Run) → necro-scan
+# Stages:
+#   test     → pytest (no external credentials needed)
+#   security → GitLab SAST + Secret Detection (built-in, free tier)
+#   scan     → NECRO dogfoods itself against its own repo (requires NECRO_URL)
+#   deploy   → Cloud Run deploy (requires GCP variables, manual trigger)
 #
-# Google Cloud authentication uses Workload Identity Federation (no service account keys).
-# Set these CI/CD variables in GitLab → Settings → CI/CD → Variables:
-#   GOOGLE_PROJECT_ID       — GCP project ID
-#   GOOGLE_ARTIFACT_REGION  — e.g. us-central1
-#   GOOGLE_ARTIFACT_REPO    — Artifact Registry repo name, e.g. necro
-#   CLOUD_RUN_SERVICE       — Cloud Run service name, e.g. necro-agent
-#   CLOUD_RUN_REGION        — e.g. us-central1
-#   NECRO_URL               — Live Cloud Run URL (for self-scan stage)
-#   NECRO_MAX_COMMITS       — (optional) default 50
-#   NECRO_LOOKBACK_MONTHS   — (optional) default 24
+# Required CI/CD variables (Settings → CI/CD → Variables):
+#   NECRO_URL          — live Cloud Run / Render URL for self-scan
+#   GOOGLE_PROJECT_ID  — for deploy stage (optional)
+#   CLOUD_RUN_SERVICE  — Cloud Run service name (optional)
+#   CLOUD_RUN_REGION   — e.g. us-central1 (optional)
+#   GEMINI_API_KEY     — for live scan (optional, scan skips gracefully without it)
 
+# ── GitLab built-in security templates ───────────────────────────────────────
+include:
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+
+# ── Global variables ──────────────────────────────────────────────────────────
 variables:
-  NECRO_URL: "https://necro-agent-38381883054.us-central1.run.app"
   NECRO_MAX_COMMITS: "50"
   NECRO_LOOKBACK_MONTHS: "24"
-  DOCKER_DRIVER: overlay2
-  # Image path in Google Artifact Registry
-  AR_IMAGE: "${GOOGLE_ARTIFACT_REGION}-docker.pkg.dev/${GOOGLE_PROJECT_ID}/${GOOGLE_ARTIFACT_REPO}/necro-agent"
 
+# ── Pipeline stages ───────────────────────────────────────────────────────────
 stages:
-  - build
   - test
   - security
-  - upload
+  - scan
   - deploy
-  - necro-scan
-  - necro-report
 
-# ── 1. BUILD — Docker image ───────────────────────────────────────────────────
-build-image:
-  stage: build
-  image: docker:24.0.5
-  services:
-    - docker:24.0.5-dind
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  script:
-    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA .
-    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
-    # Tag as latest on default branch
-    - |
-      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:latest
-        docker push $CI_REGISTRY_IMAGE:latest
-      fi
-  rules:
-    - if: '$CI_COMMIT_BRANCH'
-
-# ── 2. TEST — pytest ──────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. TEST — pytest (runs on every push, no credentials needed)
+# ─────────────────────────────────────────────────────────────────────────────
 run-tests:
   stage: test
   image: python:3.11-slim
   before_script:
     - pip install --no-cache-dir -r requirements.txt
   script:
-    - pytest tests/test_necro.py -q --ignore-glob='*live*' --tb=short
+    - pytest tests/test_necro.py -q --tb=short
   artifacts:
     reports:
       junit: test-results.xml
@@ -67,143 +48,105 @@ run-tests:
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
-# ── 3. SECURITY — GitLab built-in scanners ───────────────────────────────────
-# SAST: static analysis for Python code vulnerabilities
-include:
-  - template: Jobs/SAST.gitlab-ci.yml
-  - template: Jobs/Secret-Detection.gitlab-ci.yml
-  - template: Jobs/Dependency-Scanning.gitlab-ci.yml
-
-# Override stage placement so security runs after test
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. SECURITY — GitLab built-in SAST + Secret Detection
+#    Runs on every MR and default branch push.
+#    Results appear in the Security Dashboard and MR widget.
+# ─────────────────────────────────────────────────────────────────────────────
 sast:
   stage: security
 
 secret_detection:
   stage: security
 
-dependency_scanning:
-  stage: security
-
-# ── 4. UPLOAD — push to Google Artifact Registry ─────────────────────────────
-upload-to-ar:
-  stage: upload
-  image: google/cloud-sdk:slim
-  # Uses Workload Identity Federation — no service account key needed.
-  # GitLab Settings → Integrations → Google Cloud IAM must be active.
-  id_tokens:
-    GITLAB_OIDC_TOKEN:
-      aud: "https://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GITLAB_POOL_ID}/providers/${GITLAB_PROVIDER_ID}"
-  script:
-    - echo "$GITLAB_OIDC_TOKEN" > /tmp/oidc_token.txt
-    - |
-      gcloud iam workload-identity-pools create-cred-config \
-        "projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GITLAB_POOL_ID}/providers/${GITLAB_PROVIDER_ID}" \
-        --service-account="${GOOGLE_SERVICE_ACCOUNT}" \
-        --output-file=/tmp/creds.json \
-        --credential-source-file=/tmp/oidc_token.txt
-    - export GOOGLE_APPLICATION_CREDENTIALS=/tmp/creds.json
-    - gcloud auth login --cred-file=/tmp/creds.json --quiet
-    - gcloud auth configure-docker ${GOOGLE_ARTIFACT_REGION}-docker.pkg.dev --quiet
-    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
-    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA ${AR_IMAGE}:$CI_COMMIT_SHORT_SHA
-    - docker push ${AR_IMAGE}:$CI_COMMIT_SHORT_SHA
-    - |
-      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        docker tag ${AR_IMAGE}:$CI_COMMIT_SHORT_SHA ${AR_IMAGE}:latest
-        docker push ${AR_IMAGE}:latest
-      fi
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-  needs: ["build-image"]
-
-# ── 5. DEPLOY — Cloud Run (main branch merges only) ──────────────────────────
-deploy-to-cloud-run:
-  stage: deploy
-  image: google/cloud-sdk:slim
-  id_tokens:
-    GITLAB_OIDC_TOKEN:
-      aud: "https://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GITLAB_POOL_ID}/providers/${GITLAB_PROVIDER_ID}"
-  script:
-    - echo "$GITLAB_OIDC_TOKEN" > /tmp/oidc_token.txt
-    - |
-      gcloud iam workload-identity-pools create-cred-config \
-        "projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GITLAB_POOL_ID}/providers/${GITLAB_PROVIDER_ID}" \
-        --service-account="${GOOGLE_SERVICE_ACCOUNT}" \
-        --output-file=/tmp/creds.json \
-        --credential-source-file=/tmp/oidc_token.txt
-    - export GOOGLE_APPLICATION_CREDENTIALS=/tmp/creds.json
-    - gcloud auth login --cred-file=/tmp/creds.json --quiet
-    - |
-      gcloud run deploy ${CLOUD_RUN_SERVICE} \
-        --image=${AR_IMAGE}:$CI_COMMIT_SHORT_SHA \
-        --region=${CLOUD_RUN_REGION} \
-        --project=${GOOGLE_PROJECT_ID} \
-        --allow-unauthenticated \
-        --quiet
-    - echo "Deployed ${AR_IMAGE}:${CI_COMMIT_SHORT_SHA} to Cloud Run service '${CLOUD_RUN_SERVICE}'"
-  environment:
-    name: production
-    url: $NECRO_URL
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-  needs: ["upload-to-ar"]
-
-# ── 6. SELF-SCAN — NECRO dogfoods itself ─────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. SELF-SCAN — NECRO dogfoods itself
+#    Scans the NECRO repo for its own dormant features.
+#    Skips gracefully if NECRO_URL is not configured.
+# ─────────────────────────────────────────────────────────────────────────────
 necro-self-scan:
-  stage: necro-scan
+  stage: scan
   image: curlimages/curl:latest
   rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $NECRO_URL'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $NECRO_URL'
   script:
     - |
-      echo "=== NECRO Code Necromancer — scanning ${CI_PROJECT_PATH} ==="
-      echo "Powered by Google Cloud Agent Builder + GitLab Duo + GitLab MCP"
+      echo "=== NECRO — Dormant Code Recovery ==="
+      echo "Scanning: ${CI_PROJECT_PATH}"
+      echo "Agent: Google Cloud Agent Builder + Gemini 3 Flash + GitLab MCP"
       echo ""
 
-      RESPONSE=$(curl -s -X POST "${NECRO_URL}/api/scan/quick" \
+      RESPONSE=$(curl -sf -X POST "${NECRO_URL}/api/scan/quick" \
         -H "Content-Type: application/json" \
         -d "{
-          \"repo_url\": \"${CI_PROJECT_PATH}\",
+          \"repo_url\": \"https://gitlab.com/${CI_PROJECT_PATH}\",
           \"max_commits\": ${NECRO_MAX_COMMITS},
           \"lookback_months\": ${NECRO_LOOKBACK_MONTHS}
         }" \
-        --max-time 120)
+        --max-time 180) || { echo "NECRO scan skipped (service not reachable)"; exit 0; }
 
-      echo "$RESPONSE" | head -c 2000
+      echo "$RESPONSE" | head -c 3000
       echo ""
-      echo "Scan complete — check MR/Issues for the Graveyard Report"
+      echo "Scan complete. Saving report..."
+      echo "$RESPONSE" > necro-report.json
 
   artifacts:
-    reports:
-      dotenv: necro-scan.env
     paths:
       - necro-report.json
     when: always
     expire_in: 30 days
   allow_failure: true
 
-# ── 7. POST REPORT — GitLab issue with graveyard findings ────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. POST REPORT — create a native GitLab issue with graveyard findings
+# ─────────────────────────────────────────────────────────────────────────────
 necro-post-report:
-  stage: necro-report
+  stage: scan
   image: curlimages/curl:latest
   needs: ["necro-self-scan"]
   rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $NECRO_URL'
       when: on_success
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $NECRO_URL'
       when: on_success
   script:
     - |
       if [ ! -f necro-report.json ]; then
-        echo "No report file — skipping issue creation"
+        echo "No report — skipping issue creation"
         exit 0
       fi
 
-      curl -s -X POST "${NECRO_URL}/api/report/post-to-gitlab" \
+      curl -sf -X POST "${NECRO_URL}/api/report/post-to-gitlab" \
         -H "Content-Type: application/json" \
         -d @necro-report.json \
-        --max-time 30 || true
+        --max-time 30 || echo "Post to GitLab skipped"
 
-      echo "Graveyard report posted to ${CI_PROJECT_URL}/-/issues"
+      echo "Done — check ${CI_PROJECT_URL}/-/issues for the Graveyard Report"
   allow_failure: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. DEPLOY — Cloud Run (manual trigger, requires GCP variables)
+# ─────────────────────────────────────────────────────────────────────────────
+deploy-cloud-run:
+  stage: deploy
+  image: google/cloud-sdk:slim
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $GOOGLE_PROJECT_ID'
+      when: manual
+  script:
+    - |
+      gcloud run deploy ${CLOUD_RUN_SERVICE:-necro-agent} \
+        --source . \
+        --region ${CLOUD_RUN_REGION:-us-central1} \
+        --project ${GOOGLE_PROJECT_ID} \
+        --allow-unauthenticated \
+        --memory 1Gi \
+        --timeout 300 \
+        --set-env-vars "MONGODB_URI=${MONGODB_URI},GITLAB_TOKEN=${GITLAB_TOKEN},GEMINI_API_KEY=${GEMINI_API_KEY},GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}" \
+        --quiet
+    - echo "Deployed to Cloud Run — ${CLOUD_RUN_SERVICE:-necro-agent}"
+  environment:
+    name: production
+    url: $NECRO_URL
+  allow_failure: false
