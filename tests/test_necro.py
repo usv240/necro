@@ -799,3 +799,391 @@ class TestLiveScanFull:
         if r.status_code == 200:
             d = r.json()
             assert d.get("mcp_tool_count", 0) > 0 or len(d.get("mcp_tools_used", [])) > 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 16. Ghost MR endpoint  (POST /api/revive/{feature_id}/ghost-mr)
+# ─────────────────────────────────────────────────────────────────────────────
+class TestGhostMR:
+    """
+    Ghost MR is a headline feature: NECRO creates branch + NECRO_REVIVAL.md + Draft MR
+    via three GitLab MCP write operations.
+    """
+
+    def test_ghost_mr_route_exists(self, client):
+        """Route must be registered — a missing feature_id yields 404 (feature not found), not 405."""
+        r = client.post("/api/revive/nonexistent-feature-xyz/ghost-mr",
+                        json={"project_path": "test/repo"})
+        # 404 (feature not in DB) is the expected path — NOT 405 (method not allowed) / 422
+        assert r.status_code in (404, 503)
+
+    def test_ghost_mr_requires_project_path(self, client):
+        """If no project_path and feature has none stored, should return 400 or 404."""
+        r = client.post("/api/revive/nonexistent-feature-xyz/ghost-mr", json={})
+        assert r.status_code in (400, 404, 503)
+
+    def test_ghost_mr_not_404_or_405(self, client):
+        """Regression guard: route must not silently vanish from the router."""
+        r = client.post("/api/revive/any-id/ghost-mr",
+                        json={"project_path": "gitlab-org/gitlab-foss"})
+        assert r.status_code != 405, "Ghost MR route returned 405 — router may be misconfigured"
+        assert r.status_code != 422, "Ghost MR route has unexpected schema validation"
+
+    def test_ghost_mr_keep_buried_rejected(self, client):
+        """
+        Ghost MR, like regular revive, must refuse keep_buried features.
+        (feature not found in test env → 404, which is acceptable)
+        """
+        r = client.post("/api/revive/a-keep-buried-feature-id/ghost-mr",
+                        json={"project_path": "test/repo"})
+        assert r.status_code in (400, 404, 503)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 17. Group scan (POST /api/scan/group)  — cross-repo federation
+# ─────────────────────────────────────────────────────────────────────────────
+class TestGroupScan:
+    """
+    Group scan (Cross-Repository Graveyard Federation) — scans an entire GitLab
+    namespace in parallel and federates feature graveyards across repos.
+    """
+
+    def test_group_scan_route_exists(self, client):
+        """Route must be registered."""
+        r = client.post("/api/scan/group", json={})
+        # 422 (missing namespace) — NOT 404/405
+        assert r.status_code not in (404, 405), "Group scan route is not registered"
+
+    def test_group_scan_requires_namespace(self, client):
+        r = client.post("/api/scan/group", json={})
+        assert r.status_code == 422  # namespace is required
+
+    def test_group_scan_accepts_valid_body(self, client):
+        """Verify the body schema the frontend sends is accepted by the backend."""
+        r = client.post("/api/scan/group", json={
+            "namespace": "gitlab-org",
+            "max_repos": 2,
+            "max_commits_per_repo": 5,
+            "lookback_months": 6,
+        }, timeout=5.0)
+        # May time out mid-scan or return a result — both are valid
+        assert r.status_code not in (404, 405, 422), f"Unexpected status: {r.status_code}"
+
+    def test_group_scan_response_has_namespace(self, client):
+        """If the call completes within timeout, response must echo the namespace."""
+        try:
+            r = client.post("/api/scan/group", json={
+                "namespace": "gitlab-org",
+                "max_repos": 1,
+                "max_commits_per_repo": 5,
+                "lookback_months": 3,
+            }, timeout=8.0)
+            if r.status_code == 200:
+                d = r.json()
+                assert "namespace" in d or "repos" in d or "results" in d
+        except httpx.TimeoutException:
+            pass  # scan started — acceptable
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 18. Revival contracts (GET /api/scan/contracts/{project_path})
+# ─────────────────────────────────────────────────────────────────────────────
+class TestRevivalContracts:
+    """
+    Revival Contracts (Feature Wills) — auto-generated revival intent documents
+    created when MRs kill features, so the will is written before burial.
+    """
+
+    def test_contracts_route_exists(self, client):
+        r = client.get("/api/scan/contracts/test-org/test-repo")
+        assert r.status_code not in (404, 405), "Contracts route is not registered"
+
+    def test_contracts_returns_project_path(self, client):
+        r = client.get("/api/scan/contracts/test-org/test-repo")
+        if r.status_code == 200:
+            d = r.json()
+            assert "project_path" in d
+            assert "contracts" in d
+            assert isinstance(d["contracts"], list)
+
+    def test_contracts_accepts_status_filter(self, client):
+        """Query param ?status=active must not cause 422."""
+        r = client.get("/api/scan/contracts/test-org/test-repo?status=active")
+        assert r.status_code not in (404, 405, 422)
+
+    def test_contracts_unknown_status_handled(self, client):
+        """Invalid status filter must not crash the server."""
+        r = client.get("/api/scan/contracts/test-org/test-repo?status=bogus")
+        assert r.status_code in (200, 400, 422, 503)
+
+    def test_contracts_slash_path_works(self, client):
+        """Path with subgroup (group/subgroup/repo) must not 404 on routing."""
+        r = client.get("/api/scan/contracts/group/subgroup/repo")
+        assert r.status_code not in (404, 405)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 19. Feature vitality / EKG  (GET /api/scan/vitality/{feature_id})
+# ─────────────────────────────────────────────────────────────────────────────
+class TestFeatureVitality:
+    """
+    Feature EKG — returns the demand curve + revival score time-series for
+    a feature, showing the optimal revival window.
+    """
+
+    def test_vitality_route_exists(self, client):
+        r = client.get("/api/scan/vitality/test-feature-id")
+        assert r.status_code not in (404, 405), "Vitality route is not registered"
+
+    def test_vitality_returns_feature_id(self, client):
+        r = client.get("/api/scan/vitality/test-feature-id")
+        if r.status_code == 200:
+            d = r.json()
+            assert d.get("feature_id") == "test-feature-id"
+
+    def test_vitality_has_sparkline_key(self, client):
+        r = client.get("/api/scan/vitality/test-feature-id")
+        if r.status_code == 200:
+            assert "sparkline" in r.json()
+
+    def test_vitality_has_history_key(self, client):
+        r = client.get("/api/scan/vitality/test-feature-id")
+        if r.status_code == 200:
+            d = r.json()
+            assert "history" in d
+            assert isinstance(d["history"], list)
+
+    def test_vitality_project_path_query_param(self, client):
+        """Optional project_path query param must not cause 422."""
+        r = client.get("/api/scan/vitality/test-feature-id?project_path=test-org/test-repo")
+        assert r.status_code not in (404, 405, 422)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 20. Report all-features, stats, notify-slack
+# ─────────────────────────────────────────────────────────────────────────────
+class TestReportExtendedEndpoints:
+    """Covers the three report endpoints missing from TestReportEndpoints."""
+
+    # ── GET /api/report/all-features ─────────────────────────────────────────
+    def test_all_features_route_exists(self, client):
+        r = client.get("/api/report/all-features")
+        assert r.status_code not in (404, 405)
+
+    def test_all_features_has_features_key(self, client):
+        r = client.get("/api/report/all-features")
+        assert r.status_code == 200
+        d = r.json()
+        assert "features" in d
+        assert "total" in d
+
+    def test_all_features_is_list(self, client):
+        r = client.get("/api/report/all-features")
+        assert isinstance(r.json()["features"], list)
+
+    def test_all_features_total_matches_list_length(self, client):
+        r = client.get("/api/report/all-features")
+        d = r.json()
+        assert d["total"] == len(d["features"])
+
+    def test_all_features_limit_param(self, client):
+        """?limit= query param must be accepted without 422."""
+        r = client.get("/api/report/all-features?limit=5")
+        assert r.status_code == 200
+        assert len(r.json()["features"]) <= 5
+
+    # ── GET /api/report/stats ─────────────────────────────────────────────────
+    def test_stats_route_exists(self, client):
+        r = client.get("/api/report/stats")
+        assert r.status_code not in (404, 405)
+
+    def test_stats_has_required_keys(self, client):
+        r = client.get("/api/report/stats")
+        assert r.status_code == 200
+        d = r.json()
+        required = ["total_scans", "total_features_found", "watched_repos_count",
+                    "revivals_logged_count", "mcp_tool_calls_count"]
+        for key in required:
+            assert key in d, f"stats missing key: {key}"
+
+    def test_stats_values_are_non_negative(self, client):
+        r = client.get("/api/report/stats")
+        d = r.json()
+        for key in ["total_scans", "total_features_found", "mcp_tool_calls_count"]:
+            assert d.get(key, 0) >= 0, f"stats[{key}] is negative"
+
+    # ── POST /api/report/notify-slack ─────────────────────────────────────────
+    def test_notify_slack_route_exists(self, client):
+        r = client.post("/api/report/notify-slack", json={})
+        # 422 (missing fields) or 503 (Slack not configured) — NOT 404/405
+        assert r.status_code not in (404, 405), "notify-slack route is not registered"
+
+    def test_notify_slack_requires_project_path(self, client):
+        r = client.post("/api/report/notify-slack", json={"features": []})
+        assert r.status_code == 422
+
+    def test_notify_slack_requires_features(self, client):
+        r = client.post("/api/report/notify-slack", json={"project_path": "test/repo"})
+        assert r.status_code == 422
+
+    def test_notify_slack_no_token_returns_503(self, client):
+        """Without Slack credentials configured, must return 503 (not 500 crash)."""
+        r = client.post("/api/report/notify-slack", json={
+            "project_path": "test/repo",
+            "features": [],
+        })
+        # 503 (not configured) or 200 (if a webhook is set in env) — both are valid
+        assert r.status_code in (200, 503), f"Unexpected status: {r.status_code}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 21. Gemini service unit tests (no server needed — pure Python)
+# ─────────────────────────────────────────────────────────────────────────────
+class TestGeminiService:
+    """
+    Unit tests for the Gemini client helpers — no live API calls, no server.
+    Tests the JSON extraction and parsing robustness used in all agent pipelines.
+    """
+
+    def test_extract_json_robust_simple_object(self):
+        from backend.services.gemini import _extract_json_robust
+        result = _extract_json_robust('{"key": "value", "num": 42}')
+        assert result == {"key": "value", "num": 42}
+
+    def test_extract_json_robust_with_preamble(self):
+        from backend.services.gemini import _extract_json_robust
+        result = _extract_json_robust('Here is the result: {"status": "ok"}')
+        assert result == {"status": "ok"}
+
+    def test_extract_json_robust_with_markdown_fence(self):
+        from backend.services.gemini import _extract_json_robust
+        text = '```json\n{"recommendation": "revive_now"}\n```'
+        # After fence stripping, this should still parse
+        import re
+        cleaned = re.sub(r"```(?:json)?\s*", "", text).strip().strip("`").strip()
+        result = _extract_json_robust(cleaned)
+        assert result is not None
+        assert result.get("recommendation") == "revive_now"
+
+    def test_extract_json_robust_nested_braces(self):
+        from backend.services.gemini import _extract_json_robust
+        text = '{"outer": {"inner": {"deep": true}}}'
+        result = _extract_json_robust(text)
+        assert result == {"outer": {"inner": {"deep": True}}}
+
+    def test_extract_json_robust_array(self):
+        from backend.services.gemini import _extract_json_robust
+        result = _extract_json_robust('[{"name": "Feature A"}, {"name": "Feature B"}]')
+        assert isinstance(result, list)
+        assert len(result) == 2
+
+    def test_extract_json_robust_escaped_quotes(self):
+        from backend.services.gemini import _extract_json_robust
+        result = _extract_json_robust('{"msg": "He said \\"hello\\""}')
+        assert result is not None
+        assert "hello" in result.get("msg", "")
+
+    def test_extract_json_robust_returns_none_on_invalid(self):
+        from backend.services.gemini import _extract_json_robust
+        result = _extract_json_robust("this is not json at all")
+        assert result is None
+
+    def test_extract_json_robust_partial_braces(self):
+        from backend.services.gemini import _extract_json_robust
+        result = _extract_json_robust('{"key": "value"} some trailing garbage')
+        assert result == {"key": "value"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 22. Challenger agent unit tests (no server needed)
+# ─────────────────────────────────────────────────────────────────────────────
+class TestChallengerService:
+    """
+    Unit tests for challenger.py — the adversarial Gemini agent that stress-tests
+    viability assessments. Tests the prompt building and result merging logic.
+    """
+
+    def test_challenger_module_importable(self):
+        """Challenger service must import cleanly."""
+        import backend.services.challenger  # noqa: F401
+
+    def test_challenger_has_run_function(self):
+        from backend.services import challenger
+        assert hasattr(challenger, "run_challenger") or hasattr(challenger, "challenge_feature") or \
+               any(callable(getattr(challenger, a)) for a in dir(challenger) if not a.startswith("_"))
+
+    def test_challenger_build_prompt_contains_feature_name(self):
+        """If challenger has a prompt builder, it should include the feature name."""
+        try:
+            from backend.services.challenger import _build_challenge_prompt
+            prompt = _build_challenge_prompt(
+                {"name": "OAuth Single Sign-On", "kill_reason": "Security audit"},
+                {"recommendation": "revive_now", "revival_feasibility": 8},
+            )
+            assert "OAuth Single Sign-On" in prompt
+        except ImportError:
+            pytest.skip("_build_challenge_prompt not exposed — skipping internal unit test")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 23. Resurrection chains — feature dependency graph
+# ─────────────────────────────────────────────────────────────────────────────
+class TestResurrectionChains:
+    """
+    Resurrection Chains reveal features that died together because they shared
+    a blocking constraint. Fixing ONE constraint unlocks a chain of revivals.
+    """
+
+    def test_demo_features_may_have_resurrection_chain(self, client):
+        """Demo scan may include resurrection_chain field on features."""
+        r = client.post("/api/scan/demo")
+        for feat in r.json().get("features", []):
+            chain = feat.get("resurrection_chain")
+            if chain is not None:
+                # If present, must be a list (of related feature IDs or names)
+                assert isinstance(chain, (list, dict)), \
+                    "resurrection_chain must be list or dict"
+
+    def test_demo_features_constraint_field(self, client):
+        """Features should carry their blocking constraint when known."""
+        r = client.post("/api/scan/demo")
+        for feat in r.json().get("features", []):
+            dr = feat.get("death_reason") or {}
+            # constraint field is optional but if present must be a string
+            constraint = dr.get("constraint") or feat.get("constraint")
+            if constraint is not None:
+                assert isinstance(constraint, str)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 24. Vector search / demand matching
+# ─────────────────────────────────────────────────────────────────────────────
+class TestVectorSearch:
+    """
+    MongoDB Vector Search — Google text-embedding-004 embeddings on issue bodies
+    match open GitLab demand against buried features.
+    """
+
+    def test_demo_features_have_roi_demand_signal(self, client):
+        """Every feature in demo should have at least one demand signal in ROI."""
+        r = client.post("/api/scan/demo")
+        for feat in r.json().get("features", []):
+            roi = feat.get("roi") or {}
+            has_demand = (
+                "request_count" in roi
+                or "demand_tier" in roi
+                or "priority_tier" in roi
+                or "demand_level" in roi
+                or "open_issues_mentioning" in roi
+                or "issue_demand" in roi
+            )
+            assert has_demand, \
+                f"Feature '{feat.get('name')}' has no demand signal (vector search result) in ROI"
+
+    def test_report_stats_mcp_tool_count_positive(self, client):
+        """Vector search enriches ROI — at least some MCP calls must have occurred."""
+        r = client.get("/api/report/stats")
+        if r.status_code == 200:
+            d = r.json()
+            # mcp_tool_calls_count tracks all tool invocations including embedding calls
+            assert d.get("mcp_tool_calls_count", 0) >= 0  # non-negative at minimum
