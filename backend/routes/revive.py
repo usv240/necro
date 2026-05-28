@@ -1,5 +1,5 @@
-﻿"""
-POST /api/revive/{feature_id} â€” create a GitLab revival issue + log to MongoDB.
+"""
+POST /api/revive/{feature_id} — create a GitLab revival issue + log to MongoDB.
 """
 
 import logging
@@ -50,14 +50,14 @@ async def create_revival_issue(feature_id: str, req: ReviveRequest):
     kill_sha = feat.get("kill_commit_sha", "")
     if kill_sha:
         try:
-            logger.info("[MCP] get_commit %s â€” resolving kill author for auto-assign...", kill_sha[:8])
+            logger.info("[MCP] get_commit %s — resolving kill author for auto-assign...", kill_sha[:8])
             commit_detail = await mcp.get_commit(project_path, kill_sha)
             if commit_detail:
                 author_email = commit_detail.get("author_email", "")
                 author_name = commit_detail.get("author_name", "")
                 search_q = author_email or author_name
                 if search_q:
-                    logger.info("[MCP] search_users â€” looking up '%s'...", search_q)
+                    logger.info("[MCP] search_users — looking up '%s'...", search_q)
                     users = await mcp.search_users(search_q)
                     if users:
                         assignee_ids = [users[0]["id"]]
@@ -65,7 +65,7 @@ async def create_revival_issue(feature_id: str, req: ReviveRequest):
         except Exception as exc:
             logger.debug("Could not resolve kill commit author: %s", exc)
 
-    logger.info("[MCP] create_issue â€” '%s' in %s (assignees=%s)", title, project_path, assignee_ids)
+    logger.info("[MCP] create_issue — '%s' in %s (assignees=%s)", title, project_path, assignee_ids)
     result = await mcp.create_issue(
         project_path,
         title=title,
@@ -122,12 +122,12 @@ async def create_revival_issue(feature_id: str, req: ReviveRequest):
 @router.post("/{feature_id}/ghost-mr")
 async def create_ghost_mr(feature_id: str, req: ReviveRequest):
     """
-    Ghost MR â€” NECRO creates a real draft GitLab Merge Request with a full revival plan.
+    Ghost MR — NECRO creates a real draft GitLab Merge Request with a full revival plan.
 
     Unlike "Create Issue" (which creates a discussion item), Ghost MR creates an
     actionable code artifact in the repository:
       1. Creates branch  necro/revival/{feature-slug}
-      2. Commits NECRO_REVIVAL.md to that branch â€” a step-by-step revival plan
+      2. Commits NECRO_REVIVAL.md to that branch — a step-by-step revival plan
       3. Opens a Draft MR from that branch â†’ default branch
          with the full constraint analysis, challenger verdict, and checklist
 
@@ -176,7 +176,7 @@ async def create_ghost_mr(feature_id: str, req: ReviveRequest):
         commit_message=f"necro: revival plan for {feat['name']}",
     )
     if not file_result:
-        logger.warning("[Ghost MR] File creation failed â€” continuing with MR creation anyway")
+        logger.warning("[Ghost MR] File creation failed — continuing with MR creation anyway")
 
     # 3. Create Draft MR
     dr = feat.get("death_reason", {})
@@ -186,11 +186,11 @@ async def create_ghost_mr(feature_id: str, req: ReviveRequest):
 
     mr_description = _build_description(feat, dr, vi)
     mr_description += "\n\n---\n\n"
-    mr_description += "## Ghost MR â€” NECRO Revival Scaffold\n\n"
+    mr_description += "## Ghost MR — NECRO Revival Scaffold\n\n"
     mr_description += f"This Draft MR was auto-created by **NECRO** to scaffold the revival of `{feat['name']}`.\n\n"
     mr_description += f"The `NECRO_REVIVAL.md` file on this branch contains a step-by-step revival checklist.\n"
     mr_description += f"**To revive this feature:** review the plan, write the code, remove the `Draft:` prefix, and merge.\n\n"
-    mr_description += "_MCP tools used: `list_commits`, `get_commit`, `get_commit_diff`, `list_pipelines`, `search_users`, `create_branch`, `create_file`, `create_merge_request` â€” full forensic + write pipeline via GitLab MCP_\n\n"
+    mr_description += "_MCP tools used: `list_commits`, `get_commit`, `get_commit_diff`, `list_pipelines`, `search_users`, `create_branch`, `create_file`, `create_merge_request` — full forensic + write pipeline via GitLab MCP_\n\n"
     mr_description += "---\n\n"
     mr_description += "@duo_code_review please review this revival scaffold and assess whether the implementation approach in `NECRO_REVIVAL.md` is sound."
 
@@ -268,7 +268,7 @@ def _build_ghost_mr_plan(feat: dict, project_path: str) -> str:
         obj = challenger.get("strongest_objection", "")
         step = challenger.get("recommended_first_step", "")
         challenger_note = f"""
-## Adversarial Review (Challenger Agent â€” Vertex AI Gemini 3)
+## Adversarial Review (Challenger Agent — Vertex AI Gemini 3)
 
 > **Verdict:** {verdict.upper()} (Score: {score}/10)
 > **Key objection:** {obj}
@@ -277,7 +277,7 @@ def _build_ghost_mr_plan(feat: dict, project_path: str) -> str:
 
     return f"""# NECRO Revival Plan: {feat["name"]}
 
-> Auto-generated by **NECRO â€” The Code Necromancer**
+> Auto-generated by **NECRO — The Code Necromancer**
 > Google Cloud Agent Builder + Gemini 3 Flash + GitLab MCP
 
 ---
@@ -373,7 +373,7 @@ def _build_description(feat: dict, dr: dict, vi: dict) -> str:
     risks_block = "\n".join(f"- {r}" for r in risks) if risks else "- None identified"
     roi = feat.get("roi", {})
 
-    return f"""## Feature Revival Candidate â€” identified by NECRO
+    return f"""## Feature Revival Candidate — identified by NECRO
 
 **Feature:** {feat['name']}
 **Originally disabled:** {feat.get('kill_date', 'unknown')}{sha_ref}{mr_ref}{issue_ref}
@@ -423,7 +423,7 @@ def _build_description(feat: dict, dr: dict, vi: dict) -> str:
 
 ---
 
-*This issue was created by **NECRO â€” The Code Necromancer** agent.*
+*This issue was created by **NECRO — The Code Necromancer** agent.*
 *GitLab MCP tools used: list_commits, get_commit, get_commit_diff, list_issues, list_merge_requests, list_merge_request_notes, list_pipelines, search_users, create_issue*
 *All claims are cited from repository history. ROI estimates are rough signal-based projections, not revenue forecasts.*
 """
