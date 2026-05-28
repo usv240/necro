@@ -6,6 +6,7 @@ const INITIAL_SIMULATED_MESSAGES = [
   { t: 'NECRO Forensic Laboratory active // ADK orchestrator online', type: 'info' },
   { t: 'Google Cloud Gemini 3 Flash connection: STABLE · ping 45ms', type: 'gemini' },
   { t: 'Vertex AI Gemini 3 Flash Adversarial agent: ACTIVE · monitoring target range', type: 'gemini' },
+  { t: 'Google Search grounding: ACTIVE · constraint verification enabled · live URL evidence', type: 'gemini' },
   { t: 'MongoDB Atlas vector database clusters: SYNCED · 1,827 records mapped', type: 'mcp' },
   { t: 'GitLab Official MCP Server (SSE): CONNECTED · 10 tools active', type: 'mcp' },
   { t: '@zereight/mcp-gitlab (stdio): CONNECTED · 9 tools active · 19 total', type: 'mcp' },
@@ -199,6 +200,7 @@ function renderActiveIntegrations(h) {
     <span class="tech-tag-status active" title="Model: ${geminiName}">${geminiName}</span>
     <span class="tech-tag-status active" title="Model: ${vertexName}">Vertex AI (Adversarial)</span>
     <span class="tech-tag-status ${agentStatus}" title="ADK Agent status">${h.adk_agent === 'initialized' ? 'Agent Builder Active' : 'Agent Builder Initializing'}</span>
+    <span class="tech-tag-status active" title="ADK agent calls Google Search to verify constraint-resolution claims live — every 'what changed' has a cited URL">Google Search Grounding</span>
     <span class="tech-tag-status ${mcpStatus}" title="GitLab Official MCP Server (SSE) + @zereight/mcp-gitlab (stdio) · ${h.mcp_tool_count} tools total">GitLab MCP (official SSE + stdio) · ${h.mcp_tool_count} tools</span>
     <span class="tech-tag-status ${mcpStatus}" title="NECRO exposes itself as MCP server at /mcp — consumable by GitLab Duo agents">NECRO → MCP Server (/mcp)</span>
     <span class="tech-tag-status ${mongoStatus}" title="MongoDB Atlas DB connection">MongoDB Atlas (${h.features_in_db} features)</span>
@@ -365,6 +367,8 @@ async function loadDemoData(projectPath) {
     '[MCP] list_commits · list_issues · list_merge_requests · get_commit',
     'Detection complete — 5 dead features found',
     'Gemini 3 Flash — analyzing kill reasons and revival viability...',
+    '[SEARCH] Google Search — verifying constraint resolution: "webpack CSS Modules support"',
+    '[SEARCH] Google Search — constraint resolved Oct 2020 · webpack 5 release · evidence URL cited',
     '[ADK] Google Cloud Agent Builder — strategic synthesis complete',
     'SCAN COMPLETE — 2 features ready to revive',
   ];
@@ -398,6 +402,7 @@ function showTerminal() {
 function addTerminalLine(terminal, msg, cls) {
   if (!cls) {
     if (msg.startsWith('[MCP]')) cls = 'mcp';
+    else if (msg.startsWith('[SEARCH]') || msg.startsWith('Google Search')) cls = 'search';
     else if (msg.startsWith('Gemini') || msg.startsWith('[ADK]') || msg.startsWith('Google Cloud Agent Builder')) cls = 'gemini';
     else if (msg.startsWith('REVIVE') || msg.startsWith('REVIVE NOW')) cls = 'revive';
     else if (msg.startsWith('INVESTIGATE')) cls = 'investigate';

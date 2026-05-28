@@ -1748,6 +1748,7 @@ body {
 }
 .terminal-line.mcp { color: var(--neon-cyan); }
 .terminal-line.gemini { color: #c084fc; }
+.terminal-line.search { color: #34d399; } /* Google Search grounding — emerald green */
 .terminal-line.revive { color: var(--green); }
 .terminal-line.investigate { color: var(--amber); }
 .terminal-line.buried { color: var(--text-muted); }
@@ -2390,6 +2391,7 @@ body {
 
 [data-theme="light"] .terminal-line.mcp { color: #0891b2; }
 [data-theme="light"] .terminal-line.gemini { color: #8b5cf6; }
+[data-theme="light"] .terminal-line.search { color: #059669; }
 [data-theme="light"] .terminal-line.revive { color: #059669; }
 [data-theme="light"] .terminal-line.investigate { color: #d97706; }
 [data-theme="light"] .terminal-line.buried { color: #64748b; }
