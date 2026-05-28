@@ -31,7 +31,9 @@ stages:
   - deploy
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. TEST — pytest (runs on every push, no credentials needed)
+# 1. TEST — pytest unit tests (runs on every push, no credentials needed)
+#    Integration tests skip gracefully when no server is available.
+#    Pure-Python unit tests (marked @pytest.mark.unit) always run.
 # ─────────────────────────────────────────────────────────────────────────────
 run-tests:
   stage: test
@@ -39,7 +41,7 @@ run-tests:
   before_script:
     - pip install --no-cache-dir -r requirements.txt
   script:
-    - pytest tests/test_necro.py -q --tb=short
+    - pytest tests/test_necro.py -q --tb=short --junitxml=test-results.xml
   artifacts:
     reports:
       junit: test-results.xml

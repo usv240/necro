@@ -26,10 +26,11 @@ CLIENT_TIMEOUT = 30.0
 LONG_TIMEOUT = 180.0  # for /api/scan/quick which is synchronous
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def wait_for_server():
     """Wait for the backend to be fully ready before running any tests.
-    Skips gracefully when no server is available (e.g. CI without credentials)."""
+    Skips gracefully when no server is available (e.g. CI without credentials).
+    Not autouse — unit-marked tests never request this fixture, so they run freely."""
     import time
     deadline = time.time() + 10
     while time.time() < deadline:
@@ -1039,10 +1040,12 @@ class TestReportExtendedEndpoints:
 # ─────────────────────────────────────────────────────────────────────────────
 # 21. Gemini service unit tests (no server needed — pure Python)
 # ─────────────────────────────────────────────────────────────────────────────
+@pytest.mark.unit
 class TestGeminiService:
     """
     Unit tests for the Gemini client helpers — no live API calls, no server.
     Tests the JSON extraction and parsing robustness used in all agent pipelines.
+    Runs in CI without a live backend (marked @pytest.mark.unit).
     """
 
     def test_extract_json_robust_simple_object(self):
@@ -1097,10 +1100,12 @@ class TestGeminiService:
 # ─────────────────────────────────────────────────────────────────────────────
 # 22. Challenger agent unit tests (no server needed)
 # ─────────────────────────────────────────────────────────────────────────────
+@pytest.mark.unit
 class TestChallengerService:
     """
     Unit tests for challenger.py — the adversarial Gemini agent that stress-tests
     viability assessments. Tests the prompt building and result merging logic.
+    Runs in CI without a live backend (marked @pytest.mark.unit).
     """
 
     def test_challenger_module_importable(self):

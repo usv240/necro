@@ -24,7 +24,7 @@ from pathlib import Path
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk.tools import FunctionTool
+from google.adk.tools import FunctionTool, google_search
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +287,7 @@ def _build_agent() -> Agent:
         FunctionTool(_scan_repository_tool),
         FunctionTool(_save_report_tool),
         FunctionTool(_create_revival_issue_tool),
+        google_search,  # Google Search grounding — verifies constraint resolution claims live
     ]
 
     # Primary: GitLab's official MCP server (SSE transport — authoritative)
@@ -332,5 +333,5 @@ def get_runner() -> Runner:
             app_name="necro",
             session_service=InMemorySessionService(),
         )
-        logger.info("[OK] NECRO ADK agent initialized (model: gemini-3-flash-preview, MCP: official SSE + @zereight stdio)")
+        logger.info("[OK] NECRO ADK agent initialized (model: gemini-3-flash-preview, tools: google_search + 3 FunctionTools + MCP official SSE + @zereight stdio)")
     return _runner
