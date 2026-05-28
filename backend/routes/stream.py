@@ -283,12 +283,20 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         await emit("Challenger Agent complete — independent adversarial review done")
 
     # â”€â”€ Phase 2: ADK Synthesis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Demand reconciliation: open-issue demand adjusts the final recommendation.
+    # Runs AFTER the challenger so demand-promoted candidates stick.
+    for _feat_dict in saved_features:
+        _demand_note = _apply_demand_signal(_feat_dict)
+        if _demand_note:
+            await emit(_demand_note)
+
     await emit("[ADK] Google Cloud Agent Builder — synthesizing all findings...")
     adk_synthesis = await _run_adk_synthesis(emit, project_path, saved_features)
 
     if adk_synthesis.get("status") == "success":
         await emit("[ADK] âœ“ Agent Builder synthesis complete — executive summary ready")
         orchestrated_by = "google_cloud_agent_builder_adk"
+        await _apply_synthesis_verdicts(saved_features, adk_synthesis, emit)
     else:
         await emit(f"[ADK] Agent Builder synthesis complete — {adk_synthesis.get('reason', 'direct analysis pipeline')}")
         orchestrated_by = "direct_pipeline_with_adk_synthesis_attempted"
@@ -432,6 +440,99 @@ Return ONLY a JSON object (no markdown, no explanation outside the JSON):
     return default_max_commits, default_lookback
 
 
+# Kill reasons that are permanent by design — demand can surface them for review
+# but should never auto-promote them straight to revive_now.
+_PERMANENT_KILL_REASONS = {"security", "regulatory", "strategic_pivot"}
+
+
+def _apply_demand_signal(feat_dict: dict) -> str | None:
+    """Open-issue demand adjusts the final recommendation.
+
+    A removed feature that users are actively requesting (open issues) is the
+    strongest revival signal there is. Returns a human-readable note if the
+    recommendation changed, else None.
+      - permanent kills (security/regulatory/strategic): demand can lift
+        keep_buried -> investigate_further, never to revive_now.
+      - other kills: >=2 requesting issues AND feasibility >=7 -> revive_now;
+        otherwise lift keep_buried -> investigate_further.
+    """
+    demand = feat_dict.get("open_issue_matches", [])
+    if not demand:
+        return None
+    vi = feat_dict.setdefault("viability", {})
+    dr = feat_dict.get("death_reason", {})
+    rec = vi.get("recommendation", "")
+    try:
+        feas = int(vi.get("revival_feasibility", 0) or 0)
+    except (TypeError, ValueError):
+        feas = 0
+    category = (dr.get("category") or "").lower()
+    n = len(demand)
+    name = feat_dict.get("name", "feature")
+    permanent = category in _PERMANENT_KILL_REASONS
+
+    # Specificity guard: single-word feature names ("timeout") match issues loosely and
+    # over-count demand. Only multi-token names (>=2 significant tokens) are specific
+    # enough to trust demand for a revive_now promotion; generic names get the safe lift only.
+    specific = len([w for w in re.split(r"[\s_\-/]+", name) if len(w) > 3]) >= 2
+
+    if not permanent and specific and n >= 2 and feas >= 7 and rec in ("investigate_further", "keep_buried"):
+        vi["recommendation"] = "revive_now"
+        vi["reasoning"] = (vi.get("reasoning", "") or "") + (
+            f" Promoted to revive_now: {n} open issues are actively requesting this feature "
+            f"(feasibility {feas}/10). Live user demand is direct evidence the feature still has value."
+        )
+        feat_dict["demand_promoted"] = True
+        return f"Demand override: '{name}' -> REVIVE NOW ({n} open issues requesting it, feasibility {feas}/10)"
+
+    if rec == "keep_buried" and feas >= 4:
+        vi["recommendation"] = "investigate_further"
+        vi["reasoning"] = (vi.get("reasoning", "") or "") + (
+            f" Lifted from keep_buried: {n} open issue(s) are requesting this feature -- "
+            "active demand means it warrants investigation, not burial."
+        )
+        feat_dict["demand_promoted"] = True
+        return f"Demand override: '{name}' -> INVESTIGATE ({n} open issues requesting it)"
+
+    return None
+
+
+async def _apply_synthesis_verdicts(saved_features: list[dict], synthesis: dict, emit) -> None:
+    """Phase 2 evidence loop: when ADK google_search verified (with a real URL) that a
+    feature's original constraint is resolved, upgrade that feature's recommendation.
+    UPGRADE-only — never silently buries what Phase 1 + demand already surfaced."""
+    verdicts = synthesis.get("feature_verdicts") if isinstance(synthesis, dict) else None
+    if not isinstance(verdicts, list):
+        return
+    by_name = {f.get("name", ""): f for f in saved_features}
+    rank = {"keep_buried": 0, "investigate_further": 1, "revive_now": 2}
+    for v in verdicts:
+        if not isinstance(v, dict):
+            continue
+        feat = by_name.get(v.get("feature", ""))
+        if not feat:
+            continue
+        resolved = (v.get("constraint_resolved") or "").lower()
+        new_rec = (v.get("recommendation") or "").lower()
+        evidence_url = v.get("evidence_url") or ""
+        if new_rec not in rank:
+            continue
+        cur = feat.get("viability", {}).get("recommendation", "")
+        if resolved == "yes" and evidence_url.startswith("http") and rank[new_rec] > rank.get(cur, 0):
+            vi = feat.setdefault("viability", {})
+            vi["recommendation"] = new_rec
+            vi["what_changed"] = "ADK google_search verified the original constraint is resolved."
+            vi["evidence_url"] = evidence_url
+            grounding = vi.setdefault("grounding", {})
+            grounding["grounded"] = True
+            grounding["evidence_url"] = evidence_url
+            feat["synthesis_upgraded"] = True
+            await emit(
+                f"[ADK] Evidence upgrade: '{v.get('feature')}' -> "
+                f"{new_rec.upper().replace('_', ' ')} (google_search confirmed constraint resolved)"
+            )
+
+
 async def _find_demand_signals(
     feature_name: str, all_open_issues: list[dict], project_path: str
 ) -> list[dict]:
@@ -504,7 +605,7 @@ async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]
 
         # Build targeted search queries for revive_now features to guide google_search calls
         revive_search_targets = []
-        for _sf in revive_now[:3]:
+        for _sf in (revive_now + investigate)[:4]:
             _sdr = _sf.get("death_reason", {})
             _sreason = _sdr.get("primary_reason", "")[:80]
             _stech = _sf.get("viability", {}).get("grounding", {}).get("technology", "")
@@ -548,7 +649,8 @@ async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]
             + "2. Identify the TOP 3 highest-priority revival candidates with specific reasoning" + chr(10)
             + "3. Flag inconsistencies where challenger downgraded a revive_now recommendation" + chr(10)
             + "4. Identify the dominant graveyard pattern" + chr(10)
-            + "5. Write a 3-sentence executive action plan" + chr(10) + chr(10)
+            + "5. Write a 3-sentence executive action plan" + chr(10)
+            + "6. For EVERY finding, output a feature_verdicts entry: based on your google_search, state whether the original constraint is RESOLVED (constraint_resolved: yes/no/unverified). Say yes ONLY with a real evidence URL showing the fix/release. If resolved, set recommendation to revive_now; if the kill reason clearly still applies, keep_buried; otherwise investigate_further." + chr(10) + chr(10)
             + 'Return a JSON object:' + chr(10)
             + '{' + chr(10)
             + '  "status": "success",' + chr(10)
@@ -560,7 +662,10 @@ async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]
             + '  "graveyard_pattern": "1-2 sentence pattern observed",' + chr(10)
             + '  "executive_summary": "3-sentence action plan for engineering lead",' + chr(10)
             + '  "challenger_disagreements": ["features where challenger downgraded vs primary"],' + chr(10)
-            + '  "verification_quality": "high/medium/low"' + chr(10)
+            + '  "verification_quality": "high/medium/low",' + chr(10)
+            + '  "feature_verdicts": [' + chr(10)
+            + '    {"feature": "exact name from findings above", "constraint_resolved": "yes|no|unverified", "evidence_url": "real URL proving resolution, else empty", "recommendation": "revive_now|investigate_further|keep_buried"}' + chr(10)
+            + '  ]' + chr(10)
             + '}'
         )
 
