@@ -44,6 +44,7 @@ def _get_vertex_client() -> genai.Client | None:
 async def generate_text(prompt: str, thinking_budget: int = 0) -> str:
     """Generate text using Gemini 3 Flash, falling back to Vertex AI on error."""
     config = types.GenerateContentConfig(
+        temperature=0.0,  # deterministic scoring — same input must produce same output
         thinking_config=types.ThinkingConfig(thinking_budget=thinking_budget)
         if thinking_budget > 0 else None,
     )
@@ -67,6 +68,7 @@ async def generate_text(prompt: str, thinking_budget: int = 0) -> str:
             resp = await vertex.aio.models.generate_content(
                 model=_FALLBACK_MODEL,
                 contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.0),
             )
             return resp.text or ""
     except Exception as fallback_err:
@@ -173,6 +175,7 @@ async def generate_json_adversarial(prompt: str) -> dict | None:
             resp = await vertex.aio.models.generate_content(
                 model=_FALLBACK_MODEL,
                 contents=full_prompt,
+                config=types.GenerateContentConfig(temperature=0.0),
             )
             text = resp.text or ""
             text = re.sub(r"```(?:json)?\s*", "", text).strip().strip("`").strip()
