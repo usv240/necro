@@ -168,6 +168,8 @@ def _feature_to_dict(feat) -> dict:
         "kill_commit_message": feat.kill_commit_message,
         "kill_date": feat.kill_date,
         "detection_method": feat.detection_method,
+        "detection_confidence": getattr(feat, "detection_confidence", 0),
+        "detection_signals": getattr(feat, "detection_signals", []),
         "linked_mr_iid": feat.linked_mr_iid,
         "linked_issue_iids": feat.linked_issue_iids,
         "context_snippets": feat.context_snippets,

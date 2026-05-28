@@ -13,6 +13,7 @@ from backend.services.gemini import generate_json
 logger = logging.getLogger(__name__)
 
 REASON_CATEGORIES = [
+    "feature_flag",         # Explicitly behind a feature flag that was disabled/removed
     "api_limitation",       # External API didn't support it
     "infrastructure",       # DB, server, queue couldn't handle it
     "performance",          # Too slow, too expensive to run
@@ -35,11 +36,13 @@ async def extract_death_reason(feature) -> dict:
     if not feature.context_snippets and not feature.kill_commit_message:
         return _unknown_reason()
 
-    context = "\n\n".join([
-        f"Kill commit message: {feature.kill_commit_message}",
-        f"Kill date: {feature.kill_date}",
-        *feature.context_snippets,
-    ])
+    # Safely coerce all snippets to strings and filter out empty/None values
+    safe_snippets = [str(s) for s in (feature.context_snippets or []) if s]
+    context = "\n\n".join(filter(None, [
+        f"Kill commit message: {feature.kill_commit_message or '(none)'}",
+        f"Kill date: {feature.kill_date or 'unknown'}",
+        *safe_snippets,
+    ]))
 
     prompt = f"""A software feature called "{feature.name}" was deliberately disabled in a GitLab repository.
 
@@ -61,9 +64,13 @@ Be precise and cite only what the evidence actually says. Do not speculate beyon
 
     result = await generate_json(prompt)
     if result and "primary_reason" in result:
+        # Normalise category — reject anything Gemini invented that isn't in our list
+        if result.get("category") not in REASON_CATEGORIES:
+            result["category"] = "unknown"
         logger.info("Death reason extracted: %s (%s)", result.get("category"), result.get("confidence"))
         return result
 
+    logger.warning("Death reason extraction failed for '%s' — using fallback", feature.name)
     return _unknown_reason()
 
 

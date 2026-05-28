@@ -446,6 +446,7 @@ function renderReport(data) {
   const features = data.features || [];
   currentFeatures = features;
   _reportMeta = data;
+  _allFeaturesCache = null; // invalidate timeline cache so next visit shows fresh data
 
   // Stats
   const reviveCt = features.filter(f => _rec(f) === 'revive_now').length;
@@ -874,6 +875,43 @@ function buildFeatureCard(feat, isDemo) {
         </div>
       ` : ''}
 
+      <!-- Detection provenance — how NECRO found this feature (live scans only) -->
+      ${(() => {
+        const method = feat.detection_method || '';
+        if (!method) return '';
+        const signals = feat.detection_signals || [];
+        const conf = feat.detection_confidence || 0;
+        const methodLabel = {
+          feature_flag_removal:      '🚩 Feature flag removal',
+          revert_commit:             '↩ Revert commit',
+          commit_message_keyword:    '🔍 Commit keyword match',
+          shelved_issue:             '📋 Shelved issue',
+          gitlab_feature_flags_api:  '🚩 GitLab Feature Flags API',
+        }[method] || method.replace(/_/g, ' ');
+        const posSignals = signals.filter(s => !s.startsWith('⚠'));
+        const negSignals = signals.filter(s => s.startsWith('⚠'));
+        // Only show confidence dots when we have actual signal data (live scans)
+        const showConf = conf > 0 && signals.length > 0;
+        const confDots = showConf
+          ? ('●'.repeat(Math.min(conf, 5)) + '○'.repeat(Math.max(0, 5 - conf)))
+          : '';
+        const confColor = conf >= 4 ? 'var(--green)' : conf >= 2 ? 'var(--amber)' : 'var(--text-muted)';
+        return `
+          <div class="section-label">Detection provenance</div>
+          <div class="detection-provenance">
+            <div class="dp-method">
+              <span class="dp-method-label">${esc(methodLabel)}</span>
+              ${showConf ? `<span class="dp-conf" style="color:${confColor}" title="Detection confidence: ${conf}/5 — ${posSignals.join(', ')}">${confDots}</span>` : ''}
+            </div>
+            ${posSignals.length ? `
+              <div class="dp-signals">
+                ${posSignals.map(s => `<span class="dp-signal dp-signal-pos">${esc(s)}</span>`).join('')}
+                ${negSignals.map(s => `<span class="dp-signal dp-signal-neg">${esc(s)}</span>`).join('')}
+              </div>` : ''}
+          </div>
+        `;
+      })()}
+
       ${feat.context_snippets && feat.context_snippets.length ? `
         <div class="section-label">Evidence (cited from repo history)</div>
         <ul class="snippets-list">
@@ -1231,58 +1269,146 @@ function exportReportJson() {
 // ── Charts (Timeline tab) ─────────────────────────────────────────────────────
 let chartsDrawn = false;
 let _charts = {};
+let _allFeaturesCache = null;
 
-function renderCharts() {
-  if (!currentFeatures.length) return;
-  if (_charts.timeline) { Object.values(_charts).forEach(c => c.destroy()); _charts = {}; chartsDrawn = false; }
+async function renderCharts() {
+  // Destroy existing charts so we can redraw cleanly
+  if (Object.keys(_charts).length) {
+    Object.values(_charts).forEach(c => { try { c.destroy(); } catch(_) {} });
+    _charts = {};
+  }
+  chartsDrawn = false;
+
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)';
   const textColor = isDark ? '#888898' : '#6b6b8a';
 
-  // Timeline chart — kills by month
-  const sortedFeats = [...currentFeatures].sort((a, b) => {
-    const da = a.kill_date ? new Date(a.kill_date).getTime() : 0;
-    const db = b.kill_date ? new Date(b.kill_date).getTime() : 0;
-    return da - db;
-  });
+  // ── Fetch all features from MongoDB (not just current scan) ─────────────────
+  let allFeatures = _allFeaturesCache;
+  if (!allFeatures) {
+    try {
+      const r = await fetch('/api/report/all-features?limit=200');
+      if (r.ok) {
+        const d = await r.json();
+        allFeatures = d.features || [];
+        _allFeaturesCache = allFeatures;
+      }
+    } catch (_) {}
+  }
+  // Fallback to current scan features if API unavailable
+  if (!allFeatures || !allFeatures.length) allFeatures = currentFeatures;
+  if (!allFeatures.length) return;
 
+  // ── Update insight cards ────────────────────────────────────────────────────
+  const recCounts = { revive_now: 0, investigate_further: 0, keep_buried: 0 };
+  let feasSum = 0, feasCount = 0;
+  for (const f of allFeatures) {
+    const r = _rec(f);
+    if (r in recCounts) recCounts[r]++;
+    const feas = (f.viability || {}).revival_feasibility;
+    if (typeof feas === 'number') { feasSum += feas; feasCount++; }
+  }
+  const avgFeas = feasCount ? (feasSum / feasCount).toFixed(1) : '—';
+  const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setEl('tlReviveCount',    recCounts.revive_now);
+  setEl('tlInvestCount',    recCounts.investigate_further);
+  setEl('tlBuriedCount',    recCounts.keep_buried);
+  setEl('tlAvgFeasibility', avgFeas);
+  setEl('tlTotalFeats',     allFeatures.length);
+  const srcEl = document.getElementById('tlDataSource');
+  if (srcEl) srcEl.textContent = `Showing ${allFeatures.length} features across all scans in MongoDB Atlas`;
+
+  // ── Chart 1: Kill Timeline ─────────────────────────────────────────────────
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const monthCounts = {};
-  for (const feat of sortedFeats) {
-    const rawDate = feat.kill_date || '';
-    let displayMonth = 'Unknown';
-    if (rawDate) {
-      const parsed = new Date(rawDate);
+  for (const feat of allFeatures) {
+    const raw = feat.kill_date || '';
+    let label = 'Unknown';
+    if (raw) {
+      const parsed = new Date(raw);
       if (!isNaN(parsed.getTime())) {
-        const monthsNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        displayMonth = `${monthsNames[parsed.getMonth()]} '${String(parsed.getFullYear()).slice(-2)}`;
+        label = `${MONTHS[parsed.getMonth()]} '${String(parsed.getFullYear()).slice(-2)}`;
       } else {
-        displayMonth = rawDate.slice(0, 7);
+        // "April 17, 2026" format — already has month name
+        const m = raw.match(/^([A-Za-z]+)/);
+        if (m) label = `${m[1].slice(0,3)} '${raw.slice(-2)}`;
+        else label = raw.slice(0, 7);
       }
     }
-    monthCounts[displayMonth] = (monthCounts[displayMonth] || 0) + 1;
+    monthCounts[label] = (monthCounts[label] || 0) + 1;
   }
-  const months = Object.keys(monthCounts);
-  const counts = months.map(m => monthCounts[m]);
+  // Sort chronologically
+  const sortedMonths = Object.keys(monthCounts).filter(m => m !== 'Unknown').sort((a, b) => {
+    const parse = s => { const [mo, yr] = s.split(" '"); return parseInt('20'+yr)*12 + MONTHS.indexOf(mo); };
+    return parse(a) - parse(b);
+  });
+  if (monthCounts['Unknown']) sortedMonths.push('Unknown');
+  const tlCounts = sortedMonths.map(m => monthCounts[m]);
+  // Color bars by recency: most recent = purple, older = lighter
+  const tlColors = sortedMonths.map((_, i) => {
+    const t = i / Math.max(sortedMonths.length - 1, 1);
+    return `rgba(124,58,237,${0.3 + t * 0.65})`;
+  });
 
   _charts.timeline = new Chart(document.getElementById('timelineChart'), {
     type: 'bar',
     data: {
-      labels: months,
-      datasets: [{ label: 'Features killed', data: counts, backgroundColor: 'rgba(124,58,237,0.6)', borderColor: 'rgba(124,58,237,1)', borderWidth: 1 }]
+      labels: sortedMonths,
+      datasets: [{
+        label: 'Features killed',
+        data: tlCounts,
+        backgroundColor: tlColors,
+        borderColor: 'rgba(124,58,237,0.9)',
+        borderWidth: 1,
+        borderRadius: 3,
+      }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `${ctx.raw} feature${ctx.raw !== 1 ? 's' : ''} killed` } },
+      },
       scales: {
-        x: { ticks: { color: textColor, maxRotation: 45 }, grid: { color: gridColor } },
-        y: { ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } },
+        x: { ticks: { color: textColor, maxRotation: 45, font: { size: 10 } }, grid: { color: gridColor } },
+        y: { ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor }, beginAtZero: true },
       }
     }
   });
 
-  // Feasibility distribution
+  // ── Chart 2: Recommendation Breakdown (pie) ────────────────────────────────
+  _charts.recommendation = new Chart(document.getElementById('recommendationChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Revive Now', 'Investigate', 'Keep Buried'],
+      datasets: [{
+        data: [recCounts.revive_now, recCounts.investigate_further, recCounts.keep_buried],
+        backgroundColor: ['#10b981', '#f59e0b', '#6b7280'],
+        borderWidth: 3,
+        borderColor: isDark ? '#12121a' : '#ffffff',
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '62%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: textColor, boxWidth: 11, padding: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const pct = allFeatures.length ? Math.round(ctx.raw / allFeatures.length * 100) : 0;
+              return `${ctx.label}: ${ctx.raw} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // ── Chart 3: Feasibility Distribution (doughnut) ──────────────────────────
   const bins = [0, 0, 0, 0, 0]; // 0-2, 3-4, 5-6, 7-8, 9-10
-  for (const feat of currentFeatures) {
+  for (const feat of allFeatures) {
     const f = (feat.viability || {}).revival_feasibility || 0;
     if (f <= 2) bins[0]++;
     else if (f <= 4) bins[1]++;
@@ -1290,64 +1416,78 @@ function renderCharts() {
     else if (f <= 8) bins[3]++;
     else bins[4]++;
   }
-
   _charts.feasibility = new Chart(document.getElementById('feasibilityChart'), {
     type: 'doughnut',
     data: {
       labels: ['0–2 (Low)', '3–4', '5–6', '7–8', '9–10 (High)'],
-      datasets: [{ data: bins, backgroundColor: ['#6b7280','#ef4444','#f59e0b','#3b82f6','#10b981'], borderWidth: 2, borderColor: isDark ? '#12121a' : '#fff' }]
+      datasets: [{ data: bins, backgroundColor: ['#6b7280','#ef4444','#f59e0b','#3b82f6','#10b981'], borderWidth: 3, borderColor: isDark ? '#12121a' : '#fff', hoverOffset: 6 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: textColor, boxWidth: 12 } } }
+      cutout: '62%',
+      plugins: { legend: { position: 'bottom', labels: { color: textColor, boxWidth: 11, padding: 10, font: { size: 11 } } } }
     }
   });
 
-  // Kill reason categories
+  // ── Chart 4: Kill Reason Categories (horizontal bar) ─────────────────────
   const catCounts = {};
-  for (const feat of currentFeatures) {
+  for (const feat of allFeatures) {
     const c = (feat.death_reason || {}).category || 'unknown';
     catCounts[c] = (catCounts[c] || 0) + 1;
   }
-  const cats = Object.keys(catCounts);
-  const catColors = ['#7c3aed','#ef4444','#f59e0b','#10b981','#3b82f6','#ec4899','#14b8a6'];
+  // Sort by count descending
+  const cats = Object.keys(catCounts).sort((a, b) => catCounts[b] - catCounts[a]);
+  const catPalette = ['#7c3aed','#10b981','#f59e0b','#3b82f6','#ef4444','#ec4899','#14b8a6','#8b5cf6'];
 
   _charts.category = new Chart(document.getElementById('categoryChart'), {
     type: 'bar',
     data: {
       labels: cats.map(c => c.replace(/_/g,' ')),
-      datasets: [{ label: 'Features', data: cats.map(c => catCounts[c]), backgroundColor: catColors, borderWidth: 0 }]
+      datasets: [{
+        label: 'Features',
+        data: cats.map(c => catCounts[c]),
+        backgroundColor: cats.map((_, i) => catPalette[i % catPalette.length]),
+        borderWidth: 0,
+        borderRadius: 3,
+      }]
     },
     options: {
       indexAxis: 'y',
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `${ctx.raw} feature${ctx.raw !== 1 ? 's' : ''}` } },
+      },
       scales: {
-        x: { ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } },
-        y: { ticks: { color: textColor } },
+        x: { ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor }, beginAtZero: true },
+        y: { ticks: { color: textColor, font: { size: 11 } }, grid: { display: false } },
       }
     }
   });
 
-  // Cost-Benefit Scatter — effort (x) vs feasibility (y), bubble size = demand
+  // ── Chart 5: Cost-Benefit Scatter ─────────────────────────────────────────
   const effortOrder = { days: 1, 'days-weeks': 2, weeks: 3, 'weeks-months': 4, months: 5, 'months-quarters': 6, quarters: 7 };
   const effortLabels = { 1: 'days', 2: 'days-wks', 3: 'weeks', 4: 'wks-mo', 5: 'months', 6: 'mo-qtr', 7: 'quarters' };
 
-  const scatterData = currentFeatures.map(f => {
+  const scatterData = allFeatures.map(f => {
     const vi = f.viability || {};
     const roi = f.roi || {};
     const rec = _rec(f);
     const xVal = effortOrder[vi.effort_category] || 3;
     const yVal = vi.revival_feasibility || 0;
     const demand = roi.request_count || 0;
-    return { x: xVal + (Math.random() * 0.4 - 0.2), y: yVal + (Math.random() * 0.3 - 0.15),
-             r: Math.max(5, Math.min(22, demand * 2.5 + 6)), label: f.name, rec };
+    return {
+      x: xVal + (Math.random() * 0.5 - 0.25),
+      y: yVal + (Math.random() * 0.4 - 0.2),
+      r: Math.max(5, Math.min(20, demand * 3 + 5)),
+      label: f.name, rec,
+    };
   });
 
   const pointColors = scatterData.map(d =>
-    d.rec === 'revive_now'        ? 'rgba(16,185,129,0.75)' :
-    d.rec === 'investigate_further' ? 'rgba(245,158,11,0.75)' :
-    'rgba(107,114,128,0.45)'
+    d.rec === 'revive_now'          ? 'rgba(16,185,129,0.78)' :
+    d.rec === 'investigate_further' ? 'rgba(245,158,11,0.78)' :
+                                      'rgba(107,114,128,0.4)'
   );
 
   _charts.scatter = new Chart(document.getElementById('scatterChart'), {
@@ -1357,7 +1497,7 @@ function renderCharts() {
         label: 'Features',
         data: scatterData,
         backgroundColor: pointColors,
-        borderColor: pointColors.map(c => c.replace('0.75', '1').replace('0.45', '0.7')),
+        borderColor: pointColors.map(c => c.replace(/[\d.]+\)$/, '1)')),
         borderWidth: 1.5,
       }]
     },
@@ -1369,26 +1509,28 @@ function renderCharts() {
           callbacks: {
             label: ctx => {
               const d = ctx.raw;
-              const el = effortLabels[Math.round(d.x)] || d.x;
-              return `${d.label}  ·  effort: ${el}  ·  feasibility: ${Math.round(d.y)}/10`;
+              const el = effortLabels[Math.round(d.x)] || '?';
+              return [`📦 ${d.label}`, `  effort: ${el}  ·  feasibility: ${Math.round(d.y)}/10`];
             }
           }
         }
       },
       scales: {
         x: {
-          title: { display: true, text: 'Revival Effort  ←  less effort', color: textColor, font: { size: 11 } },
-          ticks: { color: textColor, callback: v => effortLabels[Math.round(v)] || '' },
+          title: { display: true, text: 'Revival Effort  (← less effort)', color: textColor, font: { size: 10 } },
+          ticks: { color: textColor, font: { size: 10 }, callback: v => effortLabels[Math.round(v)] || '' },
           min: 0, max: 8, grid: { color: gridColor },
         },
         y: {
-          title: { display: true, text: 'Feasibility  ↑  higher = easier revival', color: textColor, font: { size: 11 } },
-          ticks: { color: textColor, stepSize: 2 },
+          title: { display: true, text: 'Feasibility  (↑ easier to revive)', color: textColor, font: { size: 10 } },
+          ticks: { color: textColor, font: { size: 10 }, stepSize: 2 },
           min: 0, max: 10, grid: { color: gridColor },
         }
       }
     }
   });
+
+  chartsDrawn = true;
 }
 
 // ── Watch list ────────────────────────────────────────────────────────────────
@@ -1437,29 +1579,82 @@ async function loadWatchList() {
     const repos = d.repos || [];
     document.getElementById('tabBadgeWatch').textContent = repos.length;
 
+    const hdr = document.getElementById('watchSectionHeader');
+    const cnt = document.getElementById('watchRepoCount');
+    if (hdr) hdr.style.display = repos.length ? 'flex' : 'none';
+    if (cnt) cnt.textContent = `${repos.length} repo${repos.length !== 1 ? 's' : ''}`;
+
     if (!repos.length) {
-      grid.innerHTML = '<div class="empty-state"><div class="empty-icon">👁</div><p>No repositories in watch list. Add one above.</p></div>';
+      grid.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">👁</div>
+          <p>No repositories monitored yet.<br>Add a GitLab URL above to start autonomous scanning.</p>
+        </div>`;
       return;
     }
 
-    grid.innerHTML = repos.map(repo => `
-      <div class="watch-card">
-        <div class="pulse-dot"></div>
-        <div>
-          <div class="watch-path">${esc(repo.project_path)}</div>
-          <div class="watch-meta">
-            ${repo.label ? esc(repo.label) + ' · ' : ''}
-            Last scanned: ${repo.last_scanned ? new Date(repo.last_scanned).toLocaleDateString() : 'never'}
-            ${repo.revive_now_count > 0 ? ` · <span style="color:var(--revive)">${repo.revive_now_count} revival candidates</span>` : ''}
+    grid.innerHTML = `<div class="watch-repo-grid">${repos.map(repo => {
+      const revive  = repo.revive_now_count   || 0;
+      const invest  = repo.investigate_count  || 0;
+      const total   = repo.total_found        || 0;
+      const lastRaw = repo.last_scanned;
+      const lastScanned = lastRaw
+        ? (() => {
+            const d = new Date(lastRaw);
+            const diff = Date.now() - d.getTime();
+            const h = Math.floor(diff / 3600000);
+            if (h < 1)  return 'just now';
+            if (h < 24) return `${h}h ago`;
+            const days = Math.floor(h / 24);
+            return `${days}d ago · ${d.toLocaleDateString()}`;
+          })()
+        : 'never scanned';
+      const path = esc(repo.project_path);
+      const label = repo.label ? `<span class="watch-label-chip">${esc(repo.label)}</span>` : '';
+      const hasResults = revive > 0 || invest > 0;
+
+      return `
+        <div class="watch-repo-card${revive > 0 ? ' has-revivals' : ''}">
+          <div class="wrc-header">
+            <div class="wrc-dot-wrap"><div class="pulse-dot${revive > 0 ? ' pulse-green' : ''}"></div></div>
+            <div class="wrc-title">
+              <a href="https://gitlab.com/${path}" target="_blank" rel="noopener" class="wrc-path">${path}</a>
+              ${label}
+            </div>
+            <button class="btn btn-xs wrc-remove" onclick="removeWatch('${path}')" title="Stop monitoring">✕</button>
           </div>
-        </div>
-        <button class="btn btn-sm" onclick="removeWatch('${esc(repo.project_path)}')" style="margin-left:auto;color:var(--red)">Remove</button>
-      </div>
-    `).join('');
+
+          ${hasResults ? `
+          <div class="wrc-stats">
+            ${revive > 0 ? `<div class="wrc-stat wrc-stat-revive"><span class="wrc-stat-val">${revive}</span><span class="wrc-stat-lbl">Revive Now</span></div>` : ''}
+            ${invest > 0 ? `<div class="wrc-stat wrc-stat-invest"><span class="wrc-stat-val">${invest}</span><span class="wrc-stat-lbl">Investigate</span></div>` : ''}
+            ${total > 0  ? `<div class="wrc-stat wrc-stat-total"><span class="wrc-stat-val">${total}</span><span class="wrc-stat-lbl">Total found</span></div>` : ''}
+          </div>` : `
+          <div class="wrc-no-results">No revival candidates detected yet</div>`}
+
+          <div class="wrc-footer">
+            <span class="wrc-last-scan">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              ${lastScanned}
+            </span>
+            <div class="wrc-actions">
+              <button class="btn btn-xs" onclick="scanWatchedRepo('${path}')">Scan Now</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('')}</div>`;
   } catch (e) {
     grid.innerHTML = '<div class="empty-state"><p>Could not load watch list.</p></div>';
   }
   loadLiveStats();
+}
+
+async function scanWatchedRepo(projectPath) {
+  // Pre-fill the scanner URL and switch to graveyard tab to run a live scan
+  const urlInput = document.getElementById('repoUrl');
+  if (urlInput) urlInput.value = `https://gitlab.com/${projectPath}`;
+  activateTab('graveyard');
+  toast(`Ready to scan ${projectPath} — click "Run Forensic Archaeology"`, 'info');
 }
 
 async function triggerMonitor() {
@@ -1517,8 +1712,12 @@ async function loadAuditLog() {
               <td>${esc(e.feature_name || e.feature_id)}</td>
               <td><code>${esc(e.project_path)}</code></td>
               <td>
-                ${e.issue_url ? `<a href="${esc(e.issue_url)}" target="_blank" rel="noopener" class="btn btn-sm">
-                  #${e.issue_iid || '?'} ↗</a>` : '—'}
+                ${e.issue_url
+                  ? `<a href="${esc(e.issue_url)}" target="_blank" rel="noopener" class="btn btn-sm" style="display:inline-flex;align-items:center;gap:0.3rem">
+                      ${e.issue_iid ? `#${e.issue_iid}` : 'View'}
+                      <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10L10 2M5 2h5v5"/></svg>
+                    </a>`
+                  : '—'}
               </td>
               <td><code>${esc(e.via || 'gitlab_mcp')}</code></td>
               <td>${e.created_at ? new Date(e.created_at).toLocaleString() : '—'}</td>

@@ -35,10 +35,18 @@ async def score_revival_viability(feature, death_reason: dict, project_path: str
     kill_date = feature.kill_date or "unknown date"
 
     # Ground the constraint in real external API data
-    grounding = await ground_constraint(
-        constraint_text=specific_constraint or primary_reason,
-        kill_date=kill_date,
-    )
+    try:
+        grounding = await ground_constraint(
+            constraint_text=specific_constraint or primary_reason,
+            kill_date=kill_date,
+        )
+    except Exception as exc:
+        logger.warning("Constraint grounding failed for '%s': %s — continuing without evidence", feature.name, exc)
+        grounding = {
+            "grounded": False, "technology": "", "latest_version": "",
+            "evidence_date": "", "evidence_url": "", "description": "",
+            "source": "error", "is_resolved": False,
+        }
 
     # Check GitLab CI health — a broken pipeline signals the codebase is unstable
     ci_health_block = ""
@@ -111,13 +119,20 @@ Return a JSON object with these exact fields:
   "technical_risks": ["list", "of", "specific", "technical", "risks"],
   "recommendation": "revive_now" or "investigate_further" or "keep_buried",
   "reasoning": "2-3 sentence explanation citing the evidence above where available",
-  "confidence": "high" if grounded evidence confirms resolution, "medium" if partial, "low" if no external evidence
+  "confidence": "high" if grounded evidence confirms resolution, "medium" if plausible based on ecosystem knowledge, "low" if truly uncertain
 }}
 
 Recommendation guide:
-- revive_now: feasibility >= 7 AND verified evidence shows constraint is resolved
-- investigate_further: feasibility 4-6 OR constraint is partially resolved OR no external evidence
-- keep_buried: feasibility <= 3 OR constraint clearly still applies
+- revive_now: ANY of these conditions:
+    * feasibility >= 7 AND verified external evidence shows the constraint is resolved
+    * feasibility >= 7 AND category is "feature_flag" — feature flags are designed to be temporary; if the flag was removed without a clear permanent reason, the feature is a prime revival candidate
+    * feasibility >= 8 AND category is technical_debt, workaround, or performance AND medium/high confidence the original constraint no longer applies
+    * feasibility >= 8 AND confidence is "medium" or "high" AND the kill reason is NOT a clear permanent decision (not a security issue, not a strategic pivot, not a hard platform constraint)
+    * feasibility >= 7 AND is_temporary was true AND the temporary reason is clearly no longer relevant
+- investigate_further: feasibility 5-7 AND no strong evidence either way; OR feasibility 4-7 AND constraint may still apply
+- keep_buried: feasibility <= 3 OR the original kill reason clearly still applies today (hard platform limit, unfixed security issue, intentional product direction with no reversal signal)
+
+Use your knowledge of the software ecosystem as of May 2026 to assess whether the constraint has likely resolved, even without verified package data. Technical debt workarounds often become unnecessary as libraries and compilers mature. Be willing to recommend revive_now when the evidence (even circumstantial) strongly points that way.
 
 IMPORTANT: Only cite specific version numbers or dates that appear in the VERIFIED EXTERNAL EVIDENCE block above."""
 
@@ -125,6 +140,54 @@ IMPORTANT: Only cite specific version numbers or dates that appear in the VERIFI
 
     if result and "recommendation" in result:
         result["grounding"] = grounding
+
+        # Post-processing guarantee: feature flags are explicitly temporary by design.
+        # If Gemini assessed feasibility ≥ 7 but didn't say revive_now (e.g. because
+        # no external evidence was found), upgrade it — the flag's existence as a
+        # dead feature is itself the evidence that it should be reconsidered.
+        if (
+            category == "feature_flag"
+            and result.get("revival_feasibility", 0) >= 7
+            and result.get("recommendation") == "investigate_further"
+        ):
+            result["recommendation"] = "revive_now"
+            result["reasoning"] = (
+                result.get("reasoning", "") +
+                " Feature flags are explicitly temporary — the flag itself signals intent to revisit."
+            )
+
+        # Post-processing guarantee: revert commits are also explicitly temporary actions.
+        # Someone deliberately undid a merge for a specific stated reason (e.g. "no consensus yet",
+        # "breaks CI", "needs more review"). If feasibility ≥ 7, the original feature was viable
+        # once and can be viable again — Gemini's boundary-case flip between revive/investigate
+        # should resolve to revive_now for high-feasibility reverts.
+        if (
+            feature.detection_method == "revert_commit"
+            and result.get("revival_feasibility", 0) >= 7
+            and result.get("recommendation") == "investigate_further"
+        ):
+            result["recommendation"] = "revive_now"
+            result["reasoning"] = (
+                result.get("reasoning", "") +
+                " Revert commits are explicitly temporary — the feature was working and reverted for a specific, revisitable reason."
+            )
+
+        # Safety net: if Gemini says keep_buried but feasibility is very high (≥ 8) for a
+        # feature_flag_removal detection, the model likely contradicted itself. A feasibility
+        # of 8-10 means "trivially revivable" which cannot coexist with "keep buried" unless
+        # the kill reason is ironclad. Upgrade to investigate_further so a human can decide.
+        if (
+            feature.detection_method == "feature_flag_removal"
+            and result.get("revival_feasibility", 0) >= 8
+            and result.get("recommendation") == "keep_buried"
+            and result.get("confidence") != "high"
+        ):
+            result["recommendation"] = "investigate_further"
+            result["reasoning"] = (
+                result.get("reasoning", "") +
+                " High feasibility for a feature flag removal — escalated to investigate_further for human review."
+            )
+
         # Downgrade recommendation if CI is currently broken — revival into broken CI is risky
         if ci_broken:
             risks = result.get("technical_risks", [])

@@ -1,4 +1,4 @@
-# Python
+﻿# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -76,3 +76,6 @@ yarn-debug.log*
 .DS_Store
 ehthumbs.db
 Desktop.ini
+
+
+DEPTH.md

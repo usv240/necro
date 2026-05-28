@@ -28,22 +28,37 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-_EMBEDDING_MODEL = "text-embedding-004"
+# Embedding model priority list — first one that works is used.
+# text-embedding-004 requires v1 API (not v1beta); embedding-001 is the legacy v1beta model.
+_EMBEDDING_MODELS = [
+    "embedding-001",         # legacy but always available on v1beta
+    "text-embedding-004",    # preferred but needs v1 endpoint
+]
+_EMBEDDING_MODEL = _EMBEDDING_MODELS[0]
 _ATLAS_INDEX = "issue_embeddings_index"
 _SIMILARITY_THRESHOLD = 0.60
 
 
 async def embed_text(text: str) -> list[float]:
-    """Embed a single string with Google text-embedding-004 (768 dims)."""
+    """Embed a single string using the first working Google embedding model."""
     from google import genai
     from backend.config import settings
 
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    response = await client.aio.models.embed_content(
-        model=_EMBEDDING_MODEL,
-        contents=text,
-    )
-    return list(response.embeddings[0].values)
+    last_exc: Exception | None = None
+    for model in _EMBEDDING_MODELS:
+        try:
+            response = await client.aio.models.embed_content(
+                model=model,
+                contents=text,
+            )
+            emb = response.embeddings[0] if response.embeddings else None
+            if emb is not None:
+                return list(emb.values)
+        except Exception as exc:
+            last_exc = exc
+            logger.debug("[VecSearch] embed_text model=%s failed: %s", model, exc)
+    raise last_exc or RuntimeError("No embedding model available")
 
 
 async def store_issue_embeddings(project_path: str, issues: list[dict]) -> int:
@@ -66,15 +81,22 @@ async def store_issue_embeddings(project_path: str, issues: list[dict]) -> int:
         body = (issue.get("description") or "")[:200]
         texts.append(f"{title} {body}".strip() or title)
 
-    try:
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        response = await client.aio.models.embed_content(
-            model=_EMBEDDING_MODEL,
-            contents=texts,
-        )
-        vectors = [list(e.values) for e in response.embeddings]
-    except Exception as exc:
-        logger.warning("[VecSearch] Batch embed failed: %s", exc)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    vectors: list[list[float]] = []
+    for model in _EMBEDDING_MODELS:
+        try:
+            response = await client.aio.models.embed_content(
+                model=model,
+                contents=texts,
+            )
+            if response.embeddings:
+                vectors = [list(e.values) for e in response.embeddings]
+                logger.debug("[VecSearch] Batch embed OK with model=%s", model)
+                break
+        except Exception as exc:
+            logger.debug("[VecSearch] Batch embed model=%s failed: %s — trying next", model, exc)
+    if not vectors:
+        logger.warning("[VecSearch] All embedding models failed — keyword demand matching active")
         return 0
 
     db = get_db()
@@ -121,7 +143,7 @@ async def find_similar_issues(
     try:
         query_vec = await embed_text(feature_name)
     except Exception as exc:
-        logger.warning("[VecSearch] Could not embed '%s': %s", feature_name, exc)
+        logger.debug("[VecSearch] Could not embed '%s': %s — keyword fallback active", feature_name, exc)
         return []
 
     # ── Try Atlas $vectorSearch ───────────────────────────────────────────────

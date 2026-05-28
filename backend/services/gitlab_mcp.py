@@ -45,10 +45,22 @@ class GitLabClient:
     def tool_names(self) -> list[str]:
         return []
 
-    async def list_commits(self, project_path: str, per_page: int = 100, page: int = 1) -> list[dict]:
+    async def list_commits(
+        self,
+        project_path: str,
+        per_page: int = 100,
+        page: int = 1,
+        since: str | None = None,
+        until: str | None = None,
+    ) -> list[dict]:
+        params: dict = {"per_page": per_page, "page": page}
+        if since:
+            params["since"] = since
+        if until:
+            params["until"] = until
         return await self._get(
             f"/projects/{_encode(project_path)}/repository/commits",
-            params={"per_page": per_page, "page": page},
+            params=params,
         )
 
     async def get_commit(self, project_path: str, sha: str) -> Optional[dict]:
@@ -245,15 +257,19 @@ class GitLabClient:
         List recent CI pipelines for the project.
         Used to check whether the codebase is in a healthy state before recommending revival.
         Returns status: 'success' | 'failed' | 'running' | 'pending' | 'canceled'.
+        Orders by updated_at descending (chronologically correct, not by arbitrary ID).
         """
         logger.info("[MCP] list_pipelines → %s (ref=%s)", project_path, ref)
-        params: dict = {"per_page": per_page, "order_by": "id", "sort": "desc"}
+        params: dict = {"per_page": per_page, "order_by": "updated_at", "sort": "desc"}
         if ref and ref != "HEAD":
             params["ref"] = ref
-        return await self._get(
+        result = await self._get(
             f"/projects/{_encode(project_path)}/pipelines",
             params=params,
         )
+        # Filter out pipelines without a status — they can't be evaluated
+        return [p for p in (result or []) if p.get("status") in
+                ("success", "failed", "running", "pending", "canceled", "skipped")]
 
     async def list_projects_in_group(
         self, namespace: str, per_page: int = 50, page: int = 1
@@ -315,14 +331,28 @@ class GitLabClient:
 
     async def _get(self, path: str, params: dict | None = None) -> Any:
         if not settings.GITLAB_TOKEN:
+            logger.debug("GET %s skipped — no GITLAB_TOKEN", path)
             return []
         url = settings.GITLAB_URL.rstrip("/") + "/api/v4" + path
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 r = await client.get(url, headers=self._headers, params=params or {})
                 if r.status_code == 200:
-                    return r.json()
-                logger.debug("GET %s → %d", path, r.status_code)
+                    data = r.json()
+                    # GitLab sometimes returns a single dict for detail endpoints
+                    return data if data is not None else []
+                if r.status_code == 401:
+                    logger.warning("GET %s → 401 Unauthorized — check GITLAB_TOKEN", path)
+                elif r.status_code == 403:
+                    logger.warning("GET %s → 403 Forbidden — token lacks permission for this resource", path)
+                elif r.status_code == 404:
+                    logger.debug("GET %s → 404 Not Found (repo may not have this resource)", path)
+                elif r.status_code == 429:
+                    logger.warning("GET %s → 429 Rate Limited — slow down requests", path)
+                else:
+                    logger.debug("GET %s → %d", path, r.status_code)
+        except httpx.TimeoutException:
+            logger.warning("GET %s timed out after 30s", path)
         except Exception as exc:
             logger.debug("REST GET %s failed: %s", path, exc)
         return []

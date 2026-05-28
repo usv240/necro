@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,13 +12,13 @@ from backend.routes import report, revive, scan, stream, watch, monitor as monit
 from backend.services.gitlab_mcp import mcp
 from backend.services.monitor import start_monitor, stop_monitor
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s — %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s â€” %(message)s")
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ── Startup ──────────────────────────────────────────────────────
+    # â”€â”€ Startup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
     # MongoDB
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("[WARN] Atlas Vector Search index setup: %s", e)
 
-        # Feature Vitality Time-Series — Feature EKG (decay/recovery curves)
+        # Feature Vitality Time-Series â€” Feature EKG (decay/recovery curves)
         try:
             from backend.services.vitality import ensure_vitality_collection, seed_vitality_snapshots
             await ensure_vitality_collection()
@@ -47,12 +47,12 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("[WARN] Vitality time-series setup: %s", e)
     else:
-        logger.warning("[WARN] MONGODB_URI not set — running without persistence")
+        logger.warning("[WARN] MONGODB_URI not set â€” running without persistence")
 
     # GitLab REST client
     await mcp.start()
 
-    # ADK agent — initialize eagerly so health check shows "initialized"
+    # ADK agent â€” initialize eagerly so health check shows "initialized"
     try:
         from backend.services.adk_runner import get_runner
         get_runner()
@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # ── Shutdown ─────────────────────────────────────────────────────
+    # â”€â”€ Shutdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await stop_monitor()
     await mcp.stop()
     if settings.MONGODB_URI:
@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="NECRO — The Code Necromancer",
+    title="NECRO â€” The Code Necromancer",
     description="AI agent that finds disabled features in GitLab repositories and evaluates revival viability",
     version="1.0.0",
     lifespan=lifespan,
@@ -105,10 +105,10 @@ app.include_router(agent_route.router, prefix="/api/agent", tags=["agent"])
 app.include_router(watch.router, prefix="/api/watch", tags=["watch"])
 app.include_router(monitor_route.router, prefix="/api/monitor", tags=["monitor"])
 
-# ── NECRO as MCP Server — bidirectional GitLab integration ───────────────────
+# â”€â”€ NECRO as MCP Server â€” bidirectional GitLab integration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NECRO calls GitLab's MCP server (Phase 1) AND exposes its own MCP endpoint
 # so GitLab Duo agents can call NECRO's analytical pipeline as MCP tools.
-# Mounted at /mcp — configure as MCP endpoint in GitLab Duo Agent Platform.
+# Mounted at /mcp â€” configure as MCP endpoint in GitLab Duo Agent Platform.
 try:
     from backend.routes.mcp_server import create_mcp_app
     _necro_mcp_asgi = create_mcp_app()
@@ -171,9 +171,9 @@ async def health():
         "mcp_tool_count": 19,
         "adk_agent": "initialized" if _runner is not None else "pending",
         "adk_endpoints": [
-            "POST /api/agent/ask — freeform prompt to ADK agent",
-            "POST /api/agent/revive — create GitLab revival issue via ADK + MCPToolset",
-            "POST /api/agent/webhook/gitlab — GitLab push webhook → re-evaluate graveyard",
+            "POST /api/agent/ask â€” freeform prompt to ADK agent",
+            "POST /api/agent/revive â€” create GitLab revival issue via ADK + MCPToolset",
+            "POST /api/agent/webhook/gitlab â€” GitLab push webhook â†’ re-evaluate graveyard",
         ],
         "necro_mcp_server": {
             "endpoint": "POST /mcp",
@@ -184,11 +184,12 @@ async def health():
         "slack": "configured" if settings.SLACK_BOT_TOKEN else "not configured",
         "monitor": get_monitor_status(),
         "gemini_primary": "gemini-3-flash-preview",
-        "gemini_fallback": "gemini-2.5-flash (vertex-ai)",
+        "gemini_fallback": "gemini-3-flash-preview (vertex-ai)",
     }
 
 
-# Serve frontend — must be last
+# Serve frontend â€” must be last
 frontend_path = Path("frontend")
 if frontend_path.exists():
     app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+

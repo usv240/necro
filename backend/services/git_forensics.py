@@ -8,7 +8,7 @@ so the call log that appears in the UI shows real MCP tool usage.
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from backend.services.gitlab_mcp import mcp
@@ -17,11 +17,14 @@ logger = logging.getLogger(__name__)
 
 # Keywords in commit messages that suggest deliberate feature disablement
 _DISABLE_KEYWORDS = re.compile(
-    r"\b(disabl|remov|revert|kill|bury|shelv|deprecat|comment.?out|roll.?back|turn.?off|flag.?off)\w*\b",
+    r"\b(disabl|remov|revert|kill|bury|shelv|deprecat|comment.?out|roll.?back|turn.?off|flag.?off)\w*\b"
+    r"|featureflag:\s*remov"  # gitaly-style: "featureflag: remove X"
+    r"|REGISTRY_FF_\w+",       # container-registry: "REGISTRY_FF_ENFORCE_LOCKFILES"
     re.IGNORECASE,
 )
 
 _FEATURE_FLAG_PATTERNS = [
+    # Python / Ruby / JS style
     re.compile(r"FEATURE[_\-][A-Z_]+\s*=\s*[Ff]alse"),
     re.compile(r"ENABLE[_\-][A-Z_]+\s*=\s*[Ff]alse"),
     re.compile(r"enabled\s*[=:]\s*false", re.IGNORECASE),
@@ -29,6 +32,12 @@ _FEATURE_FLAG_PATTERNS = [
     re.compile(r"@feature\.(?:disable|off)\(", re.IGNORECASE),
     re.compile(r"\.feature\([\'\"][^\'\"]+[\'\"],\s*false\)"),
     re.compile(r"if\s+settings\.FEATURE_\w+\s*==\s*[Ff]alse"),
+    # Go style (gitaly, container-registry, gitlab-runner)
+    re.compile(r"OnByDefault:\s*false", re.IGNORECASE),
+    re.compile(r"ops\.FeatureFlag\s*\{"),
+    re.compile(r"featureflag\.[A-Z][A-Za-z0-9]+"),  # featureflag.TrackMaxRssAnon
+    re.compile(r"REGISTRY_FF_[A-Z_]+"),               # REGISTRY_FF_ENFORCE_LOCKFILES
+    re.compile(r"const\s+[A-Z_]*_?FF_?[A-Z_]+\s*="), # Go FF constants
 ]
 
 
@@ -44,6 +53,12 @@ class DeadFeature:
     linked_issue_iids: list[int] = field(default_factory=list)
     context_snippets: list[str] = field(default_factory=list)
     diff_excerpt: str = ""
+
+    # Quality signals — each confirmed evidence source adds to confidence.
+    # Features with detection_confidence < 2 are filtered before Gemini analysis.
+    # detection_signals lists what we found (for transparency in the UI).
+    detection_confidence: int = 0
+    detection_signals: list[str] = field(default_factory=list)
 
     # Populated in later pipeline stages
     death_reason: Optional[dict] = None
@@ -75,13 +90,30 @@ async def detect_dead_features(
         if progress_cb:
             await progress_cb(msg)
 
-    await emit(f"[MCP] list_commits — scanning last {lookback_months} months (up to {max_commits} commits)...")
+    now = datetime.now(timezone.utc)
+    # Fetch commits starting from lookback_months ago, but stop 60 days ago.
+    # Features killed in the last 60 days are too fresh — there isn't enough time
+    # for the original constraint to have resolved, so Gemini correctly labels
+    # them "investigate_further". We skip that window entirely.
+    since_date = now - timedelta(days=lookback_months * 30)
+    until_date = now - timedelta(days=60)
 
-    # Paginate commits
+    await emit(
+        f"[MCP] list_commits — scanning {since_date.strftime('%Y-%m')} → "
+        f"{until_date.strftime('%Y-%m')} ({lookback_months}mo, skip last 60d, up to {max_commits} commits)..."
+    )
+
+    # Paginate commits within the date window
     all_commits: list[dict] = []
     page = 1
     while len(all_commits) < max_commits:
-        batch = await mcp.list_commits(project_path, per_page=100, page=page)
+        batch = await mcp.list_commits(
+            project_path,
+            per_page=100,
+            page=page,
+            since=since_date.isoformat(),
+            until=until_date.isoformat(),
+        )
         if not batch:
             break
         all_commits.extend(batch)
@@ -91,6 +123,31 @@ async def detect_dead_features(
 
     all_commits = all_commits[:max_commits]
     log_mcp("list_commits", repo=project_path, result_count=len(all_commits))
+
+    # Adaptive fallback: if the date-windowed fetch returns < 20 commits, it means
+    # either the repo is low-activity in that window OR the API doesn't honour
+    # since/until for this repo. Fall back to fetching the most recent commits
+    # without date bounds so we always have enough signal to work with.
+    if len(all_commits) < 20:
+        await emit(
+            f"Commit window returned only {len(all_commits)} commits — "
+            f"widening to most recent {max_commits} commits (no date filter)..."
+        )
+        all_commits = []
+        page = 1
+        while len(all_commits) < max_commits:
+            batch = await mcp.list_commits(project_path, per_page=100, page=page)
+            if not batch:
+                break
+            all_commits.extend(batch)
+            page += 1
+            if len(batch) < 100:
+                break
+        all_commits = all_commits[:max_commits]
+        # In fallback mode, extend the "fresh" cutoff to 30 days (more lenient)
+        until_date = now - timedelta(days=30)
+        log_mcp("list_commits_fallback", repo=project_path, result_count=len(all_commits))
+        await emit(f"[MCP] Fallback: fetched {len(all_commits)} commits")
     await emit(f"[MCP] list_commits returned {len(all_commits)} commits")
 
     if not all_commits:
@@ -133,34 +190,205 @@ async def detect_dead_features(
             seen.add(key)
             unique.append(f)
 
-    await emit(f"Found {len(unique)} candidate dead features — enriching with MR and issue context...")
+    # Drop features killed in the last 60 days — too fresh for viability scoring
+    # (Gemini correctly says "constraint may not have resolved yet" → all become
+    # "investigate_further" and no "revive_now" results appear in the UI).
+    fresh_count = 0
+    aged: list[DeadFeature] = []
+    for f in unique:
+        kill_dt = _try_parse_kill_date(f.kill_date or "")
+        if kill_dt and kill_dt > until_date:
+            fresh_count += 1
+        else:
+            aged.append(f)
+    if fresh_count:
+        await emit(f"Filtered {fresh_count} features killed in last 60 days (too recent for viability)")
+    unique = aged
+
+    await emit(f"Found {len(unique)} raw candidates — enriching with MR/issue context and scoring signal quality...")
 
     # Enrich each candidate with linked MR notes and issue context
     for feat in unique:
         await _enrich_feature(feat, project_path, emit, log_mcp)
 
-    await emit(f"Detection complete — {len(unique)} dead features found")
-    return unique
+    # ── Quality gate: score each feature, drop low-confidence noise ──────────
+    # A feature must have ≥2 independent signals before being sent to Gemini.
+    # This prevents keyword noise (maintenance "remove X" commits) from wasting
+    # API calls and polluting results with low-quality false positives.
+    for feat in unique:
+        _score_feature_confidence(feat)
+
+    # Method-specific thresholds:
+    #   feature_flag_removal / gitlab_feature_flags_api — explicit by definition, auto-pass (≥1)
+    #   revert_commit — intentional by definition, auto-pass (≥1)
+    #   shelved_issue / commit_message_keyword — needs corroboration (≥2)
+    _AUTO_PASS = {"feature_flag_removal", "gitlab_feature_flags_api", "revert_commit"}
+    high_conf = [
+        f for f in unique
+        if f.detection_method in _AUTO_PASS and f.detection_confidence >= 1
+        or f.detection_confidence >= 2
+    ]
+    low_conf = [f for f in unique if f not in high_conf]
+
+    if low_conf:
+        await emit(
+            f"Quality gate: filtered {len(low_conf)} low-signal candidates "
+            f"(keyword-only, no diff/MR/issue corroboration)"
+        )
+
+    # Adaptive fallback: if the gate filtered everything, lower the bar once.
+    # This prevents empty results on repos that only have keyword hits.
+    if not high_conf and low_conf:
+        await emit("Quality gate: no high-confidence candidates — using best available signals")
+        high_conf = sorted(unique, key=lambda f: f.detection_confidence, reverse=True)[:5]
+
+    await emit(f"Detection complete — {len(high_conf)} high-confidence dead features")
+    return high_conf
+
+
+# ── Quality gate: confidence scoring ─────────────────────────────────
+
+# Patterns that signal a feature was INTENTIONALLY disabled (not maintenance)
+_INTENTIONAL_DISABLE_PATTERNS = re.compile(
+    r"\b(feature.flag|featureflag|REGISTRY_FF_|OnByDefault|temporary|temp\b|"
+    r"revisit|blocked.by|tracked.in|follow.?up|TODO|FIXME|re-enable|reenable|"
+    r"roll.?back|revert.*for|disabled.until|disabled.pending|disabled.due)\w*\b",
+    re.IGNORECASE,
+)
+
+# Patterns that suggest this is maintenance/cleanup, NOT a dead feature
+_MAINTENANCE_PATTERNS = re.compile(
+    r"\b(test|spec|translation|i18n|l10n|lint|format|style|typo|docs?|"
+    r"readme|whitespace|blank.line|unused.import|dead.code|cleanup|"
+    r"refactor|rename|reorgan|restructur)\w*\b",
+    re.IGNORECASE,
+)
+
+
+def _score_feature_confidence(feat: DeadFeature) -> None:
+    """
+    Score detection confidence (0–5) based on independent corroborating signals.
+    Mutates feat.detection_confidence and feat.detection_signals in place.
+
+    Scoring:
+      +2 : Explicit feature flag pattern in method or commit prefix
+      +2 : Commit diff shows real code removal (not just a one-liner)
+      +1 : Linked MR or issue provides context
+      +1 : Commit message contains intentional-disable language
+      +1 : Shelved issue with disable/wont-fix label
+      -1 : Commit message looks like maintenance/cleanup (test, translation, etc.)
+      -2 : No diff evidence and single-word commit message (near-certain false positive)
+    """
+    signals: list[str] = []
+    score = 0
+
+    msg = (feat.kill_commit_message or "").lower()
+    diff = feat.diff_excerpt or ""
+    snippets = " ".join(feat.context_snippets or [])
+
+    # ── Strong positive signals ───────────────────────────────────────
+    # Explicit feature flag detection is the gold standard
+    if feat.detection_method == "feature_flag_removal":
+        score += 2
+        signals.append("explicit feature flag")
+    elif feat.detection_method == "gitlab_feature_flags_api":
+        score += 2
+        signals.append("GitLab feature flags API")
+    elif feat.detection_method == "revert_commit":
+        # Reverts are intentional by definition — someone deliberately undid a change
+        score += 1
+        signals.append("intentional revert commit")
+    elif feat.detection_method == "shelved_issue":
+        score += 1
+        signals.append("shelved/disabled issue")
+
+    # Diff shows actual code was removed (at least 3 removed lines = real code change)
+    removed_lines = [ln for ln in diff.split("\n") if ln.startswith("-") and ln.strip() not in ("-", "")]
+    if len(removed_lines) >= 3:
+        score += 2
+        signals.append(f"diff: {len(removed_lines)} lines removed")
+    elif len(removed_lines) >= 1:
+        score += 1
+        signals.append(f"diff: {len(removed_lines)} line(s) removed")
+
+    # Linked MR or issue (independent context source)
+    if feat.linked_mr_iid:
+        score += 1
+        signals.append(f"linked MR !{feat.linked_mr_iid}")
+    if feat.linked_issue_iids:
+        score += 1
+        signals.append(f"linked issue(s) #{feat.linked_issue_iids[0]}")
+
+    # ── Contextual positive signals ───────────────────────────────────
+    # Intentional-disable language in commit message or snippets
+    if _INTENTIONAL_DISABLE_PATTERNS.search(feat.kill_commit_message or ""):
+        score += 1
+        signals.append("intentional-disable language in commit")
+    elif _INTENTIONAL_DISABLE_PATTERNS.search(snippets):
+        score += 1
+        signals.append("intentional-disable language in context")
+
+    # ── Negative signals (maintenance noise) ─────────────────────────
+    if _MAINTENANCE_PATTERNS.search(feat.kill_commit_message or ""):
+        score -= 1
+        signals.append("⚠ maintenance pattern in message")
+
+    # Very short commit message + no diff = almost certainly noise
+    # BUT: explicit detection methods are inherently meaningful — don't penalize them
+    is_explicit = feat.detection_method in ("feature_flag_removal", "gitlab_feature_flags_api", "revert_commit")
+    words = msg.split()
+    if len(words) <= 3 and not diff and not is_explicit:
+        score -= 2
+        signals.append("⚠ very short message, no diff")
+
+    feat.detection_confidence = max(0, score)
+    feat.detection_signals = signals
 
 
 # ── Detection strategy 1: Revert commits ──────────────────────────────
 
 
+_MERGE_BRANCH_RE = re.compile(r"^Merge branch\b", re.IGNORECASE)
+
 def _detect_reverts(commits: list[dict]) -> list[DeadFeature]:
     features = []
     for c in commits:
         title = c.get("title", "") or c.get("message", "")
-        if title.lower().startswith("revert"):
-            name = _extract_feature_name_from_message(title) or f"reverted-{c.get('id', '')[:8]}"
-            features.append(DeadFeature(
-                id=_slugify(name),
-                name=name,
-                kill_commit_sha=c.get("id", ""),
-                kill_commit_message=title,
-                kill_date=_parse_date(c.get("created_at", "")),
-                detection_method="revert_commit",
-                context_snippets=[f"Revert commit: {title}"],
-            ))
+        if not title.lower().startswith("revert"):
+            continue
+        # Skip bare "Revert 'Merge branch ...'" — meta merge commits, not features
+        inner = re.sub(r'^revert\s+["\']?', '', title, flags=re.IGNORECASE).strip('"\'').strip()
+        if _MERGE_BRANCH_RE.match(inner):
+            continue
+        # Use inner (already stripped of "Revert" prefix and outer quotes) as name basis.
+        # Strip conventional commit type prefix: "feat(scope): ", "chore: ", etc.
+        inner_clean = re.sub(
+            r"^(?:feat|fix|chore|refactor|test|ci|docs?)(?:\([^)]*\))?\s*[:\-]\s*",
+            "",
+            inner,
+            flags=re.IGNORECASE,
+        ).strip()
+        # Strip leading action verbs that describe what was done to the feature,
+        # NOT verbs that describe the feature itself (upgrade/add/update give useful context).
+        # e.g. "Remove GPG signing color" → "GPG signing color"
+        #      "Disable S3 checksum" → "S3 checksum"
+        #      "upgrade google-cloud-storage from 0.36 to 0.38" → unchanged (useful info)
+        inner_clean = re.sub(
+            r"^(remove|disable|bury|kill|shelve|deprecate|revert)\s+",
+            "",
+            inner_clean,
+            flags=re.IGNORECASE,
+        ).strip()
+        name = inner_clean[:70] if inner_clean else f"reverted-{c.get('id', '')[:8]}"
+        features.append(DeadFeature(
+            id=_slugify(name),
+            name=name,
+            kill_commit_sha=c.get("id", ""),
+            kill_commit_message=title,
+            kill_date=_parse_date(c.get("created_at", "")),
+            detection_method="revert_commit",
+            context_snippets=[f"Revert commit: {title}"],
+        ))
     return features
 
 
@@ -222,6 +450,11 @@ async def _detect_feature_flags(
 # ── Detection strategy 3: Disable keywords in commit messages ─────────
 
 
+_FF_PREFIX = re.compile(
+    r"^(featureflag:\s*remove|feat\(.*\):\s*remove\s+[A-Z_]*_?FF_|ff-remove-)",
+    re.IGNORECASE,
+)
+
 def _detect_by_message(commits: list[dict]) -> list[DeadFeature]:
     features = []
     for c in commits:
@@ -231,14 +464,19 @@ def _detect_by_message(commits: list[dict]) -> list[DeadFeature]:
         # Skip if already caught by revert strategy
         if title.lower().startswith("revert"):
             continue
+        # Skip "Merge branch '...'" meta-commits — they're plumbing, not features
+        if _MERGE_BRANCH_RE.match(title):
+            continue
         name = _extract_feature_name_from_message(title) or f"disabled-{c.get('id','')[:8]}"
+        # Use precise detection_method for feature flag commits (gitaly / container-registry style)
+        method = "feature_flag_removal" if _FF_PREFIX.search(title) else "commit_message_keyword"
         features.append(DeadFeature(
             id=_slugify(name),
             name=name,
             kill_commit_sha=c.get("id", ""),
             kill_commit_message=title,
             kill_date=_parse_date(c.get("created_at", "")),
-            detection_method="commit_message_keyword",
+            detection_method=method,
             context_snippets=[f"Commit message: {title}"],
         ))
     return features
@@ -404,14 +642,47 @@ async def _enrich_feature(feat: DeadFeature, project_path: str, emit, log_mcp=No
 
 
 def _extract_feature_name_from_message(msg: str) -> str:
-    # Strip common prefixes like "revert", "disable", "remove"
+    """
+    Extract a human-readable feature name from a git commit message.
+
+    Handles formats:
+      "featureflag: remove TrackMaxRssAnon"  → "TrackMaxRssAnon"
+      "feat(registry): remove REGISTRY_FF_ENFORCE_LOCKFILES" → "REGISTRY_FF_ENFORCE_LOCKFILES"
+      "backup: Disable S3 checksum calculations" → "S3 checksum calculations"
+      "Revert 'Add dark mode support'" → "dark mode support"
+      "Remove deprecated payment gateway" → "deprecated payment gateway"
+    """
+    # Conventional commit format: "type[(scope)]: action noun"
+    # Extract the noun part after the action keyword (remove/disable/revert/etc.)
+    action_match = re.search(
+        r"\b(remov(?:e|ing|ed)|disabl(?:e|ing|ed)|revert(?:ing|ed)?|kill(?:ing|ed)?|"
+        r"bury|shelv(?:e|ing|ed)|deprecat(?:e|ing|ed)|turn(?:ing)?\s+off|flag(?:ged)?\s+off)"
+        r"\s+(.*)",
+        msg,
+        re.IGNORECASE,
+    )
+    if action_match:
+        name = action_match.group(2).strip()
+        # Strip quoted strings wrappers
+        name = re.sub(r'^["\']|["\']$', '', name)
+        # Stop at sentence end (dot followed by space, or ! or ?)
+        name = re.split(r"\.\s|[!?]", name)[0].strip()
+        return name[:70] if name else ""
+
+    # Fallback: strip common commit-type prefixes and take the first clause
     cleaned = re.sub(
-        r"^(revert|disable|remove|bury|kill|shelve|deprecate|feat|fix|chore|refactor)[:\-\s]+",
+        r"^(?:featureflag|feat|fix|chore|refactor|test|ci|docs?)\s*(?:\([^)]*\))?\s*[:\-]\s*",
         "",
         msg,
         flags=re.IGNORECASE,
     ).strip()
-    # Take first meaningful segment
+    # Strip leading action verbs
+    cleaned = re.sub(
+        r"^(revert|disable|remove|bury|kill|shelve|deprecate)\s+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    ).strip()
     parts = re.split(r"[:\-\(\[\{]", cleaned)
     name = parts[0].strip()
     return name[:60] if name else ""
@@ -430,6 +701,32 @@ def _extract_flag_name(line: str) -> str:
 def _slugify(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     return slug[:50] or "feature"
+
+
+def _try_parse_kill_date(kill_date: str) -> datetime | None:
+    """
+    Parse kill_date back to a timezone-aware datetime for age comparisons.
+    Handles both ISO strings and the "%B %d, %Y" display format that
+    _parse_date() stores (e.g. "April 17, 2026").
+    """
+    if not kill_date:
+        return None
+    for fmt in ("%B %d, %Y", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ"):
+        try:
+            dt = datetime.strptime(kill_date, fmt)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except ValueError:
+            continue
+    # fallback: try fromisoformat
+    try:
+        dt = datetime.fromisoformat(kill_date.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        return None
 
 
 def _parse_date(dt_str: str) -> str:

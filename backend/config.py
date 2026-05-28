@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     GOOGLE_PROJECT_ID: str = ""
     GOOGLE_LOCATION: str = "us-central1"
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3-flash-preview"
 
     # MongoDB Atlas
     MONGODB_URI: str = ""

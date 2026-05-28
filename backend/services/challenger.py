@@ -1,14 +1,14 @@
-"""
-Challenger Agent — independent adversarial review of revival recommendations.
+﻿"""
+Challenger Agent â€” independent adversarial review of revival recommendations.
 
-Uses Vertex AI Gemini 2.5 Flash (via generate_json_adversarial) to ensure genuine
+Uses Vertex AI Gemini 3 Flash (via generate_json_adversarial) to ensure genuine
 model independence from the primary analysis (Gemini 3 Flash via API key).
 
 The Challenger's job is to REJECT, not confirm. It starts from a position of
 skepticism and must produce specific, falsifiable failure scenarios. It is required
 to score at least 1 point lower than the primary unless evidence is overwhelming.
 
-This models how a senior engineer would push back in a code review — not rubber-stamping,
+This models how a senior engineer would push back in a code review â€” not rubber-stamping,
 but genuinely stress-testing whether the primary agent missed something.
 """
 
@@ -18,7 +18,7 @@ from backend.services.gemini import generate_json_adversarial
 
 logger = logging.getLogger(__name__)
 
-_CHALLENGER_SYSTEM = """You are the Red Team Agent — the designated devil's advocate in a
+_CHALLENGER_SYSTEM = """You are the Red Team Agent â€” the designated devil's advocate in a
 multi-agent code review system.
 
 Your ONLY job is to find reasons why a proposed feature revival will FAIL.
@@ -31,7 +31,7 @@ You MUST:
 1. Produce exactly 3 specific, falsifiable failure scenarios
 2. Score the feature at least 1 point LOWER than the primary agent's estimate
 3. Find at least one risk the primary analysis did not explicitly address
-4. Be specific — "this might be hard" is not acceptable; "the Stripe API rate limit of 100 req/s
+4. Be specific â€” "this might be hard" is not acceptable; "the Stripe API rate limit of 100 req/s
    will be hit during peak billing cycles if the feature processes >10K users" is acceptable"""
 
 
@@ -64,7 +64,7 @@ The primary agent used this external evidence:
 Challenge whether this evidence actually resolves the specific constraint, or whether
 the primary agent over-interpreted it."""
     else:
-        grounding_note = "\nThe primary agent had NO verified external evidence — all claims are unverified AI inference."
+        grounding_note = "\nThe primary agent had NO verified external evidence â€” all claims are unverified AI inference."
 
     prompt = f"""{_CHALLENGER_SYSTEM}
 
@@ -115,24 +115,24 @@ Verdict guide:
         result["hidden_risks"] = hidden_risks[:6]
 
         logger.info(
-            "Challenger verdict for '%s': %s (score=%s, primary=%s, model=vertex_gemini_2.5_flash)",
+            "Challenger verdict for '%s': %s (score=%s, primary=%s, model=gemini_3_flash)",
             name,
             result.get("challenger_verdict"),
             result.get("challenger_score"),
             primary_feasibility,
         )
-        result["source"] = "vertex_gemini_2_5_flash_challenger"
+        result["source"] = "vertex_gemini_3_flash_challenger"
         return result
 
     return {
         "challenger_verdict": "downgrade",
         "challenger_score": max(0, primary_feasibility - 2),
         "confidence": "low",
-        "hidden_risks": ["Challenger evaluation failed — treating as downgrade by default"],
-        "strongest_objection": "Could not independently evaluate — assume risk is higher than primary estimate",
+        "hidden_risks": ["Challenger evaluation failed â€” treating as downgrade by default"],
+        "strongest_objection": "Could not independently evaluate â€” assume risk is higher than primary estimate",
         "recommended_first_step": "Manually review the primary analysis before proceeding",
-        "what_primary_got_wrong": "Unknown — challenger evaluation failed",
-        "source": "vertex_gemini_2_5_flash_challenger",
+        "what_primary_got_wrong": "Unknown â€” challenger evaluation failed",
+        "source": "vertex_gemini_3_flash_challenger",
     }
 
 
@@ -155,13 +155,14 @@ async def challenge_top_revival_candidates(features: list[dict]) -> list[dict]:
                 "challenger_verdict": "downgrade",
                 "challenger_score": max(0, primary_score - 2),
                 "confidence": "low",
-                "hidden_risks": ["Challenger evaluation failed — defaulting to downgrade"],
+                "hidden_risks": ["Challenger evaluation failed â€” defaulting to downgrade"],
                 "strongest_objection": "Could not evaluate independently",
                 "recommended_first_step": "Review manually before committing",
                 "what_primary_got_wrong": "Unknown",
-                "source": "vertex_gemini_2_5_flash_challenger",
+                "source": "vertex_gemini_3_flash_challenger",
             })
         else:
             assessments.append(r)
 
     return assessments
+

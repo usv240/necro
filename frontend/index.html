@@ -243,10 +243,10 @@
                     <span class="chip-row-desc">Real GitLab MCP + ADK + Gemini pipeline — takes ~60–90 seconds</span>
                   </div>
                   <div class="quick-buttons">
-                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-foss', 80, 12)">gitlab-foss</button>
-                    <button class="chip-live" onclick="quickScan('inkscape/inkscape', 60, 18)">inkscape</button>
-                    <button class="chip-live" onclick="quickScan('gitlab-org/gitaly', 60, 12)">gitaly</button>
-                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-runner', 60, 12)">gitlab-runner</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitaly', 150, 36)">gitaly</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/container-registry', 150, 36)">container-registry</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-runner', 120, 36)">gitlab-runner</button>
+                    <button class="chip-live" onclick="quickScan('godotengine/godot', 120, 36)">godot</button>
                     <button class="chip-more" id="moreReposToggle" onclick="toggleMoreRepos()">+ more</button>
                   </div>
                 </div>
@@ -483,29 +483,69 @@
 
       <!-- ── Timeline tab ────────────────────────────────────────────────────── -->
       <div class="tab-panel" id="tab-timeline">
+
+        <!-- Summary insight cards -->
+        <div class="tl-insight-row" id="tlInsightRow">
+          <div class="tl-insight-card tl-ins-green">
+            <div class="tl-ins-val" id="tlReviveCount">—</div>
+            <div class="tl-ins-lbl">Revive Now</div>
+          </div>
+          <div class="tl-insight-card tl-ins-amber">
+            <div class="tl-ins-val" id="tlInvestCount">—</div>
+            <div class="tl-ins-lbl">Investigate</div>
+          </div>
+          <div class="tl-insight-card tl-ins-muted">
+            <div class="tl-ins-val" id="tlBuriedCount">—</div>
+            <div class="tl-ins-lbl">Keep Buried</div>
+          </div>
+          <div class="tl-insight-card tl-ins-purple">
+            <div class="tl-ins-val" id="tlAvgFeasibility">—</div>
+            <div class="tl-ins-lbl">Avg Feasibility</div>
+          </div>
+          <div class="tl-insight-card tl-ins-blue">
+            <div class="tl-ins-val" id="tlTotalFeats">—</div>
+            <div class="tl-ins-lbl">Total Features</div>
+          </div>
+        </div>
+        <div id="tlDataSource" style="font-size:0.72rem;color:var(--text-muted);margin:0 0 1rem 0.25rem;"></div>
+
         <div class="charts-grid-layout">
-          <div class="chart-card">
+          <!-- Row 1: full-width kill timeline -->
+          <div class="chart-card chart-full-width">
             <h3>Feature Kill Timeline — kills by month</h3>
-            <div class="chart-container">
+            <div class="chart-container" style="height:180px">
               <canvas id="timelineChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Row 2: recommendation split + feasibility -->
+          <div class="chart-card">
+            <h3>Recommendation Breakdown</h3>
+            <p style="font-size:0.72rem;color:var(--text-muted);margin:-0.5rem 0 0.75rem">How NECRO classified each dormant feature</p>
+            <div class="chart-container" style="height:210px">
+              <canvas id="recommendationChart"></canvas>
             </div>
           </div>
           <div class="chart-card">
             <h3>Revival Feasibility Distribution</h3>
-            <div class="chart-container" style="height:220px">
+            <p style="font-size:0.72rem;color:var(--text-muted);margin:-0.5rem 0 0.75rem">How easy are detected features to revive?</p>
+            <div class="chart-container" style="height:210px">
               <canvas id="feasibilityChart"></canvas>
             </div>
           </div>
+
+          <!-- Row 3: kill reasons + scatter -->
           <div class="chart-card">
             <h3>Kill Reason Categories</h3>
+            <p style="font-size:0.72rem;color:var(--text-muted);margin:-0.5rem 0 0.75rem">Why features were disabled</p>
             <div class="chart-container" style="height:220px">
               <canvas id="categoryChart"></canvas>
             </div>
           </div>
           <div class="chart-card">
-            <h3>Cost-Benefit — Effort vs Revival Feasibility</h3>
-            <p style="font-size:0.75rem;color:var(--text-muted);margin:-0.5rem 0 0.75rem">Bubble size = user demand signals. Top-left quadrant = best candidates (easy + feasible).</p>
-            <div class="chart-container" style="height:260px">
+            <h3>Cost-Benefit Matrix</h3>
+            <p style="font-size:0.72rem;color:var(--text-muted);margin:-0.5rem 0 0.75rem">Bubble = demand signals · top-left = easiest wins · <span style="color:#10b981">●</span> revive <span style="color:#f59e0b">●</span> investigate</p>
+            <div class="chart-container" style="height:220px">
               <canvas id="scatterChart"></canvas>
             </div>
           </div>
@@ -514,33 +554,45 @@
 
       <!-- ── Watch list tab ─────────────────────────────────────────────────── -->
       <div class="tab-panel" id="tab-watchlist">
-        <div class="monitor-status" id="monitorStatus">
-          <div class="pulse-dot"></div>
-          <div>
-            <div class="status-label">Autonomous Monitor Runner</div>
-            <div class="status-value" id="monitorStatusText">Loading autonomous scheduler...</div>
+
+        <!-- Monitor banner -->
+        <div class="monitor-banner" id="monitorStatus">
+          <div class="monitor-banner-left">
+            <div class="monitor-icon-wrap"><div class="pulse-dot"></div></div>
+            <div class="monitor-banner-text">
+              <div class="monitor-banner-title">Autonomous Monitor Runner</div>
+              <div class="monitor-banner-sub" id="monitorStatusText">Loading scheduler…</div>
+            </div>
           </div>
-          <button class="btn btn-sm" onclick="triggerMonitor()" style="margin-left:auto">Run Scanner Now</button>
+          <button class="btn btn-sm btn-ghost" onclick="triggerMonitor()">
+            ▶ Run Scanner Now
+          </button>
         </div>
 
-        <div class="scan-card" style="margin-bottom:1rem">
-          <h2>Add Repository to Watch List</h2>
-          <div class="scan-form">
-            <div class="form-group">
-              <label>GitLab Repository URL</label>
-              <input type="text" class="form-input" id="watchUrl" placeholder="https://gitlab.com/your-org/your-repo" />
-            </div>
-            <div class="form-group" style="max-width:200px">
-              <label>Label (optional)</label>
-              <input type="text" class="form-input" id="watchLabel" placeholder="Core microservice" />
-            </div>
+        <!-- Add repo form -->
+        <div class="watch-add-panel">
+          <div class="watch-add-title">
+            <span class="watch-add-icon">＋</span> Add Repository to Watch List
+          </div>
+          <div class="watch-add-form">
+            <input type="text" class="form-input watch-url-input" id="watchUrl"
+              placeholder="https://gitlab.com/your-org/your-repo" />
+            <input type="text" class="form-input watch-label-input" id="watchLabel"
+              placeholder="Label (optional)" />
             <button class="btn btn-primary" onclick="addWatch()">Watch Repo</button>
           </div>
+          <div class="watch-add-hint">Adds repo to the autonomous scanner — NECRO will check for new dormant features every 24 hours and alert via Slack.</div>
         </div>
 
+        <!-- Repo grid -->
+        <div class="watch-section-header" id="watchSectionHeader" style="display:none">
+          <span>Monitored Repositories</span>
+          <span class="watch-section-count" id="watchRepoCount"></span>
+        </div>
         <div id="watchGrid">
           <div class="empty-state">
-            <p>No repositories in watch list. Add one above.</p>
+            <div class="empty-icon">👁</div>
+            <p>No repositories monitored yet.<br>Add a GitLab URL above to start autonomous scanning.</p>
           </div>
         </div>
       </div>

@@ -180,6 +180,13 @@ Return the issue URL after creating it."""
         if match:
             issue_url = match.group(0).rstrip(".,")
 
+    # Extract issue iid from URL if not already set  (e.g. /-/issues/123)
+    if issue_url and issue_iid is None:
+        import re
+        iid_match = re.search(r"/-/issues/(\d+)", issue_url)
+        if iid_match:
+            issue_iid = int(iid_match.group(1))
+
     # Log to MongoDB
     if settings.MONGODB_URI and issue_url:
         try:

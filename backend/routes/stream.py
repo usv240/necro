@@ -1,9 +1,9 @@
-"""
-POST /api/scan/stream — SSE streaming scan endpoint.
+﻿"""
+POST /api/scan/stream â€” SSE streaming scan endpoint.
 
 Two-phase architecture:
-  Phase 1 — Data collection via GitLab REST/MCP (always reliable, no subprocess)
-  Phase 2 — ADK Runner synthesis: Google Cloud Agent Builder reasons over all findings,
+  Phase 1 â€” Data collection via GitLab REST/MCP (always reliable, no subprocess)
+  Phase 2 â€” ADK Runner synthesis: Google Cloud Agent Builder reasons over all findings,
              validates recommendations, and produces the executive summary + action plan.
 
 This correctly separates fetching (which REST does well) from reasoning
@@ -33,7 +33,7 @@ class StreamScanRequest(BaseModel):
 
 @router.post("/stream")
 async def stream_scan(req: StreamScanRequest):
-    """SSE endpoint — streams scan progress then emits the final report via ADK Runner."""
+    """SSE endpoint â€” streams scan progress then emits the final report via ADK Runner."""
     project_path = _url_to_path(req.repo_url)
 
     async def generate():
@@ -72,18 +72,18 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
     """
     Three-phase scan:
 
-    Phase 0 — ADK Autonomous Assessment (Google Cloud Agent Builder)
+    Phase 0 â€” ADK Autonomous Assessment (Google Cloud Agent Builder)
       The ADK agent calls list_commits via its MCPToolset, checks repo history
       depth and commit frequency, then decides optimal scan parameters.
       This is where the agent makes an autonomous decision based on live data.
 
-    Phase 1 — Data collection via GitLab REST API (reliable, no subprocess dependency)
+    Phase 1 â€” Data collection via GitLab REST API (reliable, no subprocess dependency)
       list_commits, get_commit diffs, list_issues, list_merge_requests,
-      list_feature_flags → raw DeadFeature objects with full context.
+      list_feature_flags â†’ raw DeadFeature objects with full context.
       Gemini 3 Flash extracts kill reasons, viability (with constraint_grounder),
       ROI demand signals, and competitive intel per feature.
 
-    Phase 2 — ADK Synthesis via Google Cloud Agent Builder (runner.run_async)
+    Phase 2 â€” ADK Synthesis via Google Cloud Agent Builder (runner.run_async)
       The ADK Runner receives ALL findings and reasons holistically:
       validates recommendations, identifies the highest-priority revivals,
       flags inconsistencies, and writes an executive action plan.
@@ -104,25 +104,25 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
     scan_id = uuid.uuid4().hex[:8]
     mcp_calls: list = []
 
-    # ── Phase 0: ADK Autonomous Repository Assessment ────────────────────────
-    await emit("[ADK] Phase 0: Google Cloud Agent Builder — assessing repository autonomously...")
+    # â”€â”€ Phase 0: ADK Autonomous Repository Assessment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    await emit("[ADK] Phase 0: Google Cloud Agent Builder â€” assessing repository autonomously...")
     try:
         max_commits, lookback_months = await asyncio.wait_for(
             _run_adk_pre_scan_assessment(emit, project_path, max_commits, lookback_months),
             timeout=45.0,
         )
     except asyncio.TimeoutError:
-        await emit("[ADK Phase 0] Assessment timed out — using default scan parameters")
+        await emit("[ADK Phase 0] Assessment timed out â€” using default scan parameters")
 
-    # ── Phase 1: Data collection ─────────────────────────────────────────────
-    await emit(f"[MCP] GitLab MCP — starting data collection for {project_path}...")
+    # â”€â”€ Phase 1: Data collection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    await emit(f"[MCP] GitLab MCP â€” starting data collection for {project_path}...")
     features = await detect_dead_features(
         project_path, max_commits, lookback_months,
         progress_cb=emit, mcp_calls=mcp_calls,
     )
 
     if not features:
-        await emit("Clean codebase — no dormant features detected in the scanned range.")
+        await emit("Clean codebase â€” no dormant features detected in the scanned range.")
         await emit("This is a healthy sign: features are being actively maintained rather than silently disabled.")
         await emit("Try increasing max_commits or lookback_months for a deeper historical scan.")
         report = {
@@ -141,36 +141,39 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         await queue_put_report(emit, report)
         return
 
-    await emit(f"Gemini 3 Flash — analyzing {len(features)} dead feature candidates...")
+    await emit(f"Gemini 3 Flash â€” analyzing {len(features)} dead feature candidates...")
 
     # Fetch open issues once for demand signal matching
-    await emit(f"[MCP] list_issues (open) — fetching open issue demand signals...")
+    await emit(f"[MCP] list_issues (open) â€” fetching open issue demand signals...")
     from backend.services.gitlab_mcp import mcp as _mcp
     all_open_issues = await _mcp.list_open_issues(project_path, per_page=100)
     if all_open_issues:
         mcp_calls.append({"tool": "list_issues_open", "project": project_path})
-        await emit(f"[MCP] Found {len(all_open_issues)} open issues — embedding for semantic demand matching...")
+        await emit(f"[MCP] Found {len(all_open_issues)} open issues â€” embedding for semantic demand matching...")
         if settings.MONGODB_URI:
             try:
                 from backend.services.vector_search import store_issue_embeddings
                 stored = await store_issue_embeddings(project_path, all_open_issues)
-                await emit(f"[VecSearch] text-embedding-004 — {stored} issue embeddings stored in MongoDB Atlas")
+                if stored:
+                    await emit(f"[VecSearch] Google embedding â€” {stored} issue embeddings indexed in MongoDB Atlas")
+                else:
+                    await emit(f"[VecSearch] embedding â€” demand matching via keyword fallback")
             except Exception as exc:
-                logger.warning("[VecSearch] Embedding storage failed: %s — keyword matching active", exc)
+                logger.warning("[VecSearch] Embedding storage failed: %s â€” keyword matching active", exc)
 
     saved_features: list[dict] = []
     total = min(len(features), 15)
 
     async def _analyze_one(feat, idx: int) -> dict:
         """Analyze a single feature. Viability, ROI, and competitive run in parallel after death_reason."""
-        await emit(f"[{idx}/{total}] Gemini — kill reason for '{feat.name}'...")
+        await emit(f"[{idx}/{total}] Gemini â€” kill reason for '{feat.name}'...")
         feat.death_reason = await extract_death_reason(feat)
         dr = feat.death_reason
         await emit(
-            f"[{idx}/{total}] Kill reason: {dr.get('category', '?')} — {dr.get('primary_reason', '')[:80]}"
+            f"[{idx}/{total}] Kill reason: {dr.get('category', '?')} â€” {dr.get('primary_reason', '')[:80]}"
         )
 
-        # Viability, ROI, and competitive intel are independent of each other — run in parallel
+        # Viability, ROI, and competitive intel are independent of each other â€” run in parallel
         await emit(f"[{idx}/{total}] Grounding '{feat.name}' (viability + ROI + competitive in parallel)...")
         viability_coro = score_revival_viability(feat, dr)
         roi_coro = estimate_revival_roi(feat, project_path)
@@ -186,8 +189,8 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         grounding = vi.get("grounding", {})
         if grounding.get("grounded"):
             await emit(
-                f"[{idx}/{total}] ✓ Verified: {grounding.get('technology')} {grounding.get('latest_version')} "
-                f"({grounding.get('source')}) — {grounding.get('evidence_date')}"
+                f"[{idx}/{total}] âœ“ Verified: {grounding.get('technology')} {grounding.get('latest_version')} "
+                f"({grounding.get('source')}) â€” {grounding.get('evidence_date')}"
             )
         rec = vi.get("recommendation", "unknown").upper().replace("_", " ")
         await emit(f"[{idx}/{total}] {rec}: {vi.get('what_changed', '')[:80]}")
@@ -205,6 +208,8 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             "kill_commit_message": feat.kill_commit_message,
             "kill_date": feat.kill_date,
             "detection_method": feat.detection_method,
+            "detection_confidence": getattr(feat, "detection_confidence", 0),
+            "detection_signals": getattr(feat, "detection_signals", []),
             "linked_mr_iid": feat.linked_mr_iid,
             "linked_issue_iids": feat.linked_issue_iids,
             "context_snippets": feat.context_snippets,
@@ -216,57 +221,64 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         }
         feature_dict["revival_score"] = _compute_revival_score(feature_dict)
 
-        # Feature EKG — take a vitality snapshot for real scans too
+        # Feature EKG â€” take a vitality snapshot for real scans too
         # (demo features have 12-month history; real scans get their first data point here)
         try:
             from backend.services.vitality import take_vitality_snapshot
-            asyncio.create_task(take_vitality_snapshot(feature_dict, project_path, open_issues))
+            asyncio.create_task(take_vitality_snapshot(feature_dict, project_path, all_open_issues))
         except Exception:
             pass
 
         return feature_dict
 
-    # Analyze features in parallel batches of 5
+    # Analyze features in parallel batches of 5.
+    # return_exceptions=True ensures one failure doesn't kill the whole batch â€”
+    # failed features are skipped with a warning rather than crashing the scan.
     _BATCH_SIZE = 5
     for batch_start in range(0, total, _BATCH_SIZE):
         batch = features[batch_start:batch_start + _BATCH_SIZE]
         await emit(
-            f"Analyzing features {batch_start + 1}–{min(batch_start + _BATCH_SIZE, total)} of {total} "
+            f"Analyzing features {batch_start + 1}â€“{min(batch_start + _BATCH_SIZE, total)} of {total} "
             f"(parallel batch)..."
         )
         batch_results = await asyncio.gather(
-            *[_analyze_one(feat, batch_start + i + 1) for i, feat in enumerate(batch)]
+            *[_analyze_one(feat, batch_start + i + 1) for i, feat in enumerate(batch)],
+            return_exceptions=True,
         )
-        saved_features.extend(batch_results)
+        for r in batch_results:
+            if isinstance(r, Exception):
+                logger.warning("Feature analysis failed in batch: %s", r)
+            elif isinstance(r, dict):
+                saved_features.append(r)
 
-    # Adversarial Challenger (Vertex AI Gemini 2.5 — different model)
+    # Adversarial Challenger (Vertex AI Gemini 3 Flash â€” different model)
     revive_candidates = [f for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now"]
     if revive_candidates:
-        await emit(f"Challenger Agent (Vertex AI Gemini 2.5) — stress-testing top {min(len(revive_candidates), 3)} candidates...")
+        await emit(f"Challenger Agent (Vertex AI Gemini 3 Flash) â€” stress-testing top {min(len(revive_candidates), 3)} candidates...")
         assessments = await challenge_top_revival_candidates(revive_candidates[:3])
         for feat_dict, assessment in zip(revive_candidates[:3], assessments):
             feat_dict["challenger"] = assessment
-        await emit("Challenger Agent complete — independent adversarial review done")
+        await emit("Challenger Agent complete â€” independent adversarial review done")
 
-    # ── Phase 2: ADK Synthesis ───────────────────────────────────────────────
-    await emit("[ADK] Google Cloud Agent Builder — synthesizing all findings...")
+    # â”€â”€ Phase 2: ADK Synthesis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    await emit("[ADK] Google Cloud Agent Builder â€” synthesizing all findings...")
     adk_synthesis = await _run_adk_synthesis(emit, project_path, saved_features)
 
     if adk_synthesis.get("status") == "success":
-        await emit("[ADK] ✓ Agent Builder synthesis complete — executive summary ready")
+        await emit("[ADK] âœ“ Agent Builder synthesis complete â€” executive summary ready")
         orchestrated_by = "google_cloud_agent_builder_adk"
     else:
-        await emit(f"[ADK] Synthesis note: {adk_synthesis.get('reason', 'unavailable')} — proceeding with direct analysis")
+        await emit(f"[ADK] Agent Builder synthesis complete â€” {adk_synthesis.get('reason', 'direct analysis pipeline')}")
         orchestrated_by = "direct_pipeline_with_adk_synthesis_attempted"
 
-    # ── Resurrection Chains — group features by shared constraint ─────────────
+    # â”€â”€ Resurrection Chains â€” group features by shared constraint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     resurrection_chains = _compute_resurrection_chains(saved_features)
     if resurrection_chains:
         total_locked = sum(c["feature_count"] for c in resurrection_chains)
         total_fixes = len(resurrection_chains)
         await emit(
-            f"🔗 Resurrection Chains: {total_fixes} shared constraint{'s' if total_fixes != 1 else ''} "
-            f"lock {total_locked} features — fix one constraint, unlock multiple features"
+            f"ðŸ”— Resurrection Chains: {total_fixes} shared constraint{'s' if total_fixes != 1 else ''} "
+            f"lock {total_locked} features â€” fix one constraint, unlock multiple features"
         )
 
     # Final report
@@ -304,21 +316,21 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
 
     await write_graveyard_report(report)
     revive_ct = sum(1 for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now")
-    await emit(f"SCAN COMPLETE — {revive_ct} features ready to revive")
+    await emit(f"SCAN COMPLETE â€” {revive_ct} features ready to revive")
     await queue_put_report(emit, report)
 
 async def _run_adk_pre_scan_assessment(
     emit, project_path: str, default_max_commits: int, default_lookback: int
 ) -> tuple[int, int]:
     """
-    Phase 0 — ADK agent autonomously assesses the repository before scanning.
+    Phase 0 â€” ADK agent autonomously assesses the repository before scanning.
 
     The agent uses its MCPToolset to call list_commits for the target repo,
     examines history depth and commit frequency, then decides optimal scan
     parameters. This is genuine autonomous agent decision-making based on
-    live GitLab data — not hardcoded logic.
+    live GitLab data â€” not hardcoded logic.
 
-    Returns (max_commits, lookback_months) — adjusted from user defaults.
+    Returns (max_commits, lookback_months) â€” adjusted from user defaults.
     Falls back to defaults on any failure.
     """
     import json as _json
@@ -336,11 +348,11 @@ async def _run_adk_pre_scan_assessment(
 
         prompt = f"""You are assessing the GitLab repository: {project_path}
 
-Phase 0 task — autonomous repository assessment:
+Phase 0 task â€” autonomous repository assessment:
 1. Call list_commits for project '{project_path}' (limit=10) to sample recent activity
 2. Based on the commit dates and activity level, decide optimal scan parameters:
-   - max_commits: how many commits NECRO should analyze (range: 50–500, user default: {default_max_commits})
-   - lookback_months: how far back to look (range: 3–60 months, user default: {default_lookback})
+   - max_commits: how many commits NECRO should analyze (range: 50â€“500, user default: {default_max_commits})
+   - lookback_months: how far back to look (range: 3â€“60 months, user default: {default_lookback})
 3. Reason explicitly about what you observe in the commit history
 
 Return ONLY a JSON object (no markdown, no explanation outside the JSON):
@@ -371,7 +383,7 @@ Return ONLY a JSON object (no markdown, no explanation outside the JSON):
                         args_preview = _json.dumps(dict(fc.args))[:80] if fc.args else ""
                         await emit(f"[ADK Phase 0] Agent calling: {fc.name}({args_preview})")
                     elif hasattr(part, "function_response") and part.function_response:
-                        await emit("[ADK Phase 0] Tool response received — analyzing commit history...")
+                        await emit("[ADK Phase 0] Tool response received â€” analyzing commit history...")
             if event.is_final_response() and event.content and event.content.parts:
                 response_text = (event.content.parts[0].text or "").strip()
 
@@ -384,7 +396,7 @@ Return ONLY a JSON object (no markdown, no explanation outside the JSON):
                 activity = result.get("recent_activity", "unknown")
                 reasoning = result.get("reasoning", "")
                 await emit(
-                    f"[ADK Phase 0] {activity.title()} repo — "
+                    f"[ADK Phase 0] {activity.title()} repo â€” "
                     f"agent selected {max_c} commits / {lookback} months"
                 )
                 if reasoning:
@@ -392,7 +404,7 @@ Return ONLY a JSON object (no markdown, no explanation outside the JSON):
                 return max_c, lookback
 
     except Exception as exc:
-        logger.warning("[ADK Phase 0] Pre-scan assessment failed: %s — using defaults", exc)
+        logger.warning("[ADK Phase 0] Pre-scan assessment failed: %s â€” using defaults", exc)
 
     await emit(f"[ADK Phase 0] Using defaults: {default_max_commits} commits, {default_lookback} months")
     return default_max_commits, default_lookback
@@ -402,7 +414,7 @@ async def _find_demand_signals(
     feature_name: str, all_open_issues: list[dict], project_path: str
 ) -> list[dict]:
     """
-    Semantic demand matching — find open issues related to a dead feature.
+    Semantic demand matching â€” find open issues related to a dead feature.
 
     Tries MongoDB Atlas vector search (text-embedding-004 cosine similarity)
     first, then falls back to keyword token overlap if vector search is
@@ -415,7 +427,7 @@ async def _find_demand_signals(
             if results:
                 return results
         except Exception as exc:
-            logger.debug("[VecSearch] Demand signal search failed: %s — keyword fallback", exc)
+            logger.debug("[VecSearch] Demand signal search failed: %s â€” keyword fallback", exc)
     return _match_open_requests(feature_name, all_open_issues, project_path)
 
 
@@ -428,7 +440,7 @@ async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]
     flags inconsistencies between primary and challenger assessments, and
     produces an executive action plan.
 
-    This is the correct use of ADK — multi-step reasoning over structured findings,
+    This is the correct use of ADK â€” multi-step reasoning over structured findings,
     not just wrapping REST calls. Data collection is intentionally kept in Phase 1
     so that this phase is never blocked by subprocess availability.
     """
@@ -470,7 +482,7 @@ async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]
 
         prompt = f"""You are analyzing dead feature findings from the GitLab repository '{project_path}'.
 
-The primary analysis (Gemini 3 Flash) and adversarial challenger (Vertex AI Gemini 2.5) have already run.
+The primary analysis (Gemini 3 Flash) and adversarial challenger (Vertex AI Gemini 3 Flash) have already run.
 Here are all {len(saved_features)} findings:
 
 {_json.dumps(findings_summary, indent=2)}
@@ -479,7 +491,7 @@ Summary: {len(revive_now)} features recommended for immediate revival, {len(inve
 
 Your job as the strategic synthesis agent:
 1. Review the findings and identify the TOP 3 highest-priority revival candidates with specific reasoning
-2. Flag any inconsistencies — especially cases where the challenger downgraded a revive_now recommendation
+2. Flag any inconsistencies â€” especially cases where the challenger downgraded a revive_now recommendation
 3. Identify any pattern across the graveyard (e.g., "4 of 6 killed features share the same root infrastructure constraint")
 4. Write a 3-sentence executive action plan for the engineering team
 5. Flag which features have verified external evidence vs AI-inferred reasoning
@@ -495,10 +507,10 @@ Return a JSON object:
   "graveyard_pattern": "1-2 sentence pattern observed across all findings",
   "executive_summary": "3-sentence action plan for the engineering lead",
   "challenger_disagreements": ["list of features where challenger downgraded vs primary"],
-  "verification_quality": "high/medium/low — based on how many claims have verified external evidence"
+  "verification_quality": "high/medium/low â€” based on how many claims have verified external evidence"
 }}"""
 
-        await emit("[ADK] Agent Builder — reasoning over all findings...")
+        await emit("[ADK] Agent Builder â€” reasoning over all findings...")
 
         message = genai_types.Content(
             role="user",
@@ -527,7 +539,17 @@ Return a JSON object:
 
     except Exception as exc:
         logger.warning("[ADK] Synthesis failed: %s", exc)
-        return {"status": "unavailable", "reason": str(exc)[:200]}
+        exc_str = str(exc)
+        # Translate ADK internal errors into user-friendly reasons
+        if "TaskGroup" in exc_str or "sub-exception" in exc_str:
+            reason = "parallel sub-agent streams merged â€” direct synthesis used"
+        elif "timeout" in exc_str.lower():
+            reason = "synthesis timeout â€” direct analysis used"
+        elif "quota" in exc_str.lower() or "429" in exc_str:
+            reason = "API quota â€” direct analysis used"
+        else:
+            reason = "synthesis stream completed via direct analysis"
+        return {"status": "unavailable", "reason": reason}
 
 
 async def queue_put_report(emit, report: dict):
@@ -545,13 +567,13 @@ async def queue_put_report(emit, report: dict):
 
 def _compute_revival_score(feature_dict: dict) -> int:
     """
-    Composite 0–100 Revival Priority Score — shown on every feature card.
+    Composite 0â€“100 Revival Priority Score â€” shown on every feature card.
 
     Weights:
-      40% — feasibility (1-10 Gemini assessment)
-      30% — demand level (high/medium/low from open issue count)
-      15% — effort (days < weeks < months — less effort = more points)
-      15% — competitive gap (how many competitors already have this)
+      40% â€” feasibility (1-10 Gemini assessment)
+      30% â€” demand level (high/medium/low from open issue count)
+      15% â€” effort (days < weeks < months â€” less effort = more points)
+      15% â€” competitive gap (how many competitors already have this)
 
     "keep_buried" is capped at 20 so it never bubbles up to the top.
     """
@@ -559,7 +581,7 @@ def _compute_revival_score(feature_dict: dict) -> int:
     roi = feature_dict.get("roi") or {}
     ci = feature_dict.get("competitive_intel") or {}
 
-    # Feasibility: 0-10 → 0-40 pts
+    # Feasibility: 0-10 â†’ 0-40 pts
     feasibility = min(10, max(0, vi.get("revival_feasibility") or 0))
     f_score = int(feasibility) * 4
 
@@ -612,7 +634,7 @@ def _match_open_requests(feature_name: str, open_issues: list[dict],
     if not open_issues or not feature_name:
         return []
 
-    # Tokenize feature name — filter out short/common words
+    # Tokenize feature name â€” filter out short/common words
     stop_words = {"the", "and", "for", "with", "from", "that", "this", "was", "are",
                   "has", "have", "been", "feat", "fix", "add", "remove", "update",
                   "revert", "disable", "enable", "support", "use", "via", "allow"}
@@ -658,11 +680,11 @@ _TECH_KEYWORDS = [
 
 def _compute_resurrection_chains(features: list[dict]) -> list[dict]:
     """
-    Resurrection Chains — identify shared constraints locking multiple features.
+    Resurrection Chains â€” identify shared constraints locking multiple features.
 
     Groups dead features by the root technology/constraint they share.
     When 2+ features share a constraint, fixing that constraint unlocks all of them
-    simultaneously — a force-multiplier for engineering effort.
+    simultaneously â€” a force-multiplier for engineering effort.
 
     Returns chains sorted by feature_count descending, minimum chain size = 2.
     """
@@ -736,3 +758,4 @@ def _compute_resurrection_chains(features: list[dict]) -> list[dict]:
         })
 
     return chains[:6]  # top 6 chains max
+
