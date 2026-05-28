@@ -160,6 +160,8 @@ function toggleStatusOverlay() {
         note: _lastHealth.gitlab_mcp === 'active' ? 'stdio' : 'no token' },
       { name: 'ADK Agent',         state: _lastHealth.adk_agent === 'initialized' ? 'ok' : 'warn',
         note: _lastHealth.adk_agent },
+      { name: 'Google Search',     state: _lastHealth.google_search === 'active' ? 'ok' : 'warn',
+        note: _lastHealth.google_search === 'active' ? 'grounded' : 'inactive' },
       { name: 'MongoDB Atlas',     state: _lastHealth.mongodb === 'connected' ? 'ok' : 'warn',
         note: _lastHealth.mongodb },
     ];
@@ -325,7 +327,7 @@ async function startScan() {
     toast('Scan failed — check console', 'error');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = 'RUN FORENSIC ARCHAEOLOGY';
+    btn.innerHTML = 'Run Forensic Scan';
   }
 }
 
@@ -410,7 +412,7 @@ async function loadDemoData(projectPath) {
     addTerminalLine(terminal, `ERROR: ${e.message}`, 'error');
     toast('Failed to load demo data', 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = 'LOAD PRE-ANALYZED FOSS REPORT'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Load Example Report'; }
   }
 }
 
