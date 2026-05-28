@@ -256,9 +256,33 @@ function setRepoUrl(url) {
   document.getElementById('repoUrl').focus();
 }
 
+/** Normalize any GitLab URL form to the bare namespace/project path */
+function normalizeGitLabPath(raw) {
+  let s = raw.trim();
+  // Strip .git suffix
+  s = s.replace(/\.git$/, '');
+  // If it's a URL, pull out the path portion after the host
+  try {
+    const u = new URL(s);
+    // e.g. https://gitlab.com/namespace/project  → /namespace/project
+    s = u.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
+  } catch (_) {
+    // Not a URL — treat as bare path, just clean slashes
+    s = s.replace(/^\/+/, '').replace(/\/+$/, '');
+  }
+  return s;
+}
+
 async function startScan() {
-  const url = document.getElementById('repoUrl').value.trim();
-  if (!url) { toast('Enter a GitLab repository URL', 'error'); return; }
+  const raw = document.getElementById('repoUrl').value.trim();
+  if (!raw) { toast('Enter a GitLab repository URL or namespace/project', 'error'); return; }
+  const url = normalizeGitLabPath(raw);
+  if (!url || !url.includes('/')) {
+    toast('Enter a full URL (https://gitlab.com/org/repo) or namespace/project', 'error');
+    return;
+  }
+  // Show the normalized path back in the input so users can see what was parsed
+  document.getElementById('repoUrl').value = url;
 
   const maxCommits = parseInt(document.getElementById('maxCommits').value) || 300;
   const lookbackMonths = parseInt(document.getElementById('lookbackMonths').value) || 24;
@@ -463,6 +487,18 @@ function renderReport(data) {
   document.getElementById('statRevive').textContent = reviveCt;
   document.getElementById('statInvestigate').textContent = investigateCt;
   document.getElementById('statBuried').textContent = buriedCt;
+
+  // Opportunity cost estimate: avg 40 engineer-hours × $150/hr per revival candidate
+  const roiCard = document.getElementById('statRoiCard');
+  const roiVal  = document.getElementById('statRoiValue');
+  if (roiCard && roiVal && (reviveCt + investigateCt) > 0) {
+    const totalCandidates = reviveCt + investigateCt;
+    const dollars = totalCandidates * 40 * 150;  // 40 hrs × $150/hr per feature
+    roiVal.textContent = '$' + (dollars >= 1000 ? (dollars / 1000).toFixed(0) + 'k' : dollars);
+    roiCard.style.display = '';
+  } else if (roiCard) {
+    roiCard.style.display = 'none';
+  }
 
   // Source badge + MCP audit badge
   if (data.source) {

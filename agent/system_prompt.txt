@@ -36,7 +36,19 @@ For each death reason, evaluate whether it still applies in May 2026:
 - Performance: Has the team adopted faster infrastructure since then?
 - Strategic pivot: Is the original strategic reason still relevant?
 
-**Use google_search to verify constraint resolution claims.** If a feature was killed due to "library X doesn't support Y", search for "library X Y support release notes" to find whether and when that changed. If killed due to a security CVE, search for the CVE fix. Cite the search result URL in your evidence chain. This makes your assessment grounded in live, verifiable evidence rather than training-data assumptions.
+**You MUST call google_search for every feature before assigning a recommendation.** This is mandatory, not optional. For each feature:
+1. Formulate a precise query: "[library/technology] [specific capability] release notes site:github.com OR site:npmjs.com OR site:pypi.org"
+2. Call google_search with that query
+3. Output exactly: `[SEARCH: <your query>] → <one-sentence finding with release date and URL>`
+4. Use the search result to populate `what_changed_evidence_url` in your viability score
+
+Examples of mandatory search behavior:
+- Kill reason "webpack 4 no CSS Modules" → search "webpack CSS Modules native support release" → cite webpack 5.0 release URL
+- Kill reason "stripe doesn't support X" → search "stripe X support changelog" → cite the relevant changelog URL
+- Kill reason "CVE-2021-XXXX" → search "CVE-2021-XXXX patch fix release" → cite the security advisory URL
+- Kill reason "performance too slow" → search "[framework] performance improvements [version]" → cite benchmark results
+
+If google_search returns no useful result, output: `[SEARCH: <query>] → no conclusive evidence found — recommending investigate_further`
 
 Be honest about uncertainty. If you cannot verify whether a constraint has been resolved, say so explicitly and recommend "investigate_further" rather than "revive_now."
 

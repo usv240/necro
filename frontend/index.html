@@ -183,7 +183,7 @@
               <div class="cyber-field field-url">
                 <label for="repoUrl">GitLab Repository URL</label>
                 <div class="input-glow-wrapper">
-                  <input type="text" id="repoUrl" class="cyber-input" placeholder="https://gitlab.com/org/repo" />
+                  <input type="text" id="repoUrl" class="cyber-input" placeholder="https://gitlab.com/org/repo  or  org/repo" />
                   <div class="input-border-glow"></div>
                 </div>
               </div>
@@ -423,6 +423,10 @@
           <div class="stat-card buried-stat">
             <div class="stat-value" id="statBuried">0</div>
             <div class="stat-label">Keep Buried</div>
+          </div>
+          <div class="stat-card roi-stat" id="statRoiCard" style="display:none" title="Rough estimate: avg 40 engineer-hours to rediscover + rebuild a shelved feature × $150/hr">
+            <div class="stat-value" id="statRoiValue" style="color:#34d399">—</div>
+            <div class="stat-label">Est. opportunity recovered</div>
           </div>
           <div class="stat-card" id="statSourceCard" style="display:none">
             <div class="stat-value" id="statSource" style="font-size:0.8rem"></div>

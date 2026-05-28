@@ -170,6 +170,7 @@ async def health():
         ],
         "mcp_tool_count": 19,
         "adk_agent": "initialized" if _runner is not None else "pending",
+        "google_search": "active",  # Built-in ADK tool — agent calls for live constraint verification
         "adk_endpoints": [
             "POST /api/agent/ask â€” freeform prompt to ADK agent",
             "POST /api/agent/revive â€” create GitLab revival issue via ADK + MCPToolset",
