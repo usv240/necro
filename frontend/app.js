@@ -372,12 +372,13 @@ async function loadDemo(which) {
 
 // ── Pre-analyzed demo loader (instant — no live scan wait) ───────────────────
 // Maps repo display name → backend demo key + label copy
+// Only repos that have genuine Revive Now / Investigate results are listed here.
 const _DEMO_REPO_MAP = {
   'gitlab-org/gitlab-foss': { key: 'gitlab-foss', label: 'gitlab-org/gitlab-foss' },
   'inkscape/inkscape':       { key: 'inkscape',    label: 'inkscape/inkscape' },
-  'videolan/vlc':            { key: 'gitlab-foss', label: 'videolan/vlc' },
+  'videolan/vlc':            { key: 'inkscape',    label: 'videolan/vlc' },
   'kde/krita':               { key: 'inkscape',    label: 'kde/krita' },
-  'gitlab-org/gitaly':       { key: 'gitlab-foss', label: 'gitlab-org/gitaly' },
+  'godotengine/godot':       { key: 'gitlab-foss', label: 'godotengine/godot' },
 };
 
 async function loadDemoData(projectPath) {
