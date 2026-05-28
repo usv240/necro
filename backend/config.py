@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # App
     APP_PORT: int = 8080
-    APP_URL: str = "https://necro-REPLACE.run.app"
+    APP_URL: str = "https://necro-agent-38381883054.us-central1.run.app"
     OUTPUT_DIR: str = "outputs"
     DEMO_MODE: bool = False
 
