@@ -5,7 +5,7 @@
 const INITIAL_SIMULATED_MESSAGES = [
   { t: 'NECRO Forensic Laboratory active // ADK orchestrator online', type: 'info' },
   { t: 'Google Cloud Gemini 3 Flash connection: STABLE · ping 45ms', type: 'gemini' },
-  { t: 'Vertex AI Gemini 2.5 Flash Adversarial agent: ACTIVE · monitoring target range', type: 'gemini' },
+  { t: 'Vertex AI Gemini 3 Flash Adversarial agent: ACTIVE · monitoring target range', type: 'gemini' },
   { t: 'MongoDB Atlas vector database clusters: SYNCED · 1,827 records mapped', type: 'mcp' },
   { t: 'GitLab Official MCP Server (SSE): CONNECTED · 10 tools active', type: 'mcp' },
   { t: '@zereight/mcp-gitlab (stdio): CONNECTED · 9 tools active · 19 total', type: 'mcp' },
@@ -192,7 +192,7 @@ function renderActiveIntegrations(h) {
   const slackStatus = h.slack === 'configured' ? 'active' : 'inactive';
   
   const geminiName = h.gemini_primary || 'Gemini 3 Flash';
-  const vertexName = h.gemini_fallback || 'Vertex AI Gemini 2.5';
+  const vertexName = h.gemini_fallback || 'Vertex AI Gemini 3 Flash';
 
   container.innerHTML = `
     <span class="tech-stack-label">Active integrations:</span>
