@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NECRO — Cyber-Forensic Laboratory</title>
+  <title>NECRO — Code Revival Intelligence</title>
   <meta name="description" content="AI agent that finds disabled features in GitLab repositories and evaluates revival viability using Gemini 3 Flash and GitLab MCP." />
 
   <!-- Apply theme before render to prevent flash -->
@@ -50,11 +50,11 @@
           <path d="M50,20 L50,40 M50,60 L50,80 M20,50 L40,50 M60,50 L80,50" stroke="url(#logo-grad)" stroke-width="2" />
           <polygon points="50,38 58,50 50,62 42,50" fill="url(#logo-grad)" filter="url(#logo-glow)" />
         </svg>
-        <div class="avatar-ring" style="position:absolute;inset:-3px;border:1px dashed var(--border-neon);border-radius:50%;animation:spin 16s linear infinite;z-index:1;"></div>
+        <!-- avatar-ring removed — was distracting, not informative -->
       </div>
       <div class="brand-text">
         <h1 class="brand-title">NECRO</h1>
-        <span class="brand-subtitle">DORMANT CODE RECOVERY</span>
+        <span class="brand-subtitle">Code Revival Intelligence</span>
       </div>
     </div>
 
@@ -175,8 +175,8 @@
         <div class="scanner-console-card">
           <div class="scanner-console-glow"></div>
           <div class="scanner-console-header">
-            <h3>DORMANT FEATURE RECOVERY SCANNER</h3>
-            <p>Paste any public GitLab URL to discover which disabled features are ready to revive — verified against live external evidence, not guesswork.</p>
+            <h3>Dormant Feature Scanner</h3>
+            <p>Paste any public GitLab URL to discover which disabled features are ready to revive — every finding is verified against live external evidence, not training-data guesses.</p>
           </div>
           <div class="scanner-console-body">
             <div class="scanner-form-row">
@@ -202,13 +202,13 @@
                 <div class="btn-with-hint">
                   <button class="btn-neon btn-scan" id="scanBtn" onclick="startScan()">
                     <span class="neon-glow-beam"></span>
-                    RUN FORENSIC ARCHAEOLOGY
+                    Run Forensic Scan
                   </button>
                   <span class="btn-hint">Paste any GitLab URL above → live ADK + Gemini scan</span>
                 </div>
                 <div class="btn-with-hint">
                   <button class="btn-cyber btn-demo" id="demoDataBtn" onclick="loadDemoData()">
-                    LOAD PRE-ANALYZED FOSS REPORT
+                    Load Example Report
                   </button>
                   <span class="btn-hint">Instant results — no URL needed</span>
                 </div>
@@ -352,7 +352,7 @@
                     <input type="number" id="groupMaxRepos" class="cyber-input" value="8" min="2" max="20" />
                   </div>
                   <button class="btn-neon btn-group-run" id="groupScanBtn" onclick="runGroupScan()">
-                    FEDERATE GRAVEYARDS
+                    Federate Graveyards
                   </button>
                 </div>
               </div>
@@ -436,7 +436,7 @@
 
         <!-- Filter bar -->
         <div class="filter-bar" id="filterBar" style="display:none">
-          <span class="filter-title">DISCOVERY FILTER:</span>
+          <span class="filter-title">Filter:</span>
           <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">All features</button>
           <button class="filter-btn revive-filter" data-filter="revive_now" onclick="setFilter('revive_now', this)">Revive Now</button>
           <button class="filter-btn investigate-filter" data-filter="investigate_further" onclick="setFilter('investigate_further', this)">Investigate</button>
@@ -456,7 +456,7 @@
         <!-- Graveyard Grid -->
         <div class="graveyard-grid" id="graveyardGrid">
           <div class="empty-state onboarding-card">
-            <div class="onboarding-badge">QUICK START</div>
+            <div class="onboarding-badge">Quick Start</div>
             <h3 class="onboarding-title">Your codebase has features you already paid for — but never shipped</h3>
             <p class="onboarding-desc">
               NECRO scans your GitLab commit history to find disabled features, then checks whether the original kill reason still applies today. Most teams discover 4–8 revivable features per scan.
@@ -484,7 +484,7 @@
             
             <div class="onboarding-cta">
               <button class="btn-neon" onclick="loadDemoData()">
-                LOAD PRE-ANALYZED FOSS DEMO REPORT
+                Load Example Report
               </button>
             </div>
           </div>
@@ -656,7 +656,7 @@
                 </p>
                 <!-- WOW FACTOR Interactive Buried ROI Calculator -->
                 <div class="roi-calculator-widget">
-                  <span class="widget-title">BURIED ASSET RECLAIM CALCULATOR</span>
+                  <span class="widget-title">Opportunity Cost Calculator</span>
                   <div class="calculator-slider">
                     <label for="devTeamSize">Engineering Team Size: <strong id="devCountLabel">25</strong> developers</label>
                     <input type="range" id="devTeamSize" min="5" max="300" value="25" class="cyber-range" oninput="calculateROI(this.value)" />
@@ -703,7 +703,7 @@
       <div class="console-header">
         <div class="header-left-group">
           <span class="console-dot-pulse"></span>
-          <span class="console-title">COORDINATOR AGENT INTELLIGENCE STREAM</span>
+          <span class="console-title">Agent Intelligence Stream</span>
         </div>
         <span class="console-status">ONLINE // ADK READY</span>
       </div>
