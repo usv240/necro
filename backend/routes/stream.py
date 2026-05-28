@@ -270,13 +270,16 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         assessments = await challenge_top_revival_candidates(revive_candidates[:3])
         for feat_dict, assessment in zip(revive_candidates[:3], assessments):
             feat_dict["challenger"] = assessment
-            # Apply challenger verdict to final recommendation so card counts are accurate
+            # Apply challenger verdict — advisory, not a veto.
+            # downgrade: challenger has concerns but primary recommendation stands.
+            # reject:    hard pushback — move one step down (revive_now -> investigate_further).
             _verdict = assessment.get("challenger_verdict", "")
             if _verdict == "reject":
-                feat_dict.setdefault("viability", {})["recommendation"] = "keep_buried"
-            elif _verdict == "downgrade":
-                feat_dict.setdefault("viability", {})["recommendation"] = "investigate_further"
-            # confirm -> leave revive_now unchanged
+                _cur = feat_dict.get("viability", {}).get("recommendation", "")
+                if _cur == "revive_now":
+                    feat_dict.setdefault("viability", {})["recommendation"] = "investigate_further"
+            # downgrade -> leave revive_now unchanged (challenger is advisory)
+            # confirm   -> unchanged
         await emit("Challenger Agent complete — independent adversarial review done")
 
     # â”€â”€ Phase 2: ADK Synthesis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
