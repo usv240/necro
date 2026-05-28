@@ -461,8 +461,8 @@ async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]
     from google.genai import types as genai_types
 
     try:
-        from agent.agent import get_runner
-        runner = get_runner()
+        from agent.agent import get_synthesis_runner
+        runner = get_synthesis_runner()
 
         session_id = f"synthesis-{uuid.uuid4().hex[:8]}"
         await runner.session_service.create_session(

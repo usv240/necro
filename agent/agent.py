@@ -315,6 +315,38 @@ def _build_agent() -> Agent:
     )
 
 
+# ── Lightweight synthesis runner (Phase 2) — no MCPToolsets ──────────────────
+# MCPToolsets try to connect to gitlab.com/-/ide/mcp at runtime and fail with
+# 302->403, crashing the TaskGroup. Synthesis only needs google_search, so we
+# build a separate agent with just FunctionTools + google_search.
+
+_synthesis_runner: Runner | None = None
+
+def get_synthesis_runner() -> Runner:
+    global _synthesis_runner
+    if _synthesis_runner is None:
+        from backend.config import settings
+        if not os.environ.get("GOOGLE_API_KEY") and settings.GEMINI_API_KEY:
+            os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
+
+        # gemini-2.5-flash supports google_search built-in tool.
+        # google_search cannot be mixed with FunctionTools in the same agent --
+        # synthesis only needs to reason over findings and optionally search.
+        _synthesis_agent = Agent(
+            name="necro_synthesis_agent",
+            model="gemini-2.5-flash",
+            instruction=_SYSTEM_PROMPT,
+            tools=[google_search],
+        )
+        _synthesis_runner = Runner(
+            agent=_synthesis_agent,
+            app_name="necro",
+            session_service=InMemorySessionService(),
+        )
+        logger.info("[OK] NECRO synthesis runner initialized (model: gemini-2.5-flash, tool: google_search)")
+    return _synthesis_runner
+
+
 def get_runner() -> Runner:
     global _runner, _agent
     if _runner is None:
