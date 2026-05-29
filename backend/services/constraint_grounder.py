@@ -195,28 +195,78 @@ async def ground_constraint(constraint_text: str, kill_date: str) -> dict:
     return grounding
 
 
+# Keywords that collide with common English words. These ONLY match if they appear
+# adjacent to a tech-context marker (library, package, version, v1.2.3, etc.).
+# Without this guard, prose like "all requests are routed" would match the `requests`
+# PyPI package and fabricate a grounding URL — a real bug we hit in production.
+_AMBIGUOUS_TECH_WORDS = {
+    "requests", "flask", "node", "next", "vue", "apollo", "react",
+    "express", "remix", "astro", "celery", "babel", "prisma",
+    "redis", "docker", "ansible", "graphql", "next.js",
+}
+
+# Whole-word tokens that signal the surrounding text is talking ABOUT a technology
+# rather than using an English word that happens to match a package name.
+_TECH_CONTEXT_RE = re.compile(
+    r"\b("
+    r"librar(?:y|ies)|package|module|framework|sdk|api"
+    r"|version|v\d+(?:\.\d+)*|upgrade[ds]?|upgrading|migrat(?:e|ed|ion|ing)"
+    r"|deprecat(?:e|ed|ion|ing)|release[ds]?|installed?|installing"
+    r"|depend(?:ency|encies|s\s+on)|import(?:s|ed)?|requires?|requiring"
+    r"|npm|pip|pypi|registry|changelog|breaking\s+change"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _has_tech_context(keyword: str, text_lower: str) -> bool:
+    """Check if `keyword` appears near a tech-marker word — i.e. the prose is talking
+    about a technology, not using the word in its plain English sense."""
+    pattern = re.compile(rf"\b{re.escape(keyword)}\b", re.IGNORECASE)
+    for m in pattern.finditer(text_lower):
+        start = max(0, m.start() - 40)
+        end = min(len(text_lower), m.end() + 40)
+        if _TECH_CONTEXT_RE.search(text_lower[start:end]):
+            return True
+    return False
+
+
 def _identify_technology(text: str) -> tuple[str, str]:
     """
     Extract the main technology keyword from a constraint description.
     Returns (technology_name, lookup_type) where lookup_type is "npm"|"github"|"pypi"|"".
+
+    Uses whole-word matching (not substring) and requires a tech-context marker
+    for keywords that collide with common English words (e.g. "requests", "node").
     """
     text_lower = text.lower()
 
-    # Priority: exact keyword match in known maps
-    for key in sorted(_GITHUB_REPOS.keys(), key=len, reverse=True):
-        if key in text_lower:
-            # Determine best lookup type
-            if key in _NPM_CANONICAL:
-                return key, "npm"
-            return key, "github"
+    def _try_match(keys, lookup_type_fn):
+        for key in sorted(keys, key=len, reverse=True):
+            if not re.search(rf"\b{re.escape(key)}\b", text_lower):
+                continue
+            if key in _AMBIGUOUS_TECH_WORDS and not _has_tech_context(key, text_lower):
+                continue
+            return key, lookup_type_fn(key)
+        return "", ""
 
-    for key in sorted(_NPM_CANONICAL.keys(), key=len, reverse=True):
-        if key in text_lower:
-            return key, "npm"
+    # Priority 1: keywords in GITHUB_REPOS (richest metadata)
+    key, ltype = _try_match(
+        _GITHUB_REPOS.keys(),
+        lambda k: "npm" if k in _NPM_CANONICAL else "github",
+    )
+    if key:
+        return key, ltype
 
-    for key in sorted(_PYPI_PACKAGES.keys(), key=len, reverse=True):
-        if key in text_lower:
-            return key, "pypi"
+    # Priority 2: npm-only keywords
+    key, _ = _try_match(_NPM_CANONICAL.keys(), lambda _k: "npm")
+    if key:
+        return key, "npm"
+
+    # Priority 3: pypi-only keywords
+    key, _ = _try_match(_PYPI_PACKAGES.keys(), lambda _k: "pypi")
+    if key:
+        return key, "pypi"
 
     # Heuristic: extract "X package", "X library", "X API", "X SDK"
     m = re.search(
@@ -227,7 +277,8 @@ def _identify_technology(text: str) -> tuple[str, str]:
         name = m.group(1).strip("'\"")
         return name, "npm"
 
-    # Version mentions: "React 18", "PostgreSQL 15", "Node 20"
+    # Version mentions: "React 18", "PostgreSQL 15", "Node 20" — the trailing digit
+    # itself is the tech-context signal, so these are safe without _has_tech_context.
     m = re.search(r"\b(react|vue|angular|django|flask|node|postgres|redis)\s+\d+", text_lower)
     if m:
         name = m.group(1)

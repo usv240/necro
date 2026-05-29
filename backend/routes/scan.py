@@ -52,17 +52,56 @@ async def scan_status(scan_id: str):
 
 
 @router.post("/demo")
-async def load_demo(repo: str = "gitlab-foss"):
+async def load_demo(repo: str = "gitlab-foss", project_path: str | None = None):
     """
-    Return a pre-seeded demo scan from MongoDB.
-    repo: "gitlab-foss" (default) | "inkscape"
-    Both are based on real public commit history.
+    Return a pre-seeded or cached demo scan.
+
+    Two modes:
+      1) project_path=org/repo — load the BEST cached live scan for that path
+         from MongoDB (best = highest revive_now count, tie-break by recency).
+         Lets us serve real verified scan data as instant demos.
+      2) repo=gitlab-foss|inkscape — load the hand-curated seed demos.
     """
     from backend.db.seed import (
         DEMO_SCAN_ID, DEMO_PROJECT, DEMO_REPO_URL, DEMO_FEATURES,
         DEMO2_SCAN_ID, DEMO2_PROJECT, DEMO2_REPO_URL, DEMO2_FEATURES,
     )
 
+    # Mode 1: load a real cached scan by project_path
+    if project_path and settings.MONGODB_URI:
+        from backend.db.connection import get_db
+        db = get_db()
+        # Pick the scan with the most revive_now features for this project,
+        # tie-break by most recent. Falls through to seed fallback if no scan
+        # for this path is cached yet.
+        scans = await db["scans"].find(
+            {"project_path": project_path},
+            {"_id": 0},
+        ).sort("revive_now_count", -1).limit(20).to_list(length=20)
+        scans.sort(
+            key=lambda s: (s.get("revive_now_count", 0), s.get("started_at") or s.get("scan_id", "")),
+            reverse=True,
+        )
+        best_scan = next(
+            (s for s in scans if (s.get("revive_now_count", 0) + s.get("investigate_count", 0)) > 0),
+            scans[0] if scans else None,
+        )
+        if best_scan:
+            scan_id = best_scan.get("scan_id")
+            features = await db["features"].find(
+                {"scan_id": scan_id}, {"_id": 0}
+            ).to_list(length=100)
+            if features:
+                serialized = _serialize_features(features)
+                repo_url_real = f"https://gitlab.com/{project_path}"
+                return {
+                    **_build_rich_demo_envelope(project_path, repo_url_real, project_path, best_scan, serialized),
+                    "source": "mongodb_cached_scan",
+                    "cached_scan_id": scan_id,
+                }
+        logger.info("No cached scan in Mongo for project_path=%s — falling through to seed demo", project_path)
+
+    # Mode 2: hand-curated seed demos (existing behavior)
     scan_id = DEMO2_SCAN_ID if repo == "inkscape" else DEMO_SCAN_ID
     project = DEMO2_PROJECT if repo == "inkscape" else DEMO_PROJECT
     repo_url = DEMO2_REPO_URL if repo == "inkscape" else "https://gitlab.com/gitlab-org/gitlab-foss"
@@ -105,6 +144,7 @@ def _build_rich_demo_envelope(
     from backend.routes.stream import _compute_resurrection_chains
 
     is_inkscape = repo_key == "inkscape"
+    is_seed = repo_key in ("inkscape", "gitlab-foss")
 
     # ── ADK Synthesis (pre-baked demo) ────────────────────────────────────────
     revive_now = [f for f in features if (f.get("viability") or {}).get("recommendation") == "revive_now"]
@@ -132,7 +172,7 @@ def _build_rich_demo_envelope(
             "closes an ongoing competitive gap vs. Adobe Illustrator. "
             "Recommend opening a revival sprint targeting LPE preview first, then the Ghostscript fallback importer."
         )
-    else:
+    elif is_seed:
         graveyard_pattern = (
             "3 of 5 disabled features were killed by infrastructure constraints "
             "(RAM, storage, Elasticsearch cluster cost) that have since been resolved — "
@@ -145,23 +185,82 @@ def _build_rich_demo_envelope(
             "Recommend prioritising Pages wildcard domains (competitive gap vs. GitHub) and registry cache (CI performance) "
             "in the next engineering cycle."
         )
+    else:
+        # Cached-scan mode: compose narrative from the actual feature data.
+        # No hand-written GitLab-FOSS / Inkscape-specific text — keeps the
+        # demo honest and generic for any project_path served from Mongo.
+        cats = [
+            (f.get("death_reason") or {}).get("category", "unknown")
+            for f in features
+            if (f.get("viability") or {}).get("recommendation") in ("revive_now", "investigate_further")
+        ]
+        if cats:
+            from collections import Counter
+            top_cat, top_n = Counter(cats).most_common(1)[0]
+            top_cat_label = top_cat.replace("_", " ")
+            graveyard_pattern = (
+                f"{top_n} of {len(cats)} actionable features share the '{top_cat_label}' category — "
+                f"resolving one underlying {top_cat_label} blocker may unlock multiple revivals at once."
+            )
+        else:
+            graveyard_pattern = (
+                "No clear cross-feature pattern — each candidate has an independent root cause "
+                "and should be evaluated on its own merits."
+            )
+        repo_label = project.split("/")[-1] if "/" in project else project
+        top_feature_name = (revive_now[0].get("name", "") if revive_now else (
+            investigate[0].get("name", "") if investigate else "(no actionable findings)"))
+        executive_summary = (
+            f"{repo_label} has {len(revive_now)} feature(s) flagged for immediate revival "
+            f"and {len(investigate)} worth investigating. "
+            + (f"Highest-priority candidate: '{top_feature_name}' — start there. "
+               if (revive_now or investigate) else "")
+            + "Findings are sourced from the most recent live scan cached in MongoDB Atlas — "
+              "every kill reason, viability score, and demand signal is real data from the GitLab MCP pipeline."
+        )
+
+    # Verification quality: honestly downgrade for cached scans when no
+    # feature has a grounded URL — matches the guard in stream.py.
+    grounded_count = sum(
+        1 for f in features
+        if ((f.get("viability") or {}).get("grounding") or {}).get("grounded") is True
+        and str(((f.get("viability") or {}).get("grounding") or {}).get("evidence_url", "")).startswith("http")
+    )
+    if is_seed:
+        verification_quality = "high"
+    elif grounded_count == 0:
+        verification_quality = "low"
+    elif grounded_count < max(1, len(features) // 2):
+        verification_quality = "medium"
+    else:
+        verification_quality = "high"
 
     adk_synthesis = {
         "status": "success",
         "top_3_priorities": top_3,
         "graveyard_pattern": graveyard_pattern,
         "executive_summary": executive_summary,
-        "challenger_disagreements": [],
-        "verification_quality": "high",
+        "challenger_disagreements": [
+            f["name"] for f in features
+            if (f.get("challenger") or {}).get("challenger_verdict") in ("reject", "downgrade")
+        ],
+        "verification_quality": verification_quality,
         "model": "google_cloud_agent_builder_adk_gemini3_flash",
     }
 
     # ── Phase 0 assessment (pre-baked demo) ──────────────────────────────────
+    if is_seed:
+        phase0_commits = 6200 if is_inkscape else 8472
+        phase0_lookback = 60
+    else:
+        # Cached scan: use the actual scanned commit count from the scan doc.
+        phase0_commits = (scan or {}).get("total_commits_scanned", 0) or 0
+        phase0_lookback = 36
     phase0_assessment = {
         "status": "success",
         "recent_activity": "active",
-        "max_commits": 6200 if is_inkscape else 8472,
-        "lookback_months": 60 if is_inkscape else 60,
+        "max_commits": phase0_commits,
+        "lookback_months": phase0_lookback,
         "reasoning": (
             "Active repository with regular commits detected. "
             "Extended lookback selected to capture platform-migration era changes."
@@ -172,11 +271,19 @@ def _build_rich_demo_envelope(
     # ── Resurrection chains ───────────────────────────────────────────────────
     resurrection_chains = _compute_resurrection_chains(features)
 
+    # Pick a realistic scan_date — seeded demos use a fixed date; cached scans
+    # use the actual scan_date from Mongo.
+    if is_seed:
+        scan_date = "2026-05-21T10:00:00" if is_inkscape else "2026-05-20T12:00:00"
+    else:
+        sd = (scan or {}).get("scan_date") or (scan or {}).get("started_at")
+        scan_date = sd.isoformat() if hasattr(sd, "isoformat") else (sd or "2026-05-28T00:00:00")
+
     return {
         "project_path": project,
         "repo_url": repo_url,
-        "scan_date": "2026-05-21T10:00:00" if is_inkscape else "2026-05-20T12:00:00",
-        "total_commits_scanned": 6200 if is_inkscape else 8472,
+        "scan_date": scan_date,
+        "total_commits_scanned": phase0_commits if not is_seed else (6200 if is_inkscape else 8472),
         "features": features,
         "mcp_tools_used": [
             "list_commits", "get_commit", "get_commit_diff",

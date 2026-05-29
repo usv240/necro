@@ -59,6 +59,9 @@ outputs/*.md
 outputs/*.json
 !outputs/.gitkeep
 
+# CI quick-scan artifact (written at runtime, consumed by .gitlab-ci.yml)
+necro-report.json
+
 # Logs
 *.log
 *.log.*
@@ -79,3 +82,6 @@ Desktop.ini
 
 
 DEPTH.md
+
+# Internal feature design docs (not part of public submission)
+NECROSIS_FEATURE.md

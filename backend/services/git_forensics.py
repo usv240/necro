@@ -205,6 +205,20 @@ async def detect_dead_features(
         await emit(f"Filtered {fresh_count} features killed in last 60 days (too recent for viability)")
     unique = aged
 
+    # Garbage-name filter: drop candidates whose extracted name is clearly not a feature
+    # (usernames, linter pragmas, dangling prepositions from bad slice extraction, etc.).
+    # These produce embarrassing false positives in the UI and waste Gemini calls.
+    garbage_count = 0
+    clean: list[DeadFeature] = []
+    for f in unique:
+        if _is_garbage_feature_name(f.name):
+            garbage_count += 1
+        else:
+            clean.append(f)
+    if garbage_count:
+        await emit(f"Filtered {garbage_count} garbage-name candidates (usernames/pragmas/dangling prepositions)")
+    unique = clean
+
     await emit(f"Found {len(unique)} raw candidates — enriching with MR/issue context and scoring signal quality...")
 
     # Enrich each candidate with linked MR notes and issue context
@@ -639,6 +653,69 @@ async def _enrich_feature(feat: DeadFeature, project_path: str, emit, log_mcp=No
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
+
+
+# Tokens that signal an extracted "feature name" is actually noise.
+# Triggered by real production false-positives we observed on gitlab-pages:
+#   "@vshushlin as the pages maintainer"  → person stepping down, not a feature
+#   "from gitlab-pages"                   → name-extraction sliced the wrong half
+#   "gocyclo:ignore"                      → Go linter directive
+#   "local serving type"                  → too generic to be a feature
+_GARBAGE_LEADING_PREPOSITIONS = {
+    "from", "to", "for", "as", "by", "of", "in", "on", "with", "at", "the", "a", "an",
+}
+
+_LINTER_PRAGMA_RE = re.compile(
+    r"^(gocyclo|nolint|noqa|eslint(?:-disable)?|prettier-ignore|fmt[:\.]|"
+    r"pragma|//\s*ts-(?:ignore|expect-error)|@ts-(?:ignore|expect-error)|"
+    r"@?suppress(?:warnings)?)",
+    re.IGNORECASE,
+)
+
+_PERSONAL_ROLE_RE = re.compile(
+    r"\b(maintainer|owner|reviewer|approver|codeowner|admin)s?\b",
+    re.IGNORECASE,
+)
+
+
+def _is_garbage_feature_name(name: str) -> bool:
+    """Reject names that are clearly not features — pre-Gemini filter to avoid
+    false positives in the UI and wasted analysis calls.
+
+    Hard rejects:
+      * empty / too short / pure whitespace
+      * starts with @ (a GitLab username, not a feature)
+      * starts with a preposition (slice extraction picked the wrong half)
+      * matches a linter/compiler pragma
+      * is purely role-change wording (maintainer stepping down)
+    """
+    if not name or not name.strip():
+        return True
+    stripped = name.strip()
+    if len(stripped) < 4:
+        return True
+
+    # Username — never a feature
+    if stripped.startswith("@"):
+        return True
+
+    lower = stripped.lower()
+    tokens = re.split(r"[\s_\-]+", lower)
+    if tokens and tokens[0] in _GARBAGE_LEADING_PREPOSITIONS:
+        return True
+
+    if _LINTER_PRAGMA_RE.match(lower):
+        return True
+
+    # Pure role-change phrasing — "X as the pages maintainer", "Remove Y as owner"
+    # If the name contains a personal-role token and no feature-ish noun, drop it.
+    if _PERSONAL_ROLE_RE.search(lower) and not re.search(
+        r"\b(feature|flag|api|page|toggle|setting|option|module|service|integration)\b",
+        lower,
+    ):
+        return True
+
+    return False
 
 
 def _extract_feature_name_from_message(msg: str) -> str:

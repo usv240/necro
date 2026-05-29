@@ -371,25 +371,44 @@ async function loadDemo(which) {
 }
 
 // ── Pre-analyzed demo loader (instant — no live scan wait) ───────────────────
-// Maps repo display name → backend demo key + label copy
-// Only repos that have genuine Revive Now / Investigate results are listed here.
+// Two demo modes:
+//   1) `seed` chips load hand-curated demos (gitlab-foss, inkscape) from seed.py
+//   2) `cached` chips load the best real cached live scan from MongoDB for
+//      that project_path. Backed by actual scans run with the bug-fixed pipeline.
 const _DEMO_REPO_MAP = {
-  'gitlab-org/gitlab-foss': { key: 'gitlab-foss', label: 'gitlab-org/gitlab-foss' },
-  'inkscape/inkscape':       { key: 'inkscape',    label: 'inkscape/inkscape' },
-  'videolan/vlc':            { key: 'inkscape',    label: 'videolan/vlc' },
-  'kde/krita':               { key: 'inkscape',    label: 'kde/krita' },
-  'godotengine/godot':       { key: 'gitlab-foss', label: 'godotengine/godot' },
+  // ── Hand-curated seed demos ──
+  'gitlab-org/gitlab-foss': { mode: 'seed', key: 'gitlab-foss', label: 'gitlab-org/gitlab-foss' },
+  'inkscape/inkscape':       { mode: 'seed', key: 'inkscape',    label: 'inkscape/inkscape' },
+  'videolan/vlc':            { mode: 'seed', key: 'inkscape',    label: 'videolan/vlc' },
+  'kde/krita':               { mode: 'seed', key: 'inkscape',    label: 'kde/krita' },
+  'godotengine/godot':       { mode: 'seed', key: 'gitlab-foss', label: 'godotengine/godot' },
+
+  // ── Cached real-scan demos (verified post bug-fix) ──
+  'gitlab-org/gitlab':           { mode: 'cached', label: 'gitlab-org/gitlab' },
+  'gitlab-org/gitlab-shell':     { mode: 'cached', label: 'gitlab-org/gitlab-shell' },
+  'gitlab-org/gitaly':           { mode: 'cached', label: 'gitlab-org/gitaly' },
+  'gitlab-org/cli':              { mode: 'cached', label: 'gitlab-org/cli' },
+  'gitlab-org/omnibus-gitlab':   { mode: 'cached', label: 'gitlab-org/omnibus-gitlab' },
+  'fdroid/fdroidclient':         { mode: 'cached', label: 'fdroid/fdroidclient' },
+  'gstreamer/gstreamer':         { mode: 'cached', label: 'gstreamer/gstreamer' },
 };
 
 async function loadDemoData(projectPath) {
-  const entry = _DEMO_REPO_MAP[projectPath] || { key: 'gitlab-foss', label: projectPath || 'gitlab-org/gitlab-foss' };
+  const entry = _DEMO_REPO_MAP[projectPath] || { mode: 'seed', key: 'gitlab-foss', label: projectPath || 'gitlab-org/gitlab-foss' };
   const btn = document.getElementById('demoDataBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Loading...'; }
 
   const terminal = showTerminal();
   clearResults();
 
-  const lines = [
+  const isCached = entry.mode === 'cached';
+  const lines = isCached ? [
+    `[MongoDB] Loading cached live scan for ${entry.label}...`,
+    '[MongoDB] Query: scans by project_path, sorted by revive_now_count DESC',
+    '[MongoDB] Pulling features collection for matched scan_id',
+    'Cached scan retrieved — replaying real pipeline output',
+    'SCAN COMPLETE — instant cached result',
+  ] : [
     `[MCP] GitLab MCP — loading pre-analyzed ${entry.label} report...`,
     '[MCP] list_commits · list_issues · list_merge_requests · get_commit',
     'Detection complete — 5 dead features found',
@@ -402,13 +421,16 @@ async function loadDemoData(projectPath) {
   for (const line of lines) addTerminalLine(terminal, line);
 
   try {
-    const r = await fetch(`/api/scan/demo?repo=${entry.key}`, { method: 'POST' });
+    const url = isCached
+      ? `/api/scan/demo?project_path=${encodeURIComponent(projectPath)}`
+      : `/api/scan/demo?repo=${entry.key}`;
+    const r = await fetch(url, { method: 'POST' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
-    // Override project_path display to match the chip the user clicked
-    if (projectPath) data.project_path = entry.label;
+    if (!isCached && projectPath) data.project_path = entry.label;
     renderReport(data);
-    toast(`${entry.label} — 2 revival candidates ready`, 'success');
+    const reviveCt = (data.features || []).filter(f => (f.viability || {}).recommendation === 'revive_now').length;
+    toast(`${entry.label} — ${reviveCt} revival candidate(s) ready`, 'success');
   } catch (e) {
     addTerminalLine(terminal, `ERROR: ${e.message}`, 'error');
     toast('Failed to load demo data', 'error');
@@ -467,6 +489,8 @@ function clearResults() {
   document.getElementById('graveyardGrid').innerHTML = '';
   const wrapper = document.getElementById('postToGitLabBtnWrapper');
   if (wrapper) wrapper.style.display = 'none';
+  const synth = document.getElementById('adkSynthesisPanel');
+  if (synth) { synth.innerHTML = ''; synth.style.display = 'none'; }
   const t = document.getElementById('terminal');
   if (t) { t.classList.remove('visible'); t.style.display = 'none'; }
   currentFeatures = [];

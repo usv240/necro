@@ -229,6 +229,13 @@
                     <span class="chip-row-desc">Pre-analyzed — loads in 1 second, no API calls needed</span>
                   </div>
                   <div class="quick-buttons" id="quickRepoFeatured">
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab')">gitlab</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab-shell')">gitlab-shell</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitaly')">gitaly</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/cli')">gitlab-cli</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('fdroid/fdroidclient')">fdroid-client</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gstreamer/gstreamer')">gstreamer</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/omnibus-gitlab')">omnibus-gitlab</button>
                     <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab-foss')">gitlab-foss</button>
                     <button class="chip-neon chip-featured" onclick="loadDemoData('inkscape/inkscape')">inkscape</button>
                     <button class="chip-neon chip-featured" onclick="loadDemoData('videolan/vlc')">vlc</button>
@@ -241,12 +248,12 @@
                   <div class="chip-row-label">
                     <span class="chip-row-icon live-icon">●</span>
                     <span class="chip-row-title">Live scan</span>
-                    <span class="chip-row-desc">Real GitLab MCP + ADK + Gemini pipeline — takes ~60–90 seconds</span>
+                    <span class="chip-row-desc">Real GitLab MCP + ADK + Gemini pipeline — 90s to 4 min depending on candidates found</span>
                   </div>
                   <div class="quick-buttons">
-                    <button class="chip-live" onclick="quickScan('godotengine/godot', 120, 36)">godot</button>
-                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-runner', 120, 36)">gitlab-runner</button>
-                    <button class="chip-live" onclick="quickScan('gstreamer/gstreamer', 100, 36)">gstreamer</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab', 200, 24)">gitlab</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-shell', 100, 36)">gitlab-shell</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitaly', 150, 36)">gitaly</button>
                     <button class="chip-live" onclick="quickScan('gitlab-org/container-registry', 150, 36)">container-registry</button>
                     <button class="chip-more" id="moreReposToggle" onclick="toggleMoreRepos()">+ more</button>
                   </div>
@@ -255,82 +262,41 @@
                 <!-- Expanded repo browser -->
                 <div class="repo-browser" id="repoBrowser" style="display:none">
                   <div class="repo-browser-header">
-                    <span class="rb-title">Demo Repositories</span>
+                    <span class="rb-title">Verified repositories on gitlab.com</span>
                     <button class="rb-close" onclick="toggleMoreRepos()">close</button>
                   </div>
 
                   <div class="repo-category">
-                    <div class="repo-cat-label">GitLab Platform</div>
+                    <div class="repo-cat-label">★ Proven Revive Now producers</div>
                     <div class="repo-cat-chips">
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-foss', 80, 24)">gitlab-foss</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-runner', 120, 36)">gitlab-runner</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab', 200, 24)">gitlab</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-shell', 100, 36)">gitlab-shell</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitaly', 150, 36)">gitaly</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/cli', 80, 24)">gitlab-cli</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('fdroid/fdroidclient', 50, 18)">fdroid-client</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gstreamer/gstreamer', 100, 36)">gstreamer</button>
                       <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/omnibus-gitlab', 100, 36)">omnibus-gitlab</button>
+                    </div>
+                  </div>
+
+                  <div class="repo-category">
+                    <div class="repo-cat-label">Investigate-only (single dormant finding)</div>
+                    <div class="repo-cat-chips">
+                      <button class="chip-neon chip-sm" onclick="pickRepo('fdroid/fdroidserver', 50, 18)">fdroid-server</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('godotengine/godot', 120, 36)">godot</button>
                       <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-pages', 80, 36)">gitlab-pages</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-workhorse', 80, 36)">gitlab-workhorse</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-foss', 80, 24)">gitlab-foss</button>
                       <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/container-registry', 150, 36)">container-registry</button>
                     </div>
                   </div>
 
                   <div class="repo-category">
-                    <div class="repo-cat-label">Creative &amp; Design</div>
+                    <div class="repo-cat-label">Mature codebases (mostly keep-buried)</div>
                     <div class="repo-cat-chips">
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-runner', 120, 36)">gitlab-runner</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-workhorse', 80, 36)">gitlab-workhorse</button>
                       <button class="chip-neon chip-sm" onclick="pickRepo('inkscape/inkscape', 60, 18)">inkscape</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('kde/krita', 60, 18)">krita</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('GNOME/gimp', 60, 18)">gimp</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('blender/blender', 60, 12)">blender</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('rawtherapee/rawtherapee', 50, 18)">rawtherapee</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('darktable-org/darktable', 50, 18)">darktable</button>
-                    </div>
-                  </div>
-
-                  <div class="repo-category">
-                    <div class="repo-cat-label">Media &amp; Streaming</div>
-                    <div class="repo-cat-chips">
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gstreamer/gstreamer', 100, 36)">gstreamer</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('videolan/vlc', 100, 36)">vlc</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('videolan/dav1d', 80, 36)">dav1d</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('ffmpeg/ffmpeg', 100, 36)">ffmpeg</button>
-                    </div>
-                  </div>
-
-                  <div class="repo-category">
-                    <div class="repo-cat-label">GNOME Desktop</div>
-                    <div class="repo-cat-chips">
-                      <button class="chip-neon chip-sm" onclick="pickRepo('GNOME/gnome-music', 50, 18)">gnome-music</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('GNOME/nautilus', 50, 18)">nautilus</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('GNOME/evolution', 50, 18)">evolution</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('GNOME/gedit', 50, 18)">gedit</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('GNOME/gnome-calendar', 50, 18)">gnome-calendar</button>
-                    </div>
-                  </div>
-
-                  <div class="repo-category">
-                    <div class="repo-cat-label">KDE Desktop</div>
-                    <div class="repo-cat-chips">
-                      <button class="chip-neon chip-sm" onclick="pickRepo('kde/dolphin', 50, 18)">dolphin</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('kde/kate', 50, 18)">kate</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('kde/plasma-workspace', 60, 12)">plasma-workspace</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('kde/kdenlive', 60, 18)">kdenlive</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('kde/okular', 50, 18)">okular</button>
-                    </div>
-                  </div>
-
-                  <div class="repo-category">
-                    <div class="repo-cat-label">Developer Tools</div>
-                    <div class="repo-cat-chips">
-                      <button class="chip-neon chip-sm" onclick="pickRepo('fdroid/fdroidclient', 50, 18)">fdroid</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('tmate-io/tmate', 50, 18)">tmate</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('wireshark/wireshark', 60, 12)">wireshark</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/cli', 50, 12)">gitlab-cli</button>
-                    </div>
-                  </div>
-
-                  <div class="repo-category">
-                    <div class="repo-cat-label">Security &amp; Infra</div>
-                    <div class="repo-cat-chips">
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/container-registry', 50, 12)">container-registry</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('ansible/ansible', 60, 12)">ansible</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('hashicorp/vault', 60, 12)">vault</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('meltano/meltano', 100, 24)">meltano</button>
                     </div>
                   </div>
                 </div>

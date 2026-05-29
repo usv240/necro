@@ -297,6 +297,23 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         await emit("[ADK] âœ“ Agent Builder synthesis complete — executive summary ready")
         orchestrated_by = "google_cloud_agent_builder_adk"
         await _apply_synthesis_verdicts(saved_features, adk_synthesis, emit)
+        # Guard the verification_quality badge against overstating evidence.
+        # The ADK self-reports "high" based on its own confidence, but if no feature
+        # in the report has a real grounded URL, the badge should not claim "high".
+        # Without this guard, judges click an evidence URL and see no actual evidence.
+        _grounded_count = sum(
+            1 for _f in saved_features
+            if _f.get("viability", {}).get("grounding", {}).get("grounded") is True
+            and str(_f.get("viability", {}).get("grounding", {}).get("evidence_url", "")).startswith("http")
+        )
+        _vq = (adk_synthesis.get("verification_quality") or "").lower()
+        if _grounded_count == 0 and _vq == "high":
+            adk_synthesis["verification_quality"] = "low"
+            await emit("[ADK] Verification badge downgraded high → low (no Phase 1 grounded URLs)")
+        elif _grounded_count == 0 and _vq == "medium":
+            adk_synthesis["verification_quality"] = "low"
+        elif _grounded_count > 0 and _grounded_count < max(1, len(saved_features) // 2) and _vq == "high":
+            adk_synthesis["verification_quality"] = "medium"
     else:
         await emit(f"[ADK] Agent Builder synthesis complete — {adk_synthesis.get('reason', 'direct analysis pipeline')}")
         orchestrated_by = "direct_pipeline_with_adk_synthesis_attempted"
