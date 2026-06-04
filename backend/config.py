@@ -9,11 +9,16 @@ class Settings(BaseSettings):
     GITLAB_TOKEN: str = ""
     GITLAB_URL: str = "https://gitlab.com"
 
+    # GitHub (read-only, public data) — used by the constraint grounder to verify
+    # upstream dependency releases. Optional, but lifts the GitHub API rate limit
+    # from 60/hr (unauthenticated) to 5,000/hr so grounding never flakes mid-demo.
+    GITHUB_TOKEN: str = ""
+
     # Google Cloud / Gemini
     GOOGLE_PROJECT_ID: str = ""
     GOOGLE_LOCATION: str = "us-central1"
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3-flash-preview"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     # MongoDB Atlas
     MONGODB_URI: str = ""

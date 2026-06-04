@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import OUTPUT_PATH, settings
-from backend.routes import report, revive, scan, stream, watch, monitor as monitor_route, agent as agent_route
+from backend.routes import report, revive, scan, stream, watch, monitor as monitor_route, agent as agent_route, necrosis
 from backend.services.gitlab_mcp import mcp
 from backend.services.monitor import start_monitor, stop_monitor
 
@@ -104,6 +104,7 @@ app.include_router(revive.router, prefix="/api/revive", tags=["revive"])
 app.include_router(agent_route.router, prefix="/api/agent", tags=["agent"])
 app.include_router(watch.router, prefix="/api/watch", tags=["watch"])
 app.include_router(monitor_route.router, prefix="/api/monitor", tags=["monitor"])
+app.include_router(necrosis.router, prefix="/api/necrosis", tags=["necrosis"])
 
 # â”€â”€ NECRO as MCP Server — bidirectional GitLab integration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NECRO calls GitLab's MCP server (Phase 1) AND exposes its own MCP endpoint
@@ -185,7 +186,7 @@ async def health():
         "slack": "configured" if settings.SLACK_BOT_TOKEN else "not configured",
         "monitor": get_monitor_status(),
         "gemini_primary": "gemini-3-flash-preview",
-        "gemini_fallback": "gemini-3-flash-preview (vertex-ai)",
+        "gemini_fallback": "gemini-2.5-flash (vertex-ai)",
     }
 
 

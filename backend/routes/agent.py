@@ -74,6 +74,91 @@ async def agent_ask(req: AskRequest):
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
+# ── /api/agent/mission ────────────────────────────────────────────────────────
+
+class MissionRequest(BaseModel):
+    repo_url: str
+    action_repo: str | None = None       # where ACT writes land (defaults to repo_url)
+    max_commits: int = 120
+    lookback_months: int = 36
+    dry_run: bool = False                # plan + prepare, no writes (oversight checkpoint)
+
+
+@router.post("/mission")
+async def agent_mission(req: MissionRequest):
+    """
+    Autonomous code-lifecycle mission (SSE).
+
+    One instruction -> the agent plans the objectives, red-teams them, acts
+    (creates revival + deletion Ghost MRs), verifies the artifacts, and reports.
+    This is NECRO operating as an autonomous agent that finishes the job, not a
+    dashboard. Streams every phase. dry_run=true is the human-oversight checkpoint.
+    """
+    from backend.routes.stream import _url_to_path
+    from backend.services.mission import run_mission
+
+    repo = _url_to_path(req.repo_url)
+    action_repo = _url_to_path(req.action_repo) if req.action_repo else None
+
+    async def generate():
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def emit(msg: str):
+            await queue.put(msg)
+
+        async def run():
+            try:
+                report = await run_mission(
+                    emit, repo, action_repo=action_repo,
+                    max_commits=req.max_commits, lookback_months=req.lookback_months,
+                    dry_run=req.dry_run,
+                )
+                # Persist the mission so it can be replayed instantly (demo fallback).
+                if settings.MONGODB_URI:
+                    try:
+                        from backend.db.connection import get_db
+                        db = get_db()
+                        await db["missions"].insert_one(
+                            {"_mission_id": report.get("mission_id"), **json.loads(json.dumps(report, default=str))}
+                        )
+                    except Exception as _exc:
+                        logger.warning("Mission persist failed: %s", _exc)
+                await queue.put("__REPORT__:" + json.dumps(report, default=str))
+            except Exception as exc:
+                logger.exception("Mission failed")
+                await emit(f"ERROR: {exc}")
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(run())
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            if item.startswith("__REPORT__:"):
+                yield f"data: {json.dumps({'type': 'report', 'data': json.loads(item[len('__REPORT__:'):])})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'progress', 'message': item})}\n\n"
+        await task
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.get("/mission/latest")
+async def agent_mission_latest():
+    """Most recent autonomous mission report (instant replay for the demo)."""
+    if not settings.MONGODB_URI:
+        return {"available": False}
+    try:
+        from backend.db.connection import get_db
+        db = get_db()
+        m = await db["missions"].find_one({}, {"_id": 0}, sort=[("_id", -1)])
+        return {"available": True, "mission": m} if m else {"available": True, "mission": None}
+    except Exception as exc:
+        logger.warning("mission_latest failed: %s", exc)
+        return {"available": False}
+
+
 # ── /api/agent/revive ─────────────────────────────────────────────────────────
 
 class AgentReviveRequest(BaseModel):

@@ -6,7 +6,11 @@
   --surface: rgba(12, 10, 31, 0.65);
   --surface-hover: rgba(20, 16, 51, 0.8);
   --surface-solid: #0c0a1f;
-  
+  /* Faint inset fill + ring track — theme-aware so dark-only rgba() values
+     don't break on the light theme. */
+  --surface-subtle: rgba(0, 0, 0, 0.22);
+  --track: rgba(255, 255, 255, 0.06);
+
   --border: rgba(124, 58, 237, 0.15);
   --border-glow: rgba(124, 58, 237, 0.4);
   --border-neon: #a78bfa;
@@ -51,6 +55,8 @@
   --surface: rgba(255, 255, 255, 0.95);
   --surface-hover: rgba(255, 255, 255, 1);
   --surface-solid: #ffffff;
+  --surface-subtle: rgba(15, 23, 42, 0.04);
+  --track: rgba(15, 23, 42, 0.08);
   --border: rgba(99, 102, 241, 0.2);
   --border-glow: rgba(99, 102, 241, 0.35);
   --border-neon: #4f46e5;
@@ -237,28 +243,33 @@ body {
 
 .scan-inputs {
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.85rem;
+  width: 100%;
 }
 
 /* Cyber Fields & Inputs */
-.cyber-field {
+.cyber-field, .input-group {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
 }
-.cyber-field label {
+.cyber-field label, .input-group label {
   font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: none;   /* was uppercase — readable sentence case now */
-  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 .input-glow-wrapper {
   position: relative;
   width: 100%;
 }
-.cyber-input {
+.cyber-input,
+.input-group input[type="text"],
+.input-group input[type="number"] {
   width: 100%;
   background: var(--input-bg);
   border: 1px solid var(--border);
@@ -270,7 +281,9 @@ body {
   transition: var(--transition);
   box-shadow: var(--input-shadow);
 }
-.cyber-input:focus {
+.cyber-input:focus,
+.input-group input[type="text"]:focus,
+.input-group input[type="number"]:focus {
   outline: none;
   border-color: var(--border-neon);
   box-shadow: 0 0 10px var(--accent-glow);
@@ -279,6 +292,49 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
+}
+
+/* Custom modern checkbox design for mission-dryrun */
+.mission-dryrun {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-left: 0.8rem;
+  cursor: pointer;
+  user-select: none;
+}
+.mission-dryrun input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-grid;
+  place-content: center;
+  background: rgba(255, 255, 255, 0.03);
+}
+.mission-dryrun input[type="checkbox"]::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  transform: scale(0);
+  transition: 120ms transform ease-in-out;
+  box-shadow: inset 1em 1em var(--accent);
+  background-color: var(--accent);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+.mission-dryrun input[type="checkbox"]:checked {
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.15);
+}
+.mission-dryrun input[type="checkbox"]:checked::before {
+  transform: scale(1);
 }
 
 /* Neon buttons */
@@ -920,7 +976,7 @@ body {
   gap: 0.85rem;
   width: 100%;
 }
-.stat-card {
+.stat-card, .summary-stat {
   background: rgba(255, 255, 255, 0.015);
   border: 1px solid rgba(255, 255, 255, 0.03);
   border-radius: 10px;
@@ -935,7 +991,7 @@ body {
   grid-column: span 2;
   text-align: left;
 }
-.stat-value {
+.stat-value, .summary-val {
   font-size: 1.15rem;
   font-weight: 800;
   color: var(--text);
@@ -943,7 +999,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.stat-label {
+.stat-label, .summary-lbl {
   font-size: 0.65rem;
   color: var(--text-muted);
   text-transform: none;
@@ -999,6 +1055,99 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 1.25rem;
+  /* Cards size to their own content — without this, expanding one card stretches
+     every sibling in its grid row into tall empty columns. */
+  align-items: start;
+}
+
+/* ── Registry master–detail ─────────────────────────────────────────────────
+   List of features (left) + full dossier of the selected one (right). The split
+   is sized to the viewport (minus the 60px header + 140px console) so the whole
+   registry fits one screen; each pane scrolls internally instead of the page.
+   --reg-chrome can be tuned per breakpoint. */
+.graveyard-grid.registry-split {
+  --reg-chrome: 232px;
+  height: calc(100vh - var(--reg-chrome));
+  min-height: 440px;
+  grid-template-columns: clamp(208px, 22%, 300px) minmax(0, 1fr);
+  align-items: stretch;
+}
+.registry-list,
+.registry-detail {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.registry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding-right: 0.3rem;
+}
+.registry-detail { padding-right: 0.35rem; }
+
+/* Master-list rows */
+.registry-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.7rem 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  font-family: inherit;
+}
+.registry-row:hover { background: var(--surface-hover); border-color: var(--border-glow); }
+.registry-row[data-rec="revive_now"] { border-left-color: var(--green); }
+.registry-row[data-rec="investigate_further"] { border-left-color: var(--amber); }
+.registry-row[data-rec="keep_buried"] { border-left-color: var(--text-muted); }
+.registry-row.active {
+  background: var(--sidebar-nav-active);
+  border-color: var(--border-glow);
+  box-shadow: 0 2px 12px var(--accent-glow);
+}
+.registry-row.hidden { display: none; }
+.rr-icon { font-size: 1.05rem; line-height: 1; flex-shrink: 0; color: var(--text-secondary); }
+.rr-main { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; flex: 1; }
+.rr-name {
+  font-size: 0.82rem; font-weight: 700; color: var(--text);
+  line-height: 1.2; overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.rr-sub { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.rr-badge { font-size: 0.58rem; }
+.rr-date { font-size: 0.6rem; color: var(--text-muted); font-family: var(--font-mono); }
+.rr-score { font-size: 1.05rem; font-weight: 800; font-family: var(--font-mono); flex-shrink: 0; line-height: 1; }
+.rr-pct { font-size: 0.6rem; opacity: 0.7; margin-left: 1px; }
+
+/* In the detail pane the dossier card fills the pane and doesn't hover-lift. */
+.registry-detail .feature-card { margin: 0; }
+.registry-detail .feature-card:hover { transform: none; box-shadow: 0 10px 40px var(--accent-glow); }
+
+/* Narrow screens: stack — list becomes a horizontal strip above the detail. */
+@media (max-width: 880px) {
+  .graveyard-grid.registry-split {
+    /* Footer console is hidden below 900px, so reclaim its 140px. */
+    --reg-chrome: 96px;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .registry-list {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.35rem;
+  }
+  .registry-row { flex: 0 0 auto; width: 190px; border-left-width: 1px; border-top: 3px solid transparent; }
+  .registry-row .rr-date { display: none; }
+  .registry-row[data-rec="revive_now"] { border-top-color: var(--green); }
+  .registry-row[data-rec="investigate_further"] { border-top-color: var(--amber); }
+  .registry-row[data-rec="keep_buried"] { border-top-color: var(--text-muted); }
 }
 .feature-card {
   position: relative;
@@ -1021,9 +1170,18 @@ body {
 }
 
 /* Custom indicator glows based on card priority category */
-.feature-card[data-rec="revive_now"] { border-left: 4px solid var(--green); }
-.feature-card[data-rec="investigate_further"] { border-left: 4px solid var(--amber); }
-.feature-card[data-rec="keep_buried"] { border-left: 4px solid var(--text-muted); }
+.feature-card[data-rec="revive_now"],
+.feature-card[data-rec="leave_intact"] {
+  border-left: 4px solid var(--green);
+}
+.feature-card[data-rec="investigate_further"],
+.feature-card[data-rec="needs_biopsy"] {
+  border-left: 4px solid var(--amber);
+}
+.feature-card[data-rec="keep_buried"],
+.feature-card[data-rec="excise_now"] {
+  border-left: 4px solid var(--red);
+}
 
 .card-header-top {
   display: flex;
@@ -1060,6 +1218,450 @@ body {
 .badge-investigate { background: rgba(251, 191, 36, 0.12); color: var(--amber); border: 1px solid rgba(251, 191, 36, 0.25); }
 .badge-buried { background: rgba(255, 255, 255, 0.03); color: var(--text-secondary); border: 1px solid rgba(255, 255, 255, 0.06); }
 
+/* Progressive disclosure — "Show full forensics" toggle + collapsible panel */
+.forensics-toggle {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  margin-top: 0.85rem; padding: 0.4rem 0.7rem;
+  background: rgba(124, 92, 246, 0.06);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text-secondary); font-size: 0.78rem; font-weight: 600;
+  cursor: pointer; transition: var(--transition); width: 100%; justify-content: center;
+}
+.forensics-toggle:hover { background: rgba(124, 92, 246, 0.12); color: var(--text); border-color: var(--border-glow); }
+.forensics-toggle .ft-caret { font-size: 0.7rem; opacity: 0.8; }
+.card-forensics { display: none; }
+.card-forensics.open {
+  display: block;
+  margin-top: 0.6rem; padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+  animation: forensicsFade 0.22s ease;
+}
+@keyframes forensicsFade {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Expanded card: full-width, two-column detail view ─────────────────────
+   When a card opens (toggleCard adds .card-expanded-full), it spans the whole
+   grid row instead of growing inside its narrow column — filling the empty gap
+   left in the row — and lays the body out as decision (left) | dossier
+   (right), collapsing to a single column on narrow screens. */
+.feature-card.card-expanded-full {
+  grid-column: 1 / -1;
+  padding: 1.6rem 1.75rem;
+  box-shadow: 0 10px 40px var(--accent-glow);
+  border-color: var(--border-glow);
+}
+.card-expanded-full .card-body.expanded {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+/* Two columns once there's room: decision (slightly wider) | dossier, split by
+   a divider so the actionable left reads distinct from the evidence on the
+   right. Tied to viewport width since the card always spans the full row. */
+@media (min-width: 1080px) {
+  .card-expanded-full .card-body.expanded {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    column-gap: 2.5rem;
+  }
+  .card-expanded-full .card-forensics {
+    border-left: 1px solid var(--border);
+    padding-left: 2.5rem;
+  }
+}
+/* Force the dossier panel open as the right column, and hide the now-redundant
+   "Show full forensics" toggle. */
+.card-expanded-full .card-forensics {
+  display: block;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.card-expanded-full .forensics-toggle {
+  display: none;
+}
+/* Promote the viability ring to a deliberate KPI in the wide header, so it
+   reads as an intentional top-right metric rather than marooned text. */
+.card-expanded-full .radial-viability-gauge {
+  width: 68px;
+  height: 68px;
+}
+.card-expanded-full .radial-value-text {
+  font-size: 1.05rem;
+}
+
+/* Necrosis (dead-code) verdict badges */
+.fc-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.badge-excise { background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.28); }
+.badge-biopsy { background: rgba(251, 191, 36, 0.12); color: var(--amber); border: 1px solid rgba(251, 191, 36, 0.25); }
+.badge-intact { background: rgba(16, 185, 129, 0.12); color: var(--green); border: 1px solid rgba(16, 185, 129, 0.25); }
+
+[data-theme="light"] .badge-excise { background: rgba(220, 38, 38, 0.08); color: #dc2626; border-color: rgba(220, 38, 38, 0.2); }
+[data-theme="light"] .badge-biopsy { background: rgba(217, 119, 6, 0.08); color: #d97706; border-color: rgba(217, 119, 6, 0.2); }
+[data-theme="light"] .badge-intact { background: rgba(22, 163, 74, 0.08); color: #16a34a; border-color: rgba(22, 163, 74, 0.2); }
+
+/* Necrosis summary stat accents */
+.summary-excise .summary-val { color: #ef4444; text-shadow: 0 0 8px rgba(239, 68, 68, 0.45); }
+.summary-biopsy .summary-val { color: var(--amber); text-shadow: 0 0 8px var(--amber-glow); }
+.summary-intact .summary-val { color: var(--green); text-shadow: 0 0 8px var(--green-glow); }
+
+[data-theme="light"] .summary-excise .summary-val { color: #dc2626; text-shadow: none; }
+[data-theme="light"] .summary-biopsy .summary-val { color: #b45309; text-shadow: none; }
+[data-theme="light"] .summary-intact .summary-val { color: #15803d; text-shadow: none; }
+
+/* Necrosis card detail bits */
+.nec-grid { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.5rem; font-size: 0.85rem; }
+.nec-callers { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.nec-caller { font-size: 0.72rem; padding: 0.15rem 0.4rem; background: rgba(239,68,68,0.06);
+  border: 1px solid rgba(239,68,68,0.15); border-radius: 4px; }
+.fc-blast { margin-top: 0.4rem; font-size: 0.82rem; color: var(--text-secondary); }
+.fc-annotation code { font-size: 0.78rem; color: var(--amber); word-break: break-word; }
+
+/* ── Mission Control ─────────────────────────────────────────────────────── */
+.tab-badge-hot {
+  background: linear-gradient(90deg, #8b5cf6, #ec4899) !important;
+  color: #fff !important; font-weight: 700; letter-spacing: 0.05em;
+  animation: hotpulse 2.4s ease-in-out infinite;
+}
+@keyframes hotpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+.mission-card {
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  background: radial-gradient(circle at 90% 10%, rgba(139, 92, 246, 0.06) 0%, rgba(9, 9, 14, 0) 60%), var(--surface);
+  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.08);
+}
+[data-theme="light"] .mission-card {
+  border-color: rgba(79, 70, 229, 0.25);
+  background: radial-gradient(circle at 90% 10%, rgba(79, 70, 229, 0.04) 0%, rgba(255, 255, 255, 0) 60%), #ffffff;
+  box-shadow: 0 4px 20px rgba(79, 70, 229, 0.05);
+}
+.btn-mission {
+  background: linear-gradient(90deg, #8b5cf6, #6366f1) !important;
+  border: none !important;
+  font-weight: 700;
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.35);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  justify-content: center;
+  padding: 0.65rem 1rem;
+}
+.btn-mission:hover:not(:disabled) {
+  transform: translateY(-1.5px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+  background: linear-gradient(90deg, #9c73f8, #7578f3) !important;
+}
+.btn-mission:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+
+/* Phase tracker */
+.mission-phases {
+  display: flex; align-items: center; justify-content: center; gap: 0.3rem;
+  flex-wrap: wrap; margin: 1.2rem 0; padding: 1.1rem; border-radius: 12px;
+  background: rgba(139, 92, 246, 0.04); border: 1px solid rgba(139, 92, 246, 0.12);
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
+}
+[data-theme="light"] .mission-phases {
+  background: rgba(79, 70, 229, 0.03);
+  border-color: rgba(79, 70, 229, 0.1);
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.03);
+}
+.mphase { display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+  opacity: 0.4; transition: all 0.4s ease; min-width: 70px; }
+.mphase-dot {
+  width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-weight: 700; font-size: 0.9rem;
+  background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.15); color: var(--text-secondary);
+}
+.mphase-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.mphase.active { opacity: 1; }
+.mphase.active .mphase-dot {
+  border-color: #8b5cf6; color: #fff; background: rgba(139,92,246,0.25);
+  box-shadow: 0 0 14px rgba(139,92,246,0.55); animation: hotpulse 1.2s ease-in-out infinite;
+}
+.mphase.done { opacity: 1; }
+.mphase.done .mphase-dot { border-color: var(--green); color: var(--green); background: rgba(16,185,129,0.12); }
+.mphase.done .mphase-dot::after { content: '✓'; }
+.mphase.done .mphase-dot { font-size: 0; }
+.mphase.done .mphase-dot::after { font-size: 0.95rem; }
+.mphase-arrow {
+  color: #8b5cf6;
+  font-size: 1.1rem;
+  opacity: 0.3;
+  font-weight: 900;
+  text-shadow: 0 0 4px rgba(139, 92, 246, 0.3);
+  transition: all 0.3s ease;
+}
+.mphase.done + .mphase-arrow {
+  opacity: 0.95;
+  color: var(--green);
+  text-shadow: 0 0 8px rgba(16, 185, 129, 0.65);
+}
+
+/* Mission result card */
+.mission-result {
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 14px;
+  padding: 1.5rem;
+  background: rgba(139, 92, 246, 0.02);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  margin-bottom: 1.25rem;
+  backdrop-filter: blur(10px);
+}
+[data-theme="light"] .mission-result {
+  border-color: rgba(79, 70, 229, 0.15);
+  background: rgba(79, 70, 229, 0.01);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+.m-result-head { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem; }
+.m-result-icon { font-size: 1.8rem; }
+.m-result-title { font-size: 1.15rem; font-weight: 700; }
+.m-result-sub { font-size: 0.8rem; color: var(--text-secondary); }
+.m-section { margin: 1rem 0; }
+.m-section-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-secondary); margin-bottom: 0.5rem; font-weight: 600; }
+.m-plan { font-size: 0.92rem; line-height: 1.5; margin-bottom: 0.7rem; }
+.m-objectives { display: flex; flex-direction: column; gap: 0.5rem; }
+.m-obj-row { font-size: 0.88rem; }
+.m-obj-tag { display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 0.12rem 0.45rem;
+  border-radius: 4px; margin-right: 0.5rem; letter-spacing: 0.05em; }
+.m-obj-tag.m-revive { background: rgba(16,185,129,0.15); color: var(--green); }
+.m-obj-tag.m-excise { background: rgba(239,68,68,0.15); color: #ef4444; }
+.m-obj-reason { font-size: 0.8rem; color: var(--text-secondary); margin: 0.2rem 0 0 3rem; }
+.m-challenge { padding: 0.7rem; border-radius: 8px; font-size: 0.85rem; }
+.m-verdict-reject { background: rgba(239,68,68,0.08); border-left: 3px solid #ef4444; }
+.m-verdict-downgrade { background: rgba(251,191,36,0.08); border-left: 3px solid var(--amber); }
+.m-verdict-confirm, .m-verdict-confirmed { background: rgba(16,185,129,0.08); border-left: 3px solid var(--green); }
+.m-obj { margin-top: 0.35rem; color: var(--text-secondary); }
+.m-actions { display: flex; flex-direction: column; gap: 0.6rem; }
+.m-action-card { padding: 0.8rem; border-radius: 8px; background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07); }
+.m-action-card.m-revive { border-left: 3px solid var(--green); }
+.m-action-card.m-excise { border-left: 3px solid #ef4444; }
+.m-action-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+.m-badge { font-size: 0.66rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 4px; }
+.m-badge-ok { background: rgba(16,185,129,0.18); color: var(--green); }
+.m-badge-prep { background: rgba(251,191,36,0.15); color: var(--amber); }
+.m-prep-note { font-size: 0.8rem; color: var(--text-secondary); font-style: italic; }
+.m-log { max-height: 200px; overflow-y: auto; font-family: var(--font-mono, monospace); font-size: 0.76rem; }
+.m-log-row { padding: 0.2rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.m-log-phase { display: inline-block; min-width: 70px; color: #8b5cf6; text-transform: uppercase;
+  font-weight: 600; font-size: 0.7rem; }
+[data-theme="light"] .m-log-row { border-bottom-color: rgba(0,0,0,0.05); }
+[data-theme="light"] .m-log-phase { color: var(--accent); }
+
+/* ── Mission Control two-pane command console ───────────────────────────────
+   Pattern: narrow command panel left (config + always-visible pipeline steps)
+   + wide live-output panel right (idle → terminal → report). Both panes scroll
+   internally; the outer split fills the viewport — no page scroll needed.     */
+
+#tab-mission.active { flex: 1 1 auto; min-height: 0; }
+
+.mission-split {
+  --mc-chrome: 232px; /* header 60px + console 140px + gap ~32px */
+  height: calc(100vh - var(--mc-chrome));
+  min-height: 500px;
+  display: grid;
+  grid-template-columns: clamp(270px, 30%, 360px) minmax(0, 1fr);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 4px 24px rgba(124,92,246,0.07);
+}
+
+/* ── Left command pane ─────────────── */
+.mission-config {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  padding: 1.5rem 1.4rem;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.mlc-header { display: flex; align-items: center; gap: 0.75rem; }
+.mlc-orb { font-size: 1.75rem; line-height: 1; color: var(--accent); }
+.mlc-title { font-size: 1rem; font-weight: 800; color: var(--text); letter-spacing: -0.01em; }
+.mlc-tagline { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.1rem; }
+
+/* Phase strip inside the right output pane — compact horizontal track */
+.mission-output .mission-phases {
+  flex-shrink: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 1.25rem;
+  margin: 0;
+}
+
+/* Inputs */
+.mlc-fields { display: flex; flex-direction: column; gap: 0.65rem; }
+.mlc-field  { display: flex; flex-direction: column; gap: 0.28rem; }
+.mlc-label  {
+  font-size: 0.69rem; font-weight: 700; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.mlc-badge {
+  font-size: 0.6rem; font-weight: 600;
+  padding: 0.08rem 0.38rem; border-radius: 4px;
+  background: rgba(124,92,246,0.1); color: var(--accent);
+  border: 1px solid rgba(124,92,246,0.18);
+  letter-spacing: 0; text-transform: none;
+}
+[data-theme="light"] .mlc-badge { background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.18); }
+.mlc-input {
+  width: 100%; padding: 0.52rem 0.7rem;
+  background: var(--surface-subtle); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text);
+  font-size: 0.8rem; font-family: var(--font-mono);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  outline: none;
+}
+.mlc-input:focus {
+  border-color: var(--border-glow);
+  box-shadow: 0 0 0 3px rgba(124,92,246,0.1);
+}
+[data-theme="light"] .mlc-input { background: #ffffff; border-color: rgba(99,102,241,0.2); }
+
+.mlc-secondary-row {
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+}
+.mlc-footer {
+  font-size: 0.67rem; color: var(--text-muted); line-height: 1.5;
+  padding-top: 0.85rem; border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+/* ── Right output pane ─────────────── */
+.mission-output {
+  display: flex; flex-direction: column;
+  overflow-y: auto; position: relative;
+  background: var(--surface-subtle);
+}
+[data-theme="light"] .mission-output { background: #f8fafc; }
+
+/* Idle placeholder — centered informational state before first run */
+.mission-idle {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 1rem; padding: 2rem; text-align: center;
+}
+.mi-orb {
+  font-size: 3.5rem; line-height: 1; color: var(--accent); opacity: 0.22;
+  animation: mi-breathe 3.5s ease-in-out infinite;
+}
+@keyframes mi-breathe {
+  0%, 100% { opacity: 0.18; transform: scale(1); }
+  50%       { opacity: 0.38; transform: scale(1.06); }
+}
+.mi-title { font-size: 1.3rem; font-weight: 800; color: var(--text); }
+.mi-sub   { font-size: 0.85rem; color: var(--text-secondary); max-width: 360px; line-height: 1.55; }
+.mi-phases-preview {
+  display: flex; align-items: center; gap: 0.35rem;
+  flex-wrap: wrap; justify-content: center;
+}
+.mi-ph  { font-size: 0.73rem; font-weight: 600; color: var(--text-secondary);
+  padding: 0.22rem 0.6rem; border: 1px solid var(--border); border-radius: 20px; }
+.mi-arr { font-size: 0.72rem; color: var(--text-muted); }
+.mi-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: center; }
+.mi-chip {
+  font-size: 0.68rem; padding: 0.22rem 0.65rem; border-radius: 6px;
+  background: rgba(124,92,246,0.07); border: 1px solid rgba(124,92,246,0.14); color: var(--accent);
+}
+[data-theme="light"] .mi-chip { background: rgba(99,102,241,0.06); border-color: rgba(99,102,241,0.14); }
+
+/* Terminal fills the output pane during a live run */
+.mission-terminal {
+  flex: 1; min-height: 200px; margin: 0; border-radius: 0;
+  border: none; border-bottom: 1px solid var(--border);
+}
+
+/* Mission result — no outer card; the output pane is the container */
+.mission-output .mission-result {
+  margin: 0; border: none; border-radius: 0;
+  background: transparent; box-shadow: none; backdrop-filter: none;
+  padding: 0; flex: 1;
+}
+
+/* Result header bar */
+.m-result-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(90deg, rgba(124,58,237,0.08) 0%, transparent 100%);
+  border-bottom: 1px solid var(--border);
+}
+[data-theme="light"] .m-result-bar {
+  background: linear-gradient(90deg, rgba(99,102,241,0.06) 0%, transparent 100%);
+}
+.m-result-bar-left { display: flex; align-items: center; gap: 0.65rem; }
+.m-result-icon { font-size: 1.5rem; color: var(--accent); line-height: 1; }
+.m-result-title { font-size: 1rem; font-weight: 800; color: var(--text); }
+.m-result-sub { font-size: 0.74rem; color: var(--text-secondary); margin-top: 0.1rem; }
+.m-result-status {
+  font-size: 0.72rem; font-weight: 700;
+  padding: 0.28rem 0.75rem; border-radius: 20px;
+  background: rgba(16,185,129,0.1); color: var(--green);
+  border: 1px solid rgba(16,185,129,0.22); white-space: nowrap;
+}
+.m-result-status.dry { background: rgba(251,191,36,0.1); color: var(--amber); border-color: rgba(251,191,36,0.22); }
+
+/* Report body */
+.m-report-body { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1.1rem; }
+
+/* Plan target cards (REVIVE + EXCISE) */
+.m-plan-cards { display: flex; flex-direction: column; gap: 0.6rem; }
+.m-plan-card {
+  display: flex; gap: 0.75rem; padding: 0.85rem 1rem;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+}
+.m-plan-card.m-pc-revive { border-left: 3px solid var(--green); }
+.m-plan-card.m-pc-excise { border-left: 3px solid #ef4444; }
+.m-pc-icon { font-size: 1.25rem; line-height: 1; flex-shrink: 0; margin-top: 0.1rem; }
+.m-pc-body { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.m-pc-verb {
+  font-size: 0.62rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.m-plan-card.m-pc-revive .m-pc-verb { color: var(--green); }
+.m-plan-card.m-pc-excise .m-pc-verb { color: #ef4444; }
+.m-pc-name   { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+.m-pc-reason { font-size: 0.77rem; color: var(--text-secondary); line-height: 1.45; }
+
+/* Responsive — narrow screen: stack, hide stepper (too tall for horizontal strip) */
+@media (max-width: 880px) {
+  .mission-split {
+    --mc-chrome: 96px;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .mission-config {
+    border-right: none; border-bottom: 1px solid var(--border);
+    overflow-y: visible;
+  }
+  .mission-config .mission-phases { display: none; }
+}
+
 /* Radial Glowing SVG gauge for viability score */
 .radial-viability-gauge {
   position: relative;
@@ -1077,7 +1679,7 @@ body {
 }
 .radial-track {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.03);
+  stroke: var(--track);
   stroke-width: 4;
 }
 .radial-fill {
@@ -1166,6 +1768,7 @@ body {
 
 .card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
   padding-top: 0.75rem;
@@ -2141,6 +2744,17 @@ body {
   padding: 0.05rem 0.25rem;
   margin-left: 0.25rem;
 }
+/* ADK web-search evidence — distinct from registry-verified (green) so the UI
+   never overstates a Phase-2 google_search upgrade as a hard registry hit. */
+.adk-badge {
+  font-size: 0.58rem;
+  background: rgba(96, 165, 250, 0.12);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  color: #60a5fa;
+  border-radius: 4px;
+  padding: 0.05rem 0.25rem;
+  margin-left: 0.25rem;
+}
 
 /* Metrics grid in card */
 .metrics-grid {
@@ -2823,12 +3437,14 @@ body {
 }
 
 /* ── Live Scan Terminal Panel ── */
-.terminal-panel {
+/* ── Live Scan Terminal Panel ── */
+.terminal, .terminal-panel {
   display: none;
+  position: relative;
   background: #020617;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.5rem;
+  border-radius: 12px;
+  padding: 2.2rem 1.25rem 1.25rem 1.25rem;
   font-family: 'Fira Code', 'Courier New', Courier, monospace;
   font-size: 0.82rem;
   line-height: 1.5;
@@ -2838,13 +3454,26 @@ body {
   margin: 1.5rem 0;
   box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.9), 0 4px 20px rgba(0, 0, 0, 0.4);
 }
-.terminal-panel.visible {
+.terminal::before, .terminal-panel::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: 15px;
+  width: 8px;
+  height: 8px;
+  background: #ff5f56;
+  border-radius: 50%;
+  box-shadow: 14px 0 0 #ffbd2e, 28px 0 0 #27c93f;
+  z-index: 10;
+}
+.terminal.visible, .terminal-panel.visible {
   display: block;
 }
-[data-theme="light"] .terminal-panel {
-  background: #090d16;
-  color: #cbd5e1;
-  border-color: #1e293b;
+[data-theme="light"] .terminal, [data-theme="light"] .terminal-panel {
+  background: #f8fafc;
+  color: #334155;
+  border-color: #cbd5e1;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
 /* ── Generic .btn family (used in card actions, watch list, etc.) ─────────── */
@@ -2936,11 +3565,44 @@ body {
 .btn-slack-copy:hover { background: rgba(97, 31, 105, 0.55); }
 .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.75rem; }
 .btn-ghost-mr {
-  background: rgba(6,182,212,0.06);
-  border-color: rgba(6,182,212,0.2);
+  background: rgba(6,182,212,0.10);
+  border-color: rgba(6,182,212,0.45);
   color: var(--neon-cyan);
+  font-size: 0.9rem;
+  padding: 0.5rem 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
-.btn-ghost-mr:hover { background: rgba(6,182,212,0.15); border-color: var(--neon-cyan); color: #fff; }
+.btn-ghost-mr:hover {
+  background: rgba(6,182,212,0.22);
+  border-color: var(--neon-cyan);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(6,182,212,0.35);
+}
+
+/* Ghost MR hero wrapper — makes it the visual centrepiece of every Revival Candidate card */
+.ghost-mr-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.ghost-mr-sub {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  padding-left: 0.2rem;
+}
+
+/* Flagship chip — the one that guarantees Revive Now */
+.chip-flagship {
+  background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(6,182,212,0.12));
+  border-color: rgba(16,185,129,0.55) !important;
+  color: var(--green) !important;
+  font-weight: 700;
+}
+.chip-flagship:hover {
+  background: linear-gradient(135deg, rgba(16,185,129,0.32), rgba(6,182,212,0.22));
+  box-shadow: 0 0 12px rgba(16,185,129,0.35);
+}
 
 /* Spinner */
 .spinner {
@@ -3040,6 +3702,20 @@ body {
 }
 .synth-reason { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem; line-height: 1.4; }
 .synth-action { font-size: 0.72rem; color: var(--neon-cyan); margin-top: 0.25rem; }
+/* Canonical card verdict shown next to each synthesis priority so the narrative
+   can never silently contradict the per-feature card. */
+.synth-verdict {
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.synth-verdict-revive { background: rgba(16,185,129,0.14); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+.synth-verdict-investigate { background: rgba(251,191,36,0.14); color: var(--amber); border: 1px solid rgba(251,191,36,0.3); }
+.synth-verdict-buried { background: rgba(148,163,184,0.12); color: var(--text-muted); border: 1px solid rgba(148,163,184,0.25); }
 
 /* ── Resurrection Chains panel ───────────────────────────────────────────── */
 .resurrect-chains-panel {
@@ -3267,8 +3943,8 @@ body {
   display: flex;
   align-items: center;
   gap: 0.85rem;
-  padding: 0.4rem 0.6rem;
-  background: rgba(0,0,0,0.18);
+  padding: 0.55rem 0.75rem;
+  background: var(--surface-subtle);
   border: 1px solid var(--border);
   border-radius: 8px;
 }
@@ -3496,3 +4172,255 @@ body {
   .stat-card.repo-stat { grid-column: 1; }
   .feature-card { padding: 1rem; }
 }
+
+/* ── Premium UI/UX Collapsible & Panel Adjustments ── */
+.scanner-console-header, .scanner-card-header-wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+}
+.sch-title-group {
+  flex: 1;
+}
+.console-collapse-btn {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: var(--transition);
+  margin-left: 1rem;
+  flex-shrink: 0;
+}
+.console-collapse-btn:hover {
+  border-color: var(--border-neon);
+  color: var(--text);
+  background: var(--sidebar-nav-hover);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+/* Collapsible state rules */
+.scanner-console-card {
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s ease, margin 0.35s ease;
+  max-height: 800px;
+  overflow: hidden;
+}
+.scanner-console-card.collapsed {
+  max-height: 72px;
+}
+.scanner-console-card.collapsed .scanner-console-body {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.scanner-card {
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s ease, margin 0.35s ease;
+  max-height: 800px;
+  overflow: hidden;
+}
+.scanner-card.collapsed {
+  max-height: 72px;
+}
+.scanner-card.collapsed .scan-inputs,
+.scanner-card.collapsed .scan-actions {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Cyber Console Footer Collapsible */
+.cyber-terminal-console {
+  transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.cyber-terminal-console.collapsed {
+  height: 38px !important;
+}
+.cyber-terminal-console.collapsed .console-terminal-lines {
+  display: none !important;
+}
+.console-min-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  line-height: 12px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+.console-min-btn:hover {
+  border-color: var(--border-neon);
+  color: var(--text);
+  background: var(--sidebar-nav-hover);
+}
+.console-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* ── Necrosis Double-Pane master-detail overrides ── */
+.necrosis-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.15rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: 10px;
+  background: var(--surface);
+  margin-bottom: 0.45rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.necrosis-row:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-glow);
+  transform: translateX(3px);
+}
+.necrosis-row.active {
+  background: var(--sidebar-nav-active);
+  border-color: var(--border-glow);
+  border-left-color: var(--accent);
+  box-shadow: 0 4px 15px var(--accent-glow);
+  transform: translateX(5px);
+}
+.necrosis-row-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  overflow: hidden;
+  flex: 1;
+}
+.necrosis-row-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.necrosis-row-title {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.necrosis-row-path {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+.necrosis-row-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+.necrosis-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.necrosis-badge.badge-excise {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--red);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.necrosis-badge.badge-biopsy {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--amber);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+.necrosis-badge.badge-intact {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* Light Theme WCAG Enhancements for high contrast */
+[data-theme="light"] .ls-card-integration .ls-value,
+[data-theme="light"] .brand-subtitle,
+[data-theme="light"] .sidebar-nav-item.nav-tab.active .nav-item-icon,
+[data-theme="light"] .tab-badge,
+[data-theme="light"] .nav-tab.active {
+  color: #4f46e5 !important;
+  text-shadow: none !important;
+}
+[data-theme="light"] .chip-neon:hover {
+  background: rgba(79, 70, 229, 0.08);
+  border-color: #4f46e5;
+  color: #4f46e5;
+  box-shadow: none;
+}
+[data-theme="light"] .status-pulse {
+  box-shadow: none !important;
+}
+[data-theme="light"] .status-pulse.warn {
+  background: #d97706;
+}
+[data-theme="light"] .status-pulse.error {
+  background: #dc2626;
+}
+
+/* Text clipping preventative layout rules */
+.fc-title-wrap, .registry-row-title, .ls-label {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Timeline Click-to-Filter Month Tag Styles */
+.month-filter-tag {
+  background: rgba(124, 58, 237, 0.12);
+  border: 1px solid var(--border-neon);
+  color: var(--text);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  margin-left: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  animation: fadeSlideIn 0.2s ease;
+}
+[data-theme="light"] .month-filter-tag {
+  background: rgba(79, 70, 229, 0.08);
+  border-color: #4f46e5;
+  color: #4f46e5;
+}
+.month-filter-tag button {
+  background: none;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+}
+.month-filter-tag button:hover {
+  color: #ff6b6b;
+}
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateX(-5px); }
+  to { opacity: 1; transform: translateX(0); }
+}

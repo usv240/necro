@@ -1611,3 +1611,263 @@ class TestPipelineContract:
                     assert url.startswith("http"), (
                         f"Feature '{f.get('name')}' claims grounded=True but evidence_url is empty/invalid: '{url}'"
                     )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NECROSIS — dead-code detection (bidirectional graveyard). All additive.
+# ═════════════════════════════════════════════════════════════════════════════
+
+# 30. Necrosis detector — symbol/marker/tombstone parsing (pure unit tests)
+@pytest.mark.unit
+class TestNecrosisDetectorUnit:
+    """Unit tests for necrosis_detector pure helpers — no network, no server."""
+
+    def test_extract_symbol_go_func(self):
+        from backend.services.necrosis_detector import _extract_symbol
+        assert _extract_symbol("func (c *DockerMachine) logDeprecationWarning() {") == "logDeprecationWarning"
+
+    def test_extract_symbol_go_flag_name(self):
+        from backend.services.necrosis_detector import _extract_symbol
+        assert _extract_symbol("Name:            UseDirectDownload,") == "UseDirectDownload"
+
+    def test_extract_symbol_ff_convention(self):
+        from backend.services.necrosis_detector import _extract_symbol
+        assert _extract_symbol('Description: "FF_TEST_FEATURE is a flag"') == "FF_TEST_FEATURE"
+
+    def test_extract_symbol_rejects_rule_codes(self):
+        """staticcheck rule codes (SA1019, SA5011) are not symbols."""
+        from backend.services.necrosis_detector import _extract_symbol
+        assert _extract_symbol("//nolint:staticcheck // SA5011") != "SA5011"
+
+    def test_extract_symbol_rejects_noise_words(self):
+        from backend.services.necrosis_detector import _extract_symbol
+        assert _extract_symbol("// TODO remove this later") not in ("TODO", "REMOVEME")
+
+    def test_extract_symbol_rejects_field_noise(self):
+        """DefaultValue/Deprecated/Description are struct fields, not the symbol."""
+        from backend.services.necrosis_detector import _extract_symbol
+        out = _extract_symbol("DefaultValue: false, Deprecated: true,")
+        assert out not in ("DefaultValue", "Deprecated")
+
+    def test_extract_symbol_member_access_rightmost_field(self):
+        """On a //nolint line, the deprecated member is the leaf field, not the local var.
+        Regression: this used to extract 'ip' instead of 'IPAddress'."""
+        from backend.services.necrosis_detector import _extract_symbol
+        code = 'var ip []string; if inspect.NetworkSettings.IPAddress != "" { //nolint:staticcheck'
+        assert _extract_symbol(code) == "IPAddress"
+
+    def test_extract_symbol_member_call(self):
+        """A deprecated method call resolves to the method, not the receiver chain.
+        Regression: this used to fall back to 'file:config'."""
+        from backend.services.necrosis_detector import _extract_symbol
+        assert _extract_symbol("c.Machine.logDeprecationWarning()") == "logDeprecationWarning"
+
+    def test_non_deprecation_staticcheck_detected(self):
+        """SA5011 (nil pointer) is NOT a deprecation; SA1019 is."""
+        from backend.services.necrosis_detector import _NON_DEPRECATION_SA_RE
+        assert _NON_DEPRECATION_SA_RE.search("SA5011: possible nil pointer dereference")
+        assert not _NON_DEPRECATION_SA_RE.search("SA1019: deprecated API")
+
+    def test_marker_in_snippet_matches_spacing(self):
+        from backend.services.necrosis_detector import _marker_in_snippet
+        assert _marker_in_snippet("Deprecated: true", "DefaultValue: false, Deprecated:   true,") is True
+
+    def test_marker_in_snippet_rejects_absent(self):
+        from backend.services.necrosis_detector import _marker_in_snippet
+        assert _marker_in_snippet("Deprecated: true", "// just a normal comment") is False
+
+    def test_real_tombstone_requires_true(self):
+        from backend.services.necrosis_detector import _is_real_tombstone
+        assert _is_real_tombstone("Deprecated: true", "Deprecated:   true,") is True
+        assert _is_real_tombstone("Deprecated: true", "Deprecated bool // field def") is False
+
+    def test_real_tombstone_toberemovedwith_needs_value(self):
+        from backend.services.necrosis_detector import _is_real_tombstone
+        assert _is_real_tombstone("ToBeRemovedWith", 'ToBeRemovedWith: "18.0",') is True
+        assert _is_real_tombstone("ToBeRemovedWith", 'ToBeRemovedWith: "",') is False
+
+    def test_extract_intent_replacement(self):
+        from backend.services.necrosis_detector import _extract_intent
+        repl, _target = _extract_intent("# @deprecated use full_path when you need a URL route")
+        assert repl == "full_path"
+
+    def test_extract_intent_removal_target(self):
+        from backend.services.necrosis_detector import _extract_intent
+        _repl, target = _extract_intent('ToBeRemovedWith: "18.0"')
+        assert target == "18.0"
+
+    def test_detect_language_from_extension(self):
+        from backend.services.necrosis_detector import _detect_language
+        assert _detect_language("helpers/flags.go", "any") == "go"
+        assert _detect_language("app/models/wiki.rb", "any") == "ruby"
+        assert _detect_language("api.py", "any") == "python"
+
+    def test_excluded_paths_skip_generated(self):
+        from backend.services.necrosis_detector import _EXCLUDED_PATH_PATTERNS
+        assert _EXCLUDED_PATH_PATTERNS.search("vendor/foo/bar.go")
+        assert _EXCLUDED_PATH_PATTERNS.search("CHANGELOG.md")
+        assert _EXCLUDED_PATH_PATTERNS.search("api/projects.md")
+        assert _EXCLUDED_PATH_PATTERNS.search("helpers/flags_test.go")
+
+    def test_excluded_paths_allow_real_source(self):
+        from backend.services.necrosis_detector import _EXCLUDED_PATH_PATTERNS
+        assert not _EXCLUDED_PATH_PATTERNS.search("helpers/featureflags/flags.go")
+        assert not _EXCLUDED_PATH_PATTERNS.search("app/models/wiki.rb")
+
+    def test_confidence_flag_tombstone_autopasses(self):
+        from backend.services.necrosis_detector import NecroticCode, _score_necrosis_confidence
+        c = NecroticCode(
+            id="x", name="UseDualstack", file_path="cache/s3.go",
+            annotation="Deprecated: true", detection_method="flag_tombstone",
+            language="go", age_days=600,
+        )
+        _score_necrosis_confidence(c, min_age_days=90)
+        assert c.detection_confidence >= 2
+
+    def test_confidence_penalizes_fresh_deprecation(self):
+        """A deprecation only 10 days old is likely intentional, not necrosis."""
+        from backend.services.necrosis_detector import NecroticCode, _score_necrosis_confidence
+        c = NecroticCode(
+            id="x", name="NewThing", file_path="a.go",
+            annotation="// Deprecated:", detection_method="removal_marker",
+            language="go", age_days=10,
+        )
+        _score_necrosis_confidence(c, min_age_days=90)
+        # fresh penalty applied → low confidence
+        assert any("only" in s for s in c.detection_signals)
+
+
+@pytest.mark.unit
+class TestCleanupRemovalFilter:
+    """Removing redundant/unused/dead code is housekeeping, not a revivable feature.
+    Regression: 'deleted carrierwave_s3 patch from rubocop_todo files' and
+    'redundant signal handling' were being surfaced as top revival priorities."""
+
+    def test_filters_rubocop_todo_cleanup(self):
+        from backend.services.git_forensics import _is_cleanup_removal
+        assert _is_cleanup_removal("deleted carrierwave_s3 patch from rubocop_todo files") is True
+
+    def test_filters_redundant(self):
+        from backend.services.git_forensics import _is_cleanup_removal
+        assert _is_cleanup_removal("redundant signal handling in ci status command") is True
+        assert _is_cleanup_removal("Removes more redundant ruby spec tests") is True
+
+    def test_filters_unused_and_dead(self):
+        from backend.services.git_forensics import _is_cleanup_removal
+        assert _is_cleanup_removal("remove unused import") is True
+        assert _is_cleanup_removal("delete dead code in parser") is True
+
+    def test_keeps_feature_flag_removal(self):
+        from backend.services.git_forensics import _is_cleanup_removal
+        assert _is_cleanup_removal("TrackMaxRssAnon", "featureflag: remove TrackMaxRssAnon") is False
+        assert _is_cleanup_removal("REGISTRY_FF_ENFORCE_LOCKFILES", "remove REGISTRY_FF_ENFORCE_LOCKFILES") is False
+
+    def test_keeps_constraint_driven_removal(self):
+        from backend.services.git_forensics import _is_cleanup_removal
+        # mentions security → revivable even though it's a removal
+        assert _is_cleanup_removal("Pages wildcard", "Disable Pages wildcard domains — security risk") is False
+
+    def test_keeps_plain_feature(self):
+        from backend.services.git_forensics import _is_cleanup_removal
+        assert _is_cleanup_removal("Bundled Mattermost Integration", "Remove bundled Mattermost") is False
+
+
+@pytest.mark.unit
+class TestGraduationSticky:
+    """A graduated feature flag is LIVE, not dead — demand must never promote it.
+    Regression: 'default-enabled git_last_modified' was being lifted keep_buried ->
+    revive_now by the demand override, falsely recommending revival of a live feature."""
+
+    def test_demand_does_not_promote_graduated(self):
+        from backend.routes.stream import _apply_demand_signal
+        feat = {
+            "name": "default-enabled git_last_modified",
+            "death_reason": {"category": "feature_flag"},
+            "viability": {"recommendation": "keep_buried", "revival_feasibility": 9, "graduated": True},
+            "open_issue_matches": [{"iid": 1}, {"iid": 2}, {"iid": 3}],
+        }
+        note = _apply_demand_signal(feat)
+        assert note is None, "graduated feature must not be demand-promoted"
+        assert feat["viability"]["recommendation"] == "keep_buried"
+
+    def test_demand_still_promotes_non_graduated(self):
+        from backend.routes.stream import _apply_demand_signal
+        feat = {
+            "name": "wildcard domain support",
+            "death_reason": {"category": "feature_flag"},
+            "viability": {"recommendation": "keep_buried", "revival_feasibility": 8},
+            "open_issue_matches": [{"iid": 1}, {"iid": 2}],
+        }
+        _apply_demand_signal(feat)
+        # non-graduated keep_buried with demand should lift (to at least investigate)
+        assert feat["viability"]["recommendation"] != "keep_buried"
+
+
+# 31. Necrosis route contracts (integration — needs server)
+class TestNecrosisRoutes:
+    def test_necrosis_scan_route_exists(self, client):
+        try:
+            r = client.post("/api/necrosis/scan", json={"repo_url": "test/test"}, timeout=3.0)
+            assert r.status_code not in (404, 405)
+        except httpx.TimeoutException:
+            pass  # SSE started — route exists
+
+    def test_necrosis_scan_requires_repo_url(self, client):
+        r = client.post("/api/necrosis/scan", json={})
+        assert r.status_code == 422
+
+    def test_necrosis_latest_route_exists(self, client):
+        r = client.get("/api/necrosis/latest")
+        assert r.status_code == 200
+        d = r.json()
+        assert "findings" in d and "summary" in d
+
+    def test_deletion_mr_unknown_finding_404(self, client):
+        r = client.post("/api/necrosis/nonexistent-finding-xyz/deletion-mr",
+                        json={"project_path": "test/repo"})
+        assert r.status_code in (404, 503)
+
+    def test_deletion_mr_route_not_405(self, client):
+        """Regression guard — route must be registered as POST."""
+        r = client.post("/api/necrosis/any-id/deletion-mr",
+                        json={"project_path": "gitlab-org/gitlab-runner"})
+        assert r.status_code != 405
+
+
+# 32. Necrosis latest data contract (integration)
+class TestNecrosisDataContract:
+    def test_latest_findings_have_required_fields(self, client):
+        r = client.get("/api/necrosis/latest")
+        for f in r.json().get("findings", []):
+            for field in ("name", "file_path", "detection_method", "deletion_safety"):
+                assert field in f, f"necrosis finding missing field: {field}"
+
+    def test_latest_verdicts_valid(self, client):
+        r = client.get("/api/necrosis/latest")
+        valid = {"excise_now", "needs_biopsy", "leave_intact"}
+        for f in r.json().get("findings", []):
+            rec = (f.get("deletion_safety") or {}).get("recommendation")
+            if rec:
+                assert rec in valid, f"invalid necrosis verdict: {rec}"
+
+    def test_excise_now_never_has_callers(self, client):
+        """SAFETY INVARIANT: a finding marked excise_now must have 0 external callers.
+        NECRO must never recommend deleting code that is still referenced."""
+        r = client.get("/api/necrosis/latest")
+        for f in r.json().get("findings", []):
+            safety = f.get("deletion_safety") or {}
+            if safety.get("recommendation") == "excise_now":
+                callers = safety.get("callers_found", -1)
+                assert callers == 0, (
+                    f"SAFETY VIOLATION: '{f.get('name')}' is excise_now with {callers} callers"
+                )
+
+    def test_no_excluded_files_in_findings(self, client):
+        """Generated/vendored/test files must never surface as necrosis."""
+        from backend.services.necrosis_detector import _EXCLUDED_PATH_PATTERNS
+        r = client.get("/api/necrosis/latest")
+        for f in r.json().get("findings", []):
+            fp = f.get("file_path", "")
+            assert not _EXCLUDED_PATH_PATTERNS.search(fp), (
+                f"excluded file surfaced as necrosis: {fp}"
+            )

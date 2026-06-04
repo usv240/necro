@@ -1,7 +1,7 @@
 """
 Google ADK agent for NECRO — The Code Necromancer.
 
-Model: gemini-3-flash-preview
+Model: gemini-2.5-flash
 MCP:   @zereight/mcp-gitlab via ADK MCPToolset (StdioConnectionParams)
        — gives the agent native GitLab MCP tools (list_commits, create_issue, etc.)
        — works on Linux/Cloud Run; gracefully degrades to REST on Windows localhost
@@ -309,7 +309,7 @@ def _build_agent() -> Agent:
 
     return Agent(
         name="necro_code_necromancer",
-        model="gemini-3-flash-preview",
+        model="gemini-2.5-flash",
         instruction=_SYSTEM_PROMPT,
         tools=tools,
     )
@@ -365,5 +365,5 @@ def get_runner() -> Runner:
             app_name="necro",
             session_service=InMemorySessionService(),
         )
-        logger.info("[OK] NECRO ADK agent initialized (model: gemini-3-flash-preview, tools: google_search + 3 FunctionTools + MCP official SSE + @zereight stdio)")
+        logger.info("[OK] NECRO ADK agent initialized (model: gemini-2.5-flash, tools: google_search + 3 FunctionTools + MCP official SSE + @zereight stdio)")
     return _runner

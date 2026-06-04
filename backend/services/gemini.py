@@ -1,20 +1,31 @@
 """
-Gemini client — Gemini 3 Flash primary (Google AI Studio), Vertex AI Gemini 3 Flash fallback.
+Gemini client — Gemini 3 Flash primary (Google AI Studio), Vertex AI Gemini 2.5 Flash fallback.
+
+The Vertex project does not currently serve gemini-3-flash-preview, so the fallback
+(and the adversarial Challenger, which runs on Vertex) uses gemini-2.5-flash. This is an
+honest, deliberate split — and it makes the Challenger a genuinely different model from
+the primary, which strengthens the adversarial-independence guarantee.
 """
 
 import json
 import logging
 import re
+import time
 
 import google.genai as genai
 from google.genai import types
 
 from backend.config import settings
+from backend.services.run_trace import trace_event
 
 logger = logging.getLogger(__name__)
 
-_PRIMARY_MODEL = "gemini-3-flash-preview"
-_FALLBACK_MODEL = settings.GEMINI_MODEL  # gemini-3-flash-preview via Vertex AI
+_PRIMARY_MODEL = "gemini-3-flash-preview"  # Google AI Studio (API key) — verified available
+_FALLBACK_MODEL = settings.GEMINI_MODEL  # gemini-2.5-flash via Vertex AI (Vertex lacks gemini-3)
+
+# Per-request HTTP timeout (milliseconds). Without this, a single hung connection
+# blocks for minutes and holds the whole parallel feature batch hostage.
+_HTTP_TIMEOUT_MS = 45000
 
 _client: genai.Client | None = None
 _vertex_client: genai.Client | None = None
@@ -47,9 +58,13 @@ async def generate_text(prompt: str, thinking_budget: int = 0) -> str:
         temperature=0.0,  # deterministic scoring — same input must produce same output
         thinking_config=types.ThinkingConfig(thinking_budget=thinking_budget)
         if thinking_budget > 0 else None,
+        http_options=types.HttpOptions(timeout=_HTTP_TIMEOUT_MS),
     )
 
     # Primary: Gemini 3 Flash
+    started = time.perf_counter()
+    primary_error = ""
+    primary_error_type = ""
     try:
         client = _get_client()
         resp = await client.aio.models.generate_content(
@@ -57,23 +72,46 @@ async def generate_text(prompt: str, thinking_budget: int = 0) -> str:
             contents=prompt,
             config=config,
         )
-        return resp.text or ""
+        text = resp.text or ""
+        trace_event("gemini_call", provider="ai_studio", model=_PRIMARY_MODEL,
+                    status="success", duration_ms=round((time.perf_counter() - started) * 1000, 2),
+                    response_chars=len(text))
+        return text
     except Exception as primary_err:
+        primary_error = str(primary_err)
+        primary_error_type = type(primary_err).__name__
         logger.warning("Gemini 3 Flash error: %s — falling back to Vertex AI", primary_err)
 
-    # Fallback: Vertex AI Gemini 3 Flash
+    trace_event("gemini_call", provider="ai_studio", model=_PRIMARY_MODEL,
+                status="error", duration_ms=round((time.perf_counter() - started) * 1000, 2),
+                error_type=primary_error_type, error=primary_error)
+
+    # Fallback: Vertex AI Gemini 2.5 Flash
+    started = time.perf_counter()
     try:
         vertex = _get_vertex_client()
         if vertex:
             resp = await vertex.aio.models.generate_content(
                 model=_FALLBACK_MODEL,
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.0),
+                config=types.GenerateContentConfig(
+                    temperature=0.0,
+                    http_options=types.HttpOptions(timeout=_HTTP_TIMEOUT_MS),
+                ),
             )
-            return resp.text or ""
+            text = resp.text or ""
+            trace_event("gemini_call", provider="vertex_ai", model=_FALLBACK_MODEL,
+                        status="success", duration_ms=round((time.perf_counter() - started) * 1000, 2),
+                        response_chars=len(text))
+            return text
     except Exception as fallback_err:
         logger.error("Vertex AI fallback error: %s", fallback_err)
 
+        trace_event("gemini_call", provider="vertex_ai", model=_FALLBACK_MODEL,
+                    status="error", duration_ms=round((time.perf_counter() - started) * 1000, 2),
+                    error_type=type(fallback_err).__name__, error=str(fallback_err))
+
+    trace_event("gemini_call", provider="all", status="empty_response")
     return ""
 
 
@@ -87,9 +125,11 @@ async def generate_json(prompt: str, thinking_budget: int = 0, retries: int = 2)
     full_prompt = prompt + "\n\nReturn ONLY valid JSON. No markdown fences, no explanation outside the JSON."
 
     for attempt in range(1, retries + 2):  # retries + 1 total attempts
+        trace_event("gemini_json_attempt", attempt=attempt, max_attempts=retries + 1)
         text = await generate_text(full_prompt, thinking_budget=thinking_budget)
         if not text:
             if attempt <= retries:
+                trace_event("gemini_json_retry", attempt=attempt, reason="empty_response")
                 logger.warning("Gemini returned empty response, retry %d/%d", attempt, retries)
                 continue
             return None
@@ -110,6 +150,7 @@ async def generate_json(prompt: str, thinking_budget: int = 0, retries: int = 2)
             return result
 
         logger.warning("JSON parse failed (attempt %d/%d): %.300s", attempt, retries + 1, text)
+        trace_event("gemini_json_retry", attempt=attempt, reason="parse_failed")
 
     return None
 
@@ -160,15 +201,16 @@ def _extract_json_robust(text: str) -> dict | list | None:
 
 async def generate_json_adversarial(prompt: str) -> dict | None:
     """
-    Generate a JSON response using the Vertex AI client (Gemini 3 Flash).
+    Generate a JSON response using the Vertex AI client (Gemini 2.5 Flash).
 
-    Used by the Challenger Agent to ensure serving independence from the
-    primary analysis (Gemini 3 Flash via API key). Same model, different
-    serving infrastructure (Vertex AI vs AI Studio) and adversarial system prompt.
+    Used by the Challenger Agent to ensure independence from the primary analysis
+    (Gemini 3 Flash via AI Studio API key). The Challenger runs a DIFFERENT model
+    (Gemini 2.5 Flash) on DIFFERENT serving infrastructure (Vertex AI) with an
+    adversarial system prompt — genuine model + serving independence.
     """
     full_prompt = prompt + "\n\nReturn ONLY valid JSON. No markdown fences, no explanation outside the JSON."
 
-    # Primary: Vertex AI Gemini 3 Flash (independent serving from primary API-key path)
+    # Primary: Vertex AI Gemini 2.5 Flash (independent model + serving from primary API-key path)
     vertex = _get_vertex_client()
     if vertex:
         try:

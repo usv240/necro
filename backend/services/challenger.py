@@ -1,8 +1,8 @@
 """
 Challenger Agent — independent adversarial review of revival recommendations.
 
-Uses Vertex AI Gemini 3 Flash (via generate_json_adversarial) to ensure genuine
-model independence from the primary analysis (Gemini 3 Flash via API key).
+Uses Vertex AI Gemini 2.5 Flash (via generate_json_adversarial) to ensure genuine
+model independence from the primary analysis (Gemini 3 Flash via AI Studio API key).
 
 The Challenger's job is to REJECT, not confirm. It starts from a position of
 skepticism and must produce specific, falsifiable failure scenarios. It is required
@@ -24,8 +24,11 @@ multi-agent code review system.
 Your ONLY job is to find reasons why a proposed feature revival will FAIL.
 You are NOT trying to be helpful or encouraging. You are trying to prevent bad decisions.
 
-Your starting position is REJECT. You will only move to CONFIRM if the evidence is
-overwhelming and the risks are clearly manageable.
+Your default posture is deep skepticism, but channel it correctly: REJECT only when the
+original blocker still stands (the constraint is not actually resolved). When the blocker
+has demonstrably cleared but real risks remain, DOWNGRADE and load your objections into the
+risks — do not reject a feature whose constraint is genuinely gone just because revival is
+hard work. Only CONFIRM when the constraint is resolved AND the risks are clearly manageable.
 
 You MUST:
 1. Produce exactly 3 specific, falsifiable failure scenarios
@@ -98,10 +101,22 @@ Return a JSON object:
   "what_primary_got_wrong": "specifically what the primary agent overlooked or overstated"
 }}
 
-Verdict guide:
-- confirm: feasibility >= 7 AND all 3 failure scenarios have clear mitigations
-- downgrade: feasibility 4-6 OR at least one failure scenario lacks a clear mitigation
-- reject: feasibility <= 3 OR the primary agent's evidence does not actually resolve the constraint"""
+Verdict guide — choose the verdict by WHAT your objection is about:
+- reject: ONLY when the original blocking constraint is NOT actually resolved (the
+    evidence doesn't prove the specific blocker is gone), OR feasibility <= 3, OR the
+    kill reason is a permanent/legal/security blocker that still applies. "Reject" means
+    "the thing that killed this feature is still true."
+- downgrade: the constraint IS resolved, but revival carries real cost or risk — large
+    migration effort, breaking changes, performance/ops concerns, ecosystem upgrades.
+    These are reasons to be CAUTIOUS, not reasons the feature is dead. Use downgrade here.
+- confirm: constraint resolved AND the listed risks have clear mitigations.
+
+CRITICAL: migration size and upgrade effort are DOWNGRADE concerns, never REJECT grounds.
+If the original constraint is genuinely resolved (e.g. the API/version that was missing
+now exists and shipped after the kill date), do NOT reject just because the upgrade is a
+big project — raise those as hidden_risks and downgrade instead. Reserve reject for
+"the blocker is still real." Your skepticism belongs in the risks, not in over-rejecting
+features whose constraint has demonstrably cleared."""
 
     result = await generate_json_adversarial(prompt)
 
@@ -115,13 +130,13 @@ Verdict guide:
         result["hidden_risks"] = hidden_risks[:6]
 
         logger.info(
-            "Challenger verdict for '%s': %s (score=%s, primary=%s, model=gemini_3_flash)",
+            "Challenger verdict for '%s': %s (score=%s, primary=%s, model=vertex_gemini_2_5_flash)",
             name,
             result.get("challenger_verdict"),
             result.get("challenger_score"),
             primary_feasibility,
         )
-        result["source"] = "vertex_gemini_3_flash_challenger"
+        result["source"] = "vertex_gemini_2_5_flash_challenger"
         return result
 
     return {
@@ -132,18 +147,23 @@ Verdict guide:
         "strongest_objection": "Could not independently evaluate — assume risk is higher than primary estimate",
         "recommended_first_step": "Manually review the primary analysis before proceeding",
         "what_primary_got_wrong": "Unknown — challenger evaluation failed",
-        "source": "vertex_gemini_3_flash_challenger",
+        "source": "vertex_gemini_2_5_flash_challenger",
     }
 
 
-async def challenge_top_revival_candidates(features: list[dict]) -> list[dict]:
+async def challenge_top_revival_candidates(features: list[dict], limit: int = 3) -> list[dict]:
     """
-    Run the Challenger Agent on up to 3 revive_now candidates in parallel.
+    Run the Challenger Agent on up to `limit` candidates in parallel.
     Returns a list of challenger assessment dicts (same order as input).
+
+    The caller decides which candidates to pass — typically all revive_now
+    recommendations plus the highest-feasibility investigate_further ones, so
+    cautious-but-wrong verdicts also get an independent adversarial review.
     """
     import asyncio
 
-    tasks = [challenge_revival_candidate(f) for f in features[:3]]
+    selected = features[:max(0, limit)]
+    tasks = [challenge_revival_candidate(f) for f in selected]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     assessments = []
@@ -159,7 +179,7 @@ async def challenge_top_revival_candidates(features: list[dict]) -> list[dict]:
                 "strongest_objection": "Could not evaluate independently",
                 "recommended_first_step": "Review manually before committing",
                 "what_primary_got_wrong": "Unknown",
-                "source": "vertex_gemini_3_flash_challenger",
+                "source": "vertex_gemini_2_5_flash_challenger",
             })
         else:
             assessments.append(r)

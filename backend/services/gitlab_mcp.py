@@ -12,12 +12,14 @@ Transport summary:
 """
 
 import logging
+import time
 import urllib.parse
 from typing import Any, Optional
 
 import httpx
 
 from backend.config import settings
+from backend.services.run_trace import trace_event
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +204,24 @@ class GitLabClient:
             params={"scope": "issues", "search": query, "per_page": per_page},
         )
 
+    async def search_blobs(self, project_path: str, query: str, per_page: int = 20) -> list[dict]:
+        """
+        Search the LIVE repository file content (scope=blobs) for a query string.
+
+        Unlike search_code (which searches issues) this hits the actual source files
+        currently in the repo — used by Necrosis detection to find deprecation
+        annotations (@deprecated, TODO: remove, Deprecated: true, etc.) that are
+        still present in the codebase right now.
+
+        Returns a list of {basename, data, path, filename, ref, startline, project_id}
+        per GitLab's blobs search response.
+        """
+        result = await self._get(
+            f"/projects/{_encode(project_path)}/search",
+            params={"scope": "blobs", "search": query, "per_page": per_page},
+        )
+        return result if isinstance(result, list) else []
+
     async def get_file(self, project_path: str, file_path: str, ref: str = "HEAD") -> Optional[dict]:
         """
         Fetch a single file from the repository at a given ref.
@@ -220,6 +240,30 @@ class GitLabClient:
             except Exception:
                 result["decoded_content"] = ""
         return result if isinstance(result, dict) else None
+
+    async def get_file_blame(
+        self, project_path: str, file_path: str, ref: str = "HEAD",
+        start_line: int | None = None, end_line: int | None = None,
+    ) -> list[dict]:
+        """
+        Fetch git blame for a file (optionally a line range) via the GitLab blame API.
+
+        Returns a list of blame ranges, each {commit: {...}, lines: [...]}. Used by
+        Necrosis detection to find the EXACT commit that introduced a deprecation
+        annotation on a specific line — far more accurate than file-level last-commit
+        for dating how long code has been undead.
+        """
+        params: dict = {"ref": ref}
+        if start_line is not None and end_line is not None:
+            params["range[start]"] = start_line
+            params["range[end]"] = end_line
+        logger.info("[MCP] get_file_blame -> %s:%s@%s lines=%s-%s",
+                    project_path, file_path, ref, start_line, end_line)
+        result = await self._get(
+            f"/projects/{_encode(project_path)}/repository/files/{_encode(file_path)}/blame",
+            params=params,
+        )
+        return result if isinstance(result, list) else []
 
     async def get_commit_diff(self, project_path: str, sha: str) -> list[dict]:
         """
@@ -331,16 +375,28 @@ class GitLabClient:
 
     async def _get(self, path: str, params: dict | None = None) -> Any:
         if not settings.GITLAB_TOKEN:
+            trace_event("gitlab_http", method="GET", path=path, status="skipped_no_token")
             logger.debug("GET %s skipped — no GITLAB_TOKEN", path)
             return []
         url = settings.GITLAB_URL.rstrip("/") + "/api/v4" + path
+        started = time.perf_counter()
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 r = await client.get(url, headers=self._headers, params=params or {})
+                duration_ms = round((time.perf_counter() - started) * 1000, 2)
                 if r.status_code == 200:
                     data = r.json()
+                    trace_event(
+                        "gitlab_http", method="GET", path=path, params=params or {},
+                        status_code=r.status_code, duration_ms=duration_ms,
+                        result_count=len(data) if isinstance(data, list) else None,
+                    )
                     # GitLab sometimes returns a single dict for detail endpoints
                     return data if data is not None else []
+                trace_event(
+                    "gitlab_http", method="GET", path=path, params=params or {},
+                    status_code=r.status_code, duration_ms=duration_ms,
+                )
                 if r.status_code == 401:
                     logger.warning("GET %s → 401 Unauthorized — check GITLAB_TOKEN", path)
                 elif r.status_code == 403:
@@ -353,17 +409,27 @@ class GitLabClient:
                     logger.debug("GET %s → %d", path, r.status_code)
         except httpx.TimeoutException:
             logger.warning("GET %s timed out after 30s", path)
+            trace_event("gitlab_http", method="GET", path=path, status="timeout")
         except Exception as exc:
             logger.debug("REST GET %s failed: %s", path, exc)
+            trace_event("gitlab_http", method="GET", path=path, status="error",
+                        error_type=type(exc).__name__, error=str(exc))
         return []
 
     async def _post(self, path: str, json: dict | None = None) -> Optional[dict]:
         if not settings.GITLAB_TOKEN:
+            trace_event("gitlab_http", method="POST", path=path, status="skipped_no_token")
             return None
         url = settings.GITLAB_URL.rstrip("/") + "/api/v4" + path
+        started = time.perf_counter()
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 r = await client.post(url, headers=self._headers, json=json or {})
+                trace_event(
+                    "gitlab_http", method="POST", path=path,
+                    status_code=r.status_code,
+                    duration_ms=round((time.perf_counter() - started) * 1000, 2),
+                )
                 if r.status_code in (200, 201):
                     return r.json()
                 logger.warning("POST %s → %d: %s", path, r.status_code, r.text[:300])
@@ -375,6 +441,8 @@ class GitLabClient:
                 return {"_error": True, **body}
         except Exception as exc:
             logger.warning("REST POST %s failed: %s", path, exc)
+            trace_event("gitlab_http", method="POST", path=path, status="error",
+                        error_type=type(exc).__name__, error=str(exc))
         return None
 
 

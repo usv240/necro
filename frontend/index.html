@@ -9,12 +9,12 @@
   <!-- Apply theme before render to prevent flash -->
   <script>
     (function() {
-      var t = localStorage.getItem('necro-theme') || 'dark';
+      var t = localStorage.getItem('necro-theme') || 'light';
       document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
 
-  <link rel="stylesheet" href="style.css?v=3.0" />
+  <link rel="stylesheet" href="style.css?v=20260531a" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -67,6 +67,20 @@
           <span class="nav-item-icon">✦</span>
           <span class="nav-item-text">Dormant Feature Registry</span>
           <span class="tab-badge" id="tabBadgeGraveyard" style="margin-left:auto">0</span>
+        </div>
+      </button>
+      <button class="sidebar-nav-item nav-tab" data-tab="necrosis">
+        <div style="display:flex;align-items:center;gap:0.55rem;width:100%">
+          <span class="nav-item-icon">☠</span>
+          <span class="nav-item-text">Necrosis Registry</span>
+          <span class="tab-badge" id="tabBadgeNecrosis" style="margin-left:auto">0</span>
+        </div>
+      </button>
+      <button class="sidebar-nav-item nav-tab" data-tab="mission">
+        <div style="display:flex;align-items:center;gap:0.55rem;width:100%">
+          <span class="nav-item-icon">◎</span>
+          <span class="nav-item-text">Mission Control</span>
+          <span class="tab-badge tab-badge-hot" id="tabBadgeMission" style="margin-left:auto">AI</span>
         </div>
       </button>
       <button class="sidebar-nav-item nav-tab" data-tab="timeline">
@@ -175,8 +189,11 @@
         <div class="scanner-console-card">
           <div class="scanner-console-glow"></div>
           <div class="scanner-console-header">
-            <h3>Dormant Feature Scanner</h3>
-            <p>Paste any public GitLab URL to discover which disabled features are ready to revive — every finding is verified against live external evidence, not training-data guesses.</p>
+            <div class="sch-title-group">
+              <h3>Dormant Feature Scanner</h3>
+              <p>Paste any public GitLab URL to discover which disabled features are ready to revive — every finding is verified against live external evidence, not training-data guesses.</p>
+            </div>
+            <button class="console-collapse-btn" id="collapseScannerBtn" onclick="toggleScannerConsole()" title="Toggle Scanner Panel">▲</button>
           </div>
           <div class="scanner-console-body">
             <div class="scanner-form-row">
@@ -229,18 +246,12 @@
                     <span class="chip-row-desc">Pre-analyzed — loads in 1 second, no API calls needed</span>
                   </div>
                   <div class="quick-buttons" id="quickRepoFeatured">
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab')">gitlab</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab-shell')">gitlab-shell</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitaly')">gitaly</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/cli')">gitlab-cli</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('fdroid/fdroidclient')">fdroid-client</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('gstreamer/gstreamer')">gstreamer</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/omnibus-gitlab')">omnibus-gitlab</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab-workhorse')" title="Best real-repo spread: 3 Revival Candidates + 2 Keep Buried">gitlab-workhorse ★</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/container-registry')" title="3 Revival Candidates: reverts + feature flag removal">container-registry</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab-pages')" title="3 Revival Candidates including FF_ENABLE_DOMAIN_REDIRECT">gitlab-pages</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitaly')" title="Feature flag removals: TrackMaxRssAnon, git_last_modified">gitaly</button>
+                    <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab')" title="Honest clean scan — proves NECRO doesn't fabricate">gitlab (clean)</button>
                     <button class="chip-neon chip-featured" onclick="loadDemoData('gitlab-org/gitlab-foss')">gitlab-foss</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('inkscape/inkscape')">inkscape</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('videolan/vlc')">vlc</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('kde/krita')">krita</button>
-                    <button class="chip-neon chip-featured" onclick="loadDemoData('godotengine/godot')">godot</button>
                   </div>
                 </div>
 
@@ -251,10 +262,12 @@
                     <span class="chip-row-desc">Real GitLab MCP + ADK + Gemini pipeline — 90s to 4 min depending on candidates found</span>
                   </div>
                   <div class="quick-buttons">
-                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab', 200, 24)">gitlab</button>
-                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-shell', 100, 36)">gitlab-shell</button>
-                    <button class="chip-live" onclick="quickScan('gitlab-org/gitaly', 150, 36)">gitaly</button>
-                    <button class="chip-live" onclick="quickScan('gitlab-org/container-registry', 150, 36)">container-registry</button>
+                    <button class="chip-live chip-flagship" onclick="quickScan('ujwal240/necro-demo-graveyard', 200, 12)" title="Flagship: 2 Revive Now (React + OpenSSL, verified evidence) + 1 Candidate + 2 Buried">necro-demo &#9733;</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-workhorse', 250, 48)" title="Best real repo: 3 Revival Candidates + 2 Keep Buried">workhorse</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/container-registry', 300, 48)" title="3 Revival Candidates: GCS revert + REGISTRY_FF flag">container-registry</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-pages', 200, 48)" title="3–4 features including FF_ENABLE_DOMAIN_REDIRECT">gitlab-pages</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab-development-kit', 300, 48)" title="OpenSSL + Node kills — grounded with real evidence">dev-kit</button>
+                    <button class="chip-live" onclick="quickScan('gitlab-org/gitlab', 200, 24)" title="Honest clean scan — 0 results proves no fabrication">gitlab (clean)</button>
                     <button class="chip-more" id="moreReposToggle" onclick="toggleMoreRepos()">+ more</button>
                   </div>
                 </div>
@@ -267,34 +280,31 @@
                   </div>
 
                   <div class="repo-category">
-                    <div class="repo-cat-label">★ Proven Revive Now producers</div>
+                    <div class="repo-cat-label">★ Reliable live-result producers</div>
                     <div class="repo-cat-chips">
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab', 200, 24)">gitlab</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-shell', 100, 36)">gitlab-shell</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitaly', 150, 36)">gitaly</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/cli', 80, 24)">gitlab-cli</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab', 120, 24)">gitlab</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/container-registry', 80, 36)">container-registry</button>
                       <button class="chip-neon chip-sm" onclick="pickRepo('fdroid/fdroidclient', 50, 18)">fdroid-client</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gstreamer/gstreamer', 100, 36)">gstreamer</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/omnibus-gitlab', 100, 36)">omnibus-gitlab</button>
-                    </div>
-                  </div>
-
-                  <div class="repo-category">
-                    <div class="repo-cat-label">Investigate-only (single dormant finding)</div>
-                    <div class="repo-cat-chips">
-                      <button class="chip-neon chip-sm" onclick="pickRepo('fdroid/fdroidserver', 50, 18)">fdroid-server</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('godotengine/godot', 120, 36)">godot</button>
                       <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-pages', 80, 36)">gitlab-pages</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-foss', 80, 24)">gitlab-foss</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/container-registry', 150, 36)">container-registry</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-workhorse', 80, 36)">gitlab-workhorse</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gstreamer/gstreamer', 80, 36)">gstreamer</button>
                     </div>
                   </div>
 
                   <div class="repo-category">
-                    <div class="repo-cat-label">Mature codebases (mostly keep-buried)</div>
+                    <div class="repo-cat-label">Additional tested live targets</div>
                     <div class="repo-cat-chips">
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-runner', 120, 36)">gitlab-runner</button>
-                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-workhorse', 80, 36)">gitlab-workhorse</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitlab-runner', 80, 36)">gitlab-runner</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/gitaly', 100, 36)">gitaly</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('gitlab-org/omnibus-gitlab', 80, 36)">omnibus-gitlab</button>
+                      <button class="chip-neon chip-sm" onclick="pickRepo('fdroid/fdroidserver', 50, 18)">fdroid-server</button>
+                    </div>
+                  </div>
+
+                  <div class="repo-category">
+                    <div class="repo-cat-label">Cached-demo only / lower-yield live scans</div>
+                    <div class="repo-cat-chips">
+                      <button class="chip-neon chip-sm" onclick="pickRepo('godotengine/godot', 120, 36)">godot</button>
                       <button class="chip-neon chip-sm" onclick="pickRepo('inkscape/inkscape', 60, 18)">inkscape</button>
                       <button class="chip-neon chip-sm" onclick="pickRepo('meltano/meltano', 100, 24)">meltano</button>
                     </div>
@@ -385,7 +395,7 @@
           </div>
           <div class="stat-card investigate-stat">
             <div class="stat-value" id="statInvestigate">0</div>
-            <div class="stat-label">Investigate</div>
+            <div class="stat-label">Revival Candidates</div>
           </div>
           <div class="stat-card buried-stat">
             <div class="stat-value" id="statBuried">0</div>
@@ -456,6 +466,193 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- ── Mission Control tab ─────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-mission">
+        <div class="mission-split">
+
+          <!-- ── LEFT: command config (inputs + CTA) ────────────────────── -->
+          <aside class="mission-config">
+
+            <div class="mlc-header">
+              <div class="mlc-orb">◎</div>
+              <div>
+                <div class="mlc-title">Autonomous Mission</div>
+                <div class="mlc-tagline">One instruction — agent finishes the job</div>
+              </div>
+            </div>
+
+            <!-- Repo inputs -->
+            <div class="mlc-fields">
+              <div class="mlc-field">
+                <label class="mlc-label" for="missionScanRepo">Scan repository <span class="mlc-badge">find the work</span></label>
+                <input type="text" class="mlc-input" id="missionScanRepo" placeholder="gitlab-org/gitlab-runner" value="gitlab-org/gitlab-runner" autocomplete="off" spellcheck="false" />
+              </div>
+              <div class="mlc-field">
+                <label class="mlc-label" for="missionActionRepo">Action repository <span class="mlc-badge">create the MRs</span></label>
+                <input type="text" class="mlc-input" id="missionActionRepo" placeholder="your-group/your-project" value="ujwal240-group/ujwal240-project" autocomplete="off" spellcheck="false" />
+              </div>
+            </div>
+
+            <button class="btn btn-mission" id="missionBtn" onclick="startMission()">
+              ◎ Launch Autonomous Mission
+            </button>
+
+            <div class="mlc-secondary-row">
+              <button class="btn btn-sm" id="missionReplayBtn" onclick="loadMissionLatest()" title="Instantly replay the most recent mission report — no live run">
+                ⚡ Replay last mission
+              </button>
+              <label class="mission-dryrun">
+                <input type="checkbox" id="missionDryRun" /> Dry run
+              </label>
+            </div>
+
+            <div class="mlc-footer">
+              Powered by <strong>Google Cloud Agent Builder</strong> + GitLab MCP write tools
+            </div>
+
+          </aside>
+
+          <!-- ── RIGHT: live output (idle → terminal → report) ──────────── -->
+          <section class="mission-output">
+
+            <!-- Phase progress strip — shown during a live run, then hidden -->
+            <div class="mission-phases" id="missionPhases" style="display:none">
+              <div class="mphase" data-phase="recon"><span class="mphase-dot">1</span><span class="mphase-label">Recon</span></div>
+              <div class="mphase-arrow">→</div>
+              <div class="mphase" data-phase="plan"><span class="mphase-dot">2</span><span class="mphase-label">Plan</span></div>
+              <div class="mphase-arrow">→</div>
+              <div class="mphase" data-phase="challenge"><span class="mphase-dot">3</span><span class="mphase-label">Challenge</span></div>
+              <div class="mphase-arrow">→</div>
+              <div class="mphase" data-phase="act"><span class="mphase-dot">4</span><span class="mphase-label">Act</span></div>
+              <div class="mphase-arrow">→</div>
+              <div class="mphase" data-phase="verify"><span class="mphase-dot">5</span><span class="mphase-label">Verify</span></div>
+              <div class="mphase-arrow">→</div>
+              <div class="mphase" data-phase="report"><span class="mphase-dot">6</span><span class="mphase-label">Report</span></div>
+            </div>
+
+            <div class="mission-idle" id="missionIdle">
+              <div class="mi-orb">◎</div>
+              <div class="mi-title">Ready to launch</div>
+              <div class="mi-sub">Configure repos on the left and launch the autonomous agent.</div>
+              <div class="mi-phases-preview">
+                <span class="mi-ph">Recon</span><span class="mi-arr">→</span>
+                <span class="mi-ph">Plan</span><span class="mi-arr">→</span>
+                <span class="mi-ph">Challenge</span><span class="mi-arr">→</span>
+                <span class="mi-ph">Act</span><span class="mi-arr">→</span>
+                <span class="mi-ph">Verify</span><span class="mi-arr">→</span>
+                <span class="mi-ph">Report</span>
+              </div>
+              <div class="mi-chips">
+                <span class="mi-chip">Google Cloud Agent Builder</span>
+                <span class="mi-chip">GitLab MCP stdio</span>
+                <span class="mi-chip">Adversarial challenge</span>
+                <span class="mi-chip">Real Draft MRs</span>
+              </div>
+            </div>
+            <div class="terminal mission-terminal" id="missionTerminal" style="display:none"></div>
+            <div id="missionReport"></div>
+          </section>
+
+        </div>
+      </div>
+
+      <!-- ── Necrosis Registry tab ───────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-necrosis">
+        <div class="scanner-card" id="necrosisScannerCard">
+          <div class="scanner-card-header-wrap">
+            <div class="sch-title-group">
+              <h3 class="scanner-title">☠ Necrosis Scanner — Dead Code Detection</h3>
+              <p class="scanner-sub">
+                The mirror of revival. Paste a public GitLab URL to find code that was
+                <strong>deprecated or disabled but never removed</strong> — necrotic tissue still
+                attached to a living codebase. Every finding is checked against live callers
+                (GitLab blobs search) before NECRO suggests excising it. We never recommend
+                deleting load-bearing code.
+              </p>
+            </div>
+            <button class="console-collapse-btn" id="collapseNecrosisScannerBtn" onclick="toggleNecrosisScanner()" title="Toggle Necrosis Panel">▲</button>
+          </div>
+
+          <div class="scan-inputs">
+            <div class="input-group" style="flex:1">
+              <label for="necrosisRepoUrl">GitLab Repository URL</label>
+              <input type="text" id="necrosisRepoUrl" placeholder="https://gitlab.com/org/repo  or  org/repo"
+                     value="gitlab-org/gitlab-runner" />
+            </div>
+            <div class="input-group">
+              <label for="necrosisMaxFindings">Max Findings</label>
+              <input type="number" id="necrosisMaxFindings" value="30" />
+            </div>
+            <div class="input-group">
+              <label for="necrosisMinAge">Min Age (days)</label>
+              <input type="number" id="necrosisMinAge" value="90" />
+            </div>
+          </div>
+
+          <div class="scan-actions">
+            <button class="btn btn-primary" id="necrosisScanBtn" onclick="startNecrosisScan()">
+              Run Necrosis Scan
+            </button>
+            <span class="scan-hint">Scans live file content via GitLab MCP <code>search_blobs</code> + per-line <code>blame</code> dating</span>
+          </div>
+
+          <div class="chip-section" style="margin-top:0.9rem">
+            <div class="chip-row-label">
+              <span class="chip-row-icon">⚡</span>
+              <span class="chip-row-title">Instant demo</span>
+              <span class="chip-row-desc">Pre-analyzed cached scan — loads in 1 second</span>
+            </div>
+            <div class="quick-buttons">
+              <button class="chip-neon chip-featured" onclick="loadNecrosisDemo('gitlab-org/gitlab-runner')" title="Go — nolint:staticcheck suppressions + Deprecated: true flags">gitlab-runner ★</button>
+              <button class="chip-neon chip-featured" onclick="loadNecrosisDemo('gitlab-org/gitaly')" title="Go — ToBeRemovedWith flags + deprecated RPC methods">gitaly</button>
+              <button class="chip-neon chip-featured" onclick="loadNecrosisDemo('gitlab-org/container-registry')" title="Go — REGISTRY_FF tombstones + deprecated storage calls">container-registry</button>
+              <button class="chip-neon chip-featured" onclick="loadNecrosisDemo('gitlab-org/gitlab-workhorse')" title="Go — deprecated upload handlers + removed middleware">gitlab-workhorse</button>
+              <button class="chip-neon chip-featured" onclick="loadNecrosisDemo('gitlab-org/gitlab')" title="Ruby/Rails — @deprecated annotations + TODO: remove markers">gitlab</button>
+            </div>
+          </div>
+
+          <div class="chip-section" style="margin-top:0.7rem">
+            <div class="chip-row-label">
+              <span class="chip-row-icon live-icon">●</span>
+              <span class="chip-row-title">Live scan</span>
+              <span class="chip-row-desc">Real GitLab MCP search_blobs + per-line blame — 60–120s</span>
+            </div>
+            <div class="quick-buttons">
+              <button class="chip-live" onclick="quickNecrosis('gitlab-org/gitlab-runner', 40, 90)" title="Best for excise_now: Go repo with Deprecated: true flags + green CI">gitlab-runner ★</button>
+              <button class="chip-live" onclick="quickNecrosis('gitlab-org/container-registry', 40, 90)" title="Go — REGISTRY_FF tombstones, deprecated storage layer calls">container-registry</button>
+              <button class="chip-live" onclick="quickNecrosis('gitlab-org/gitlab-workhorse', 40, 90)" title="Go — deprecated upload handlers, old middleware">gitlab-workhorse</button>
+              <button class="chip-live" onclick="quickNecrosis('gitlab-org/gitaly', 40, 90)" title="Go — ToBeRemovedWith annotations, deprecated RPC stubs">gitaly</button>
+              <button class="chip-live" onclick="quickNecrosis('gitlab-org/gitlab', 40, 180)" title="Ruby/Rails — @deprecated + TODO: remove, 15M+ lines">gitlab</button>
+              <button class="chip-live" onclick="quickNecrosis('inkscape/inkscape', 30, 180)" title="C++ — deprecated GTK/Cairo APIs, old rendering paths">inkscape</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Necrosis summary bar -->
+        <div class="summary-bar" id="necrosisSummaryBar" style="display:none">
+          <div class="summary-stat repo-stat"><div class="summary-val" id="necRepo">—</div><div class="summary-lbl">Repository scanned</div></div>
+          <div class="summary-stat summary-excise"><div class="summary-val" id="necExcise">0</div><div class="summary-lbl">Excise Now</div></div>
+          <div class="summary-stat summary-biopsy"><div class="summary-val" id="necBiopsy">0</div><div class="summary-lbl">Needs Biopsy</div></div>
+          <div class="summary-stat summary-intact"><div class="summary-val" id="necIntact">0</div><div class="summary-lbl">Leave Intact</div></div>
+          <div class="summary-stat"><div class="summary-val" id="necReclaimed">—</div><div class="summary-lbl">Est. cleanup value</div></div>
+        </div>
+
+        <!-- Necrosis filter -->
+        <div class="filter-bar" id="necrosisFilterBar" style="display:none">
+          <span class="filter-label">Filter:</span>
+          <button class="filter-btn active" onclick="setNecrosisFilter('all', this)">All findings</button>
+          <button class="filter-btn" onclick="setNecrosisFilter('excise_now', this)">Excise Now</button>
+          <button class="filter-btn" onclick="setNecrosisFilter('needs_biopsy', this)">Needs Biopsy</button>
+          <button class="filter-btn" onclick="setNecrosisFilter('leave_intact', this)">Leave Intact</button>
+        </div>
+
+        <!-- Necrosis results grid -->
+        <div class="graveyard-grid" id="necrosisGrid"></div>
+
+        <!-- Necrosis terminal -->
+        <div class="terminal" id="necrosisTerminal" style="display:none"></div>
       </div>
 
       <!-- ── Timeline tab ────────────────────────────────────────────────────── -->
@@ -666,13 +863,16 @@
     </main>
 
     <!-- Bottom Real-time simulation terminal -->
-    <footer class="cyber-terminal-console">
+    <footer class="cyber-terminal-console" id="cyberConsoleFooter">
       <div class="console-header">
         <div class="header-left-group">
           <span class="console-dot-pulse"></span>
           <span class="console-title">Agent Intelligence Stream</span>
         </div>
-        <span class="console-status">ONLINE // ADK READY</span>
+        <div class="console-header-right">
+          <span class="console-status">ONLINE // ADK READY</span>
+          <button class="console-min-btn" id="consoleCollapseBtn" onclick="toggleConsoleFooter()" title="Toggle Console Footer">_</button>
+        </div>
       </div>
       <div class="console-terminal-lines" id="cliFeedContainer">
         <!-- Live typing simulated stream of MCP queries -->
@@ -685,6 +885,6 @@
 <div class="toast-container" id="toastContainer"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=20260601a"></script>
 </body>
 </html>

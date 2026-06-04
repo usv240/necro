@@ -82,8 +82,10 @@ tools:
 
 # ── Quick-start prompts for Duo Chat sidebar ─────────────────────────────────
 suggested_prompts:
+  - "NECRO, run an autonomous code-lifecycle mission on this repo"
   - "NECRO, scan this repository for dead features"
   - "What features were disabled in the last 2 years that could be revived now?"
+  - "Find dead code that's deprecated but never removed, and tell me what's safe to delete"
   - "Show me the Resurrection Chains — shared constraints locking multiple features"
   - "Are there any open issues requesting features we already built and disabled?"
   - "Create a revival plan for the highest-priority dead feature"

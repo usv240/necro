@@ -9,12 +9,33 @@ Every claim is labelled: "verified via npm_registry" vs "unverified (AI-inferred
 """
 
 import logging
+import os
 import re
 from typing import Optional
 
 import httpx
 
+from backend.services.run_trace import trace_event
+
 logger = logging.getLogger(__name__)
+
+
+def _github_headers(accept: str) -> dict:
+    """GitHub API headers. Uses GITHUB_TOKEN when present to lift the unauthenticated
+    rate limit (60/hr -> 5000/hr). Without a token a busy scan can exhaust the quota
+    and silently degrade groundings to 'unverified' — the cause of flaky revive verdicts.
+
+    Resolution order: .env via Settings (GITHUB_TOKEN) -> raw env (GITHUB_TOKEN/GH_TOKEN)."""
+    headers = {"Accept": accept, "User-Agent": "necro-constraint-grounder/1.0"}
+    try:
+        from backend.config import settings
+        token = settings.GITHUB_TOKEN
+    except Exception:
+        token = ""
+    token = token or os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 # Technology → GitHub repo for release lookup
 _GITHUB_REPOS: dict[str, str] = {
@@ -63,6 +84,31 @@ _GITHUB_REPOS: dict[str, str] = {
     "apollo": "apollographql/apollo-client",
     "twilio": "twilio/twilio-node",
     "sendgrid": "sendgrid/sendgrid-nodejs",
+    # ── Runtimes & system tooling (GitHub releases verifiable) ──────────────
+    # These cover the constraint types that actually kill features in non-JS repos
+    # (GitLab=Ruby/Go, godot/inkscape/gstreamer=C/C++). The common revivable pattern
+    # is "blocked by <runtime/lib> bug, fixed in a later release" — release dates
+    # let us verify the fix landed after the kill date.
+    "go": "golang/go",
+    "golang": "golang/go",
+    "ruby": "ruby/ruby",
+    "rust": "rust-lang/rust",
+    "python": "python/cpython",
+    "cpython": "python/cpython",
+    "llvm": "llvm/llvm-project",
+    "clang": "llvm/llvm-project",
+    "electron": "electron/electron",
+    "gtk": "GNOME/gtk",
+    "qt": "qt/qtbase",
+    "godot": "godotengine/godot",
+    "openssl": "openssl/openssl",
+    "ffmpeg": "FFmpeg/FFmpeg",
+    "grpc": "grpc/grpc",
+    "protobuf": "protocolbuffers/protobuf",
+    "boringssl": "google/boringssl",
+    "curl": "curl/curl",
+    "sqlite": "sqlite/sqlite",
+    "openssl3": "openssl/openssl",
 }
 
 # Canonical npm package names (for packages with scoped names, etc.)
@@ -115,12 +161,59 @@ _PYPI_PACKAGES: dict[str, str] = {
 }
 
 
+# ── Permanently-deprecated platform capabilities ───────────────────────────────
+# The version-lookup path (npm/GitHub/PyPI) only answers "does a newer release exist?".
+# It systematically MISSES the class of kill reason where the platform capability itself
+# was removed from the ecosystem (browser/runtime/plugin). For these, a newer library
+# release is irrelevant or actively misleading — "grpc shipped v1.81" does not revive
+# HTTP/2 Server Push after browsers removed it. Each entry carries a citable URL so the
+# "keep buried" verdict is evidence-backed, not an assertion.
+# (regex pattern, human label, end-of-life note, citable URL)
+_DEPRECATED_TECH: list[tuple[str, str, str, str]] = [
+    (r"http/?2\s*server[\s\-]?push|http/?2\s*push|\bh2\s*push\b",
+     "HTTP/2 Server Push",
+     "Chrome removed HTTP/2 Server Push in 2022 (M106) and other browsers followed. The "
+     "client-side protocol feature is gone, so a server-library fix cannot revive it.",
+     "https://developer.chrome.com/blog/removing-push/"),
+    (r"adobe flash|flash player|flash content|\.swf\b|actionscript",
+     "Adobe Flash",
+     "Adobe Flash Player reached end-of-life on 2020-12-31 and is blocked in all modern browsers.",
+     "https://www.adobe.com/products/flashplayer/end-of-life.html"),
+    (r"web\s?sql|websql",
+     "Web SQL Database",
+     "The Web SQL Database spec was deprecated by the W3C and removed from Chrome 119 (2023).",
+     "https://developer.chrome.com/blog/deprecating-web-sql/"),
+    (r"silverlight",
+     "Microsoft Silverlight",
+     "Silverlight reached end-of-support on 2021-10-12 and is unsupported in modern browsers.",
+     "https://learn.microsoft.com/en-us/lifecycle/products/silverlight-5"),
+    (r"java applet|browser applet|\bnpapi\b",
+     "Java Applets / NPAPI plugins",
+     "NPAPI plugin support (including Java applets) was removed from Chrome (2015) and Firefox (2017).",
+     "https://www.java.com/en/download/help/applet.html"),
+    (r"appcache|application cache|cache manifest",
+     "AppCache",
+     "The HTML5 Application Cache API was removed from Chrome 95 (2021) in favour of Service Workers.",
+     "https://developer.mozilla.org/docs/Web/API/Window/applicationCache"),
+]
+
+
+def _check_deprecation(text: str) -> Optional[dict]:
+    """Return a deprecation record if the text names a permanently-removed platform
+    capability, else None. Matched against feature name + constraint together."""
+    tl = (text or "").lower()
+    for pattern, label, note, url in _DEPRECATED_TECH:
+        if re.search(pattern, tl):
+            return {"label": label, "note": note, "url": url}
+    return None
+
+
 # Per-process cache: constraint text → grounding result.
 # Multiple features sharing the same constraint (webpack, oauth, etc.) skip redundant API calls.
 _GROUNDER_CACHE: dict[str, dict] = {}
 
 
-async def ground_constraint(constraint_text: str, kill_date: str) -> dict:
+async def ground_constraint(constraint_text: str, kill_date: str, feature_name: str = "") -> dict:
     """
     Given a constraint description and kill date, query real external APIs to find
     evidence of whether that constraint has been resolved.
@@ -139,21 +232,56 @@ async def ground_constraint(constraint_text: str, kill_date: str) -> dict:
       is_resolved (bool)    — did the resolution land AFTER the kill date?
       source (str)          — "npm_registry" | "github_releases" | "pypi" | "unverified"
     """
+    # Permanent-deprecation gate (runs FIRST, before any version lookup). If the
+    # feature depends on a platform capability that was removed from the ecosystem,
+    # no library version bump can revive it — short-circuit with a citable record so
+    # the verdict is "keep buried", not a misleading "newer release exists". (Bug #11/#1)
+    dep = _check_deprecation(f"{feature_name} {constraint_text}")
+    if dep:
+        result = {
+            "grounded": True,
+            "technology": dep["label"],
+            "evidence_date": "",
+            "evidence_url": dep["url"],
+            "latest_version": "",
+            "description": dep["note"],
+            "is_resolved": False,
+            "deprecated": True,
+            "source": "ecosystem_deprecation",
+        }
+        trace_event("constraint_grounding", status="deprecated", technology=dep["label"],
+                    evidence_url=dep["url"])
+        return result
+
     if not constraint_text:
+        trace_event("constraint_grounding", status="unverified", reason="empty_constraint")
         return _unverified("No constraint text provided")
 
     cache_key = constraint_text.lower().strip()[:120]
     if cache_key in _GROUNDER_CACHE:
         logger.debug("Grounder cache hit for: %s", cache_key[:60])
+        trace_event("constraint_grounding", status="cache_hit", constraint=cache_key)
         return _GROUNDER_CACHE[cache_key]
 
     tech, tech_type = _identify_technology(constraint_text)
+    # Fallback: the AI-phrased constraint sometimes drops the technology name (e.g.
+    # "lack of renderToPipeableStream support" instead of "React 17 ..."), which made
+    # grounding flip between revive/investigate run-to-run. The FEATURE NAME reliably
+    # carries the tech ("Streaming SSR (blocked by React 17, ...)"), so try it too.
+    if not tech and feature_name:
+        tech, tech_type = _identify_technology(feature_name)
+        if tech:
+            logger.info("Grounder identified '%s' from feature name (constraint text had none)", tech)
     if not tech:
         result = _unverified("No specific technology identified in constraint text")
         _GROUNDER_CACHE[cache_key] = result
+        trace_event("constraint_grounding", status="unverified", constraint=cache_key,
+                    reason="technology_not_identified")
         return result
 
     logger.info("Grounding constraint for '%s' (type=%s, kill=%s)", tech, tech_type, kill_date)
+    trace_event("constraint_grounding", status="lookup_started", constraint=cache_key,
+                technology=tech, lookup_type=tech_type, kill_date=kill_date)
 
     result: Optional[dict] = None
 
@@ -177,6 +305,8 @@ async def ground_constraint(constraint_text: str, kill_date: str) -> dict:
     if not result:
         grounding = _unverified(f"No release data found for '{tech}' via external APIs")
         _GROUNDER_CACHE[cache_key] = grounding
+        trace_event("constraint_grounding", status="unverified", constraint=cache_key,
+                    technology=tech, reason="release_data_not_found")
         return grounding
 
     is_resolved = _released_after_kill(result.get("release_date", ""), kill_date)
@@ -192,6 +322,10 @@ async def ground_constraint(constraint_text: str, kill_date: str) -> dict:
         "source": result.get("source", "api"),
     }
     _GROUNDER_CACHE[cache_key] = grounding
+    trace_event("constraint_grounding", status="verified", constraint=cache_key,
+                technology=tech, source=grounding["source"],
+                evidence_url=grounding["evidence_url"], evidence_date=grounding["evidence_date"],
+                is_resolved=grounding["is_resolved"])
     return grounding
 
 
@@ -203,6 +337,9 @@ _AMBIGUOUS_TECH_WORDS = {
     "requests", "flask", "node", "next", "vue", "apollo", "react",
     "express", "remix", "astro", "celery", "babel", "prisma",
     "redis", "docker", "ansible", "graphql", "next.js",
+    # Runtimes/tools that are also common English words — only match with tech context
+    # (version/upgrade/release/etc.) so prose like "go back" or "ruby colour" never grounds.
+    "go", "ruby", "rust", "python", "qt", "curl", "clang",
 }
 
 # Whole-word tokens that signal the surrounding text is talking ABOUT a technology
@@ -214,6 +351,7 @@ _TECH_CONTEXT_RE = re.compile(
     r"|deprecat(?:e|ed|ion|ing)|release[ds]?|installed?|installing"
     r"|depend(?:ency|encies|s\s+on)|import(?:s|ed)?|requires?|requiring"
     r"|npm|pip|pypi|registry|changelog|breaking\s+change"
+    r"|compiler|runtime|toolchain|std(?:lib)?|crate|gem|bug\s+in|fixed\s+in"
     r")\b",
     re.IGNORECASE,
 )
@@ -229,6 +367,44 @@ def _has_tech_context(keyword: str, text_lower: str) -> bool:
         if _TECH_CONTEXT_RE.search(text_lower[start:end]):
             return True
     return False
+
+
+# Common English words that get captured right after a package marker but are NOT
+# packages. Without this guard, "the sdk was unstable" grounded "was" as an npm
+# package, and "remove the api endpoint" grounded "endpoint" — fake "verified" badges.
+_NOT_A_PACKAGE = {
+    "was", "is", "are", "be", "been", "the", "this", "that", "it", "its", "they",
+    "had", "has", "have", "will", "can", "may", "did", "does", "got", "get",
+    "endpoint", "endpoints", "code", "logic", "support", "feature", "features",
+    "version", "call", "calls", "method", "function", "class", "field", "value",
+    "data", "file", "files", "test", "tests", "thing", "stuff", "part", "used",
+    "unstable", "broken", "old", "new", "legacy", "default", "config", "setting",
+    "and", "for", "with", "from", "into", "via", "due", "because", "when",
+}
+
+# Import-path markers — Go/other module paths are NOT npm packages and must never
+# be sent to the npm registry ("module google.golang.org/api" → not npm).
+_IMPORT_PATH_RE = re.compile(
+    r"(?:golang\.org|google\.golang|github\.com|gopkg\.in|gitlab\.com|"
+    r"\b[a-z0-9\-]+\.(?:org|com|io|dev|net)/)"
+)
+
+
+def _looks_like_package(name: str) -> bool:
+    """True only when `name` is plausibly a real npm/pypi package — not a Go import
+    path, not a bare English word, not too short. Prevents false 'verified' groundings."""
+    if not name or len(name) < 3:
+        return False
+    if name.lower() in _NOT_A_PACKAGE:
+        return False
+    if _IMPORT_PATH_RE.search(name):
+        return False
+    # package-shaped: optional @scope, alnum start, package chars only, contains a letter
+    if not re.match(r"^@?[a-z0-9][a-z0-9._\-/]{1,60}$", name):
+        return False
+    if not re.search(r"[a-z]", name):
+        return False
+    return True
 
 
 def _identify_technology(text: str) -> tuple[str, str]:
@@ -268,14 +444,22 @@ def _identify_technology(text: str) -> tuple[str, str]:
     if key:
         return key, "pypi"
 
-    # Heuristic: extract "X package", "X library", "X API", "X SDK"
-    m = re.search(
-        r"(?:npm package|library|sdk|framework|api|module)\s+['\"]?([a-zA-Z][\w\-\.@/]+)['\"]?",
-        text_lower,
-    )
+    # Heuristic: extract an explicitly-named package. Bare generic markers
+    # (api/module/sdk/framework) were DROPPED — they match plain prose ("remove the api
+    # endpoint") and grabbed the next English word as a fake package. We match BOTH
+    # "package <name>" (name after) and "<name> library/package" (name before), then
+    # require the captured token to pass _looks_like_package (rejects Go import paths,
+    # English words, and verb-stopwords like "had"/"was").
+    candidates = []
+    m = re.search(r"\b(?:npm package|npm module|package|library)\s+['\"]?([a-z0-9@][\w\-\.@/]+)['\"]?", text_lower)
     if m:
-        name = m.group(1).strip("'\"")
-        return name, "npm"
+        candidates.append(m.group(1).strip("'\"@/"))
+    m = re.search(r"\b([a-z0-9@][\w\-\.@/]+)\s+(?:npm\s+)?(?:package|library)\b", text_lower)
+    if m:
+        candidates.append(m.group(1).strip("'\"@/"))
+    for name in candidates:
+        if _looks_like_package(name):
+            return name, "npm"
 
     # Version mentions: "React 18", "PostgreSQL 15", "Node 20" — the trailing digit
     # itself is the tech-context signal, so these are safe without _has_tech_context.
@@ -326,10 +510,7 @@ async def _check_github_releases(repo: str) -> Optional[dict]:
     try:
         async with httpx.AsyncClient(
             timeout=8.0,
-            headers={
-                "Accept": "application/vnd.github.v3+json",
-                "User-Agent": "necro-constraint-grounder/1.0",
-            },
+            headers=_github_headers("application/vnd.github.v3+json"),
         ) as client:
             # Try latest endpoint first
             r = await client.get(f"https://api.github.com/repos/{repo}/releases/latest")
@@ -338,12 +519,14 @@ async def _check_github_releases(repo: str) -> Optional[dict]:
             else:
                 # Fall back to first page of releases
                 r2 = await client.get(f"https://api.github.com/repos/{repo}/releases?per_page=1")
-                if r2.status_code != 200:
-                    return None
-                releases = r2.json()
-                if not releases:
-                    return None
-                data = releases[0]
+                releases = r2.json() if r2.status_code == 200 else []
+                if releases:
+                    data = releases[0]
+                else:
+                    # Many major projects (Go, CPython, GTK, Qt, FFmpeg, SQLite) publish
+                    # via git TAGS, not GitHub Releases. Fall back to the tags API +
+                    # commit date so these still ground with a real, citable date.
+                    return await _check_github_tags(client, repo)
 
             version = data.get("tag_name", "")
             published = data.get("published_at", "")
@@ -359,6 +542,62 @@ async def _check_github_releases(repo: str) -> Optional[dict]:
             }
     except Exception as exc:
         logger.debug("GitHub releases lookup failed for %s: %s", repo, exc)
+        return None
+
+
+async def _check_github_tags(client: "httpx.AsyncClient", repo: str) -> Optional[dict]:
+    """Fallback for projects that ship via git tags rather than GitHub Releases
+    (Go, CPython, GTK, Qt, FFmpeg, SQLite, …). Resolves the newest tag and the date
+    of the commit it points to, so grounding still has a real citable date + URL."""
+    try:
+        tr = await client.get(f"https://api.github.com/repos/{repo}/tags?per_page=20")
+        if tr.status_code != 200:
+            return None
+        tags = tr.json()
+        if not tags:
+            return None
+        # Prefer a version-shaped tag (skip rc/alpha/beta when a stable one exists)
+        def _is_stable(t):
+            n = (t.get("name", "") or "").lower()
+            return not any(x in n for x in ("rc", "alpha", "beta", "-dev", "nightly"))
+        chosen = next((t for t in tags if _is_stable(t)), tags[0])
+        version = chosen.get("name", "")
+        commit_url = chosen.get("commit", {}).get("url", "")
+        release_date = ""
+        if commit_url:
+            cr = await client.get(commit_url)
+            if cr.status_code == 200:
+                cd = cr.json()
+                release_date = (
+                    cd.get("commit", {}).get("committer", {}).get("date", "")
+                    or cd.get("commit", {}).get("author", {}).get("date", "")
+                )
+        # Recency guard: GitHub's tags API does NOT return tags in chronological order,
+        # so tags[0] is sometimes an ancient tag (Go→2012, FFmpeg→2010, GTK→2017). Showing
+        # a decade-old release as "evidence" would be worse than not grounding. If the
+        # resolved date is implausibly old, the ordering failed — return unverified instead
+        # of misleading evidence. (Repos with proper Releases never hit this path.)
+        if release_date:
+            from datetime import datetime, timezone
+            try:
+                dt = datetime.fromisoformat(release_date.replace("Z", "+00:00"))
+                age_years = (datetime.now(timezone.utc) - dt).days / 365.0
+                if age_years > 4:
+                    logger.debug("Tags fallback for %s gave stale tag %s (%s) — rejecting", repo, version, release_date[:10])
+                    return None
+            except ValueError:
+                return None
+        else:
+            return None
+        return {
+            "version": version,
+            "release_date": release_date[:10],
+            "url": f"https://github.com/{repo}/releases/tag/{version}" if version else f"https://github.com/{repo}/tags",
+            "description": f"{repo.split('/')[-1]} {version} (git tag)",
+            "source": "github_tags",
+        }
+    except Exception as exc:
+        logger.debug("GitHub tags lookup failed for %s: %s", repo, exc)
         return None
 
 

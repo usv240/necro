@@ -1,173 +1,155 @@
-# NECRO — Code Revival Intelligence
+# NECRO — Code Lifecycle Intelligence
 
-**Find the features your team already built, paid for, and accidentally buried — then ship them.**
-
-> 🏆 Built for the [Google Cloud Rapid Agent Hackathon](https://rapid-agent.devpost.com) · **GitLab Track**
+NECRO reads your GitLab history and your live codebase, then helps you decide what your
+dead code deserves: a second life, or a proper burial. It doesn't just point at problems —
+it reasons about them, checks the evidence, and opens the merge request to act on it.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-necro--agent-blue?style=flat-square)](https://necro-agent-38381883054.us-central1.run.app)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green?style=flat-square)](./LICENSE)
-[![GitLab CI](https://img.shields.io/badge/CI-GitLab%20Pipeline-orange?style=flat-square)](https://gitlab.com/ujwal240-group/ujwal240-project/-/pipelines)
 
-🚀 **[Open the live app →](https://necro-agent-38381883054.us-central1.run.app)**
-
----
-
-## What is NECRO?
-
-NECRO is a **multi-agent AI forensics tool** that scans your GitLab repository and finds disabled features whose original kill reasons no longer apply — so your team can revive them instead of rebuilding from scratch.
-
-**Paste a GitLab URL. Get a ranked revival plan in 60–90 seconds.**
-
-### What you get from a scan
-
-- 📋 **Every disabled feature** found across commits, MRs, issues, and GitLab Feature Flags
-- 🔍 **The exact kill reason** — extracted from commit messages, MR discussions, and issue threads
-- ✅ **Live verification** — Google Search + npm/GitHub/PyPI APIs confirm whether the constraint was resolved and when, with a cited URL
-- ⚔️ **Adversarial challenge** — a second AI agent stress-tests every "revive" recommendation and finds reasons it might fail
-- 📊 **Ranked action plan** — Google Cloud Agent Builder synthesizes all findings into top 3 priorities
-- 🔀 **One-click action** — create a real GitLab issue or Draft MR with a full revival checklist
+**[Open the live app →](https://necro-agent-38381883054.us-central1.run.app)**
 
 ---
 
-## The Problem
+## The idea
 
-**GitLab Pages** wildcard domain support was disabled in 2021 because of a DNS subdomain takeover vulnerability. GitLab shipped subdomain verification in 2023. Three years later, the feature was still disabled — and 312 open issues were requesting it back. Nobody connected the dots.
+Every codebase carries two kinds of dead weight:
 
-This pattern repeats on every engineering team. A feature gets killed for a reason that made sense at the time. The reason disappears. The feature stays dead. The team eventually rebuilds the same thing from scratch — or a competitor ships it first.
+1. **Features that were killed** for a reason that no longer applies. A flag was turned off
+   because a library couldn't do something in 2021. The library can do it now. Nobody went
+   back. The team eventually rebuilds it from scratch.
+2. **Code that was deprecated but never removed.** A `@deprecated` annotation, a `TODO: remove`,
+   a feature flag marked `Deprecated: true`. It's been sitting there for years, adding noise
+   and risk, because deleting code is scary and nobody's sure it's safe.
 
-**The average team of 25 engineers wastes $140K+/year** this way.
+NECRO handles both directions of that lifecycle:
 
-NECRO connects those dots automatically.
+```
+  shipped ──► killed ──┬──► is the kill reason still valid?  ──► REVIVE
+                       │
+                       └──► deprecated but never deleted? ───► EXCISE
+```
 
----
-
-## How It Works
-
-### Phase 1 — Find and Analyze (60–90 seconds)
-
-**Step 1: Detect dead features** via 6 independent strategies using GitLab MCP tools:
-
-| # | Strategy | What it finds |
-|---|---|---|
-| 1 | Revert commits | Commits beginning with "Revert" — explicit feature deaths |
-| 2 | Feature flag diffs | Commits setting `FEATURE_X = false` or `.feature("name", false)` |
-| 3 | Disable keywords | Commits containing "disable", "remove", "kill", "flag-off", etc. |
-| 4 | Shelved issues | Closed issues labeled: `wont-fix`, `shelved`, `deferred`, `rejected` |
-| 5 | Feature-branch MRs | Merged `feature/*` branches with disable keywords in the title |
-| 6 | GitLab Feature Flags API | Native flags via `GET /api/v4/projects/:id/feature_flags` where `active=false` |
-
-**Step 2: Classify the kill reason** — Gemini 3 Flash reads the commit message, MR discussion, and linked issue threads to identify the specific constraint. Categories: `api_limitation`, `infrastructure`, `performance`, `security`, `technical_debt`, `strategic_pivot`, and more.
-
-**Step 3: Verify the constraint is still real** — two independent live sources:
-
-- **Google Search** (ADK built-in tool): searches `"[library] [capability] release notes"` or `"CVE-XXXX patch fix"` and cites the URL + date in the result
-- **Registry APIs**: queries npm, GitHub releases, and PyPI for the latest version and publish date
-
-Every "what changed" claim is labelled **verified** (backed by a live source) or **AI-inferred** (no evidence found — treat as hypothesis). Nothing is fabricated.
-
-**Step 4: Score revival viability** — outputs one of three verdicts:
-- 🟢 **Revive Now** — constraint resolved, clear path forward
-- 🟡 **Investigate Further** — partial evidence, needs human review
-- 🔴 **Keep Buried** — constraint still applies
-
-**Step 5: Adversarial challenge** — a second Gemini 3 Flash agent running on Vertex AI starts from a rejection position and must produce three specific, falsifiable failure scenarios for every "Revive Now" candidate.
-
-**Step 6: Resurrection Chains** — features that share a root constraint are grouped: *"One webpack upgrade unlocks 4 features simultaneously."* One fix, multiple revivals.
-
-### Phase 2 — ADK Synthesis (5–10 seconds)
-
-Google Cloud Agent Builder (ADK) reads all Phase 1 findings and uses `google_search` + GitLab MCPToolsets + FunctionTools to produce:
-- Top 3 revival priorities with reasoning
-- The single most common constraint blocking your graveyard
-- Open questions that need answering before action
-
-Results stream live to the browser as they're produced.
+Same engine, mirror-imaged. One side asks *"should this come back?"*, the other asks
+*"is it finally safe to delete this?"* — and both back every answer with live evidence.
 
 ---
 
-## Multi-Agent Design
+## What it does
 
-Three agents with distinct roles — not the same model with different prompts:
+### 1. Revival — bring back what's worth saving
 
-| Agent | Model | Infrastructure | Role |
-|---|---|---|---|
-| **Primary Analyst** | Gemini 3 Flash | Google AI (via ADK) | Kill reason extraction, viability scoring, ROI, competitive intel |
-| **Challenger** | Gemini 3 Flash | Vertex AI (separate SDK) | Adversarial red team — starts from REJECT, finds failure scenarios |
-| **Synthesis** | Gemini 3 Flash | ADK Runner | Strategic plan — multi-tool reasoning with google_search + MCP |
+Paste a GitLab URL. NECRO finds disabled features across commits, merge requests, issues, and
+feature flags, works out *why* each was killed, then checks whether that reason still holds:
 
-The Challenger is structurally required to disagree. It runs on separate infrastructure with a separate adversarial prompt and must produce falsifiable objections.
+- **Live verification** — Google Search + npm/GitHub/PyPI APIs confirm whether the blocking
+  constraint was resolved, and when, with a citable URL. Claims are labelled *verified* or
+  *AI-inferred* — nothing is presented as fact without a source.
+- **Demand signals** — matches open issues that are still asking for the feature.
+- **Adversarial challenge** — a second model argues *against* each revival and has to produce
+  specific reasons it might fail.
+- **Verdict** — Revive Now / Investigate / Keep Buried, with effort and risk.
+
+### 2. Necrosis — excise what's been dead too long
+
+NECRO scans the *live codebase* (not just history) for deprecation markers — `@deprecated`,
+`Deprecated: true`, `TODO: remove`, `//nolint:staticcheck`, and more. For each one it:
+
+- Dates the annotation with per-line `git blame` (how long has it actually been undead?).
+- Counts live callers via code search — **if anything still references it, NECRO will not tell
+  you to delete it.**
+- Returns Excise Now / Needs Biopsy / Leave Intact, plus the blast radius.
+
+### 3. Mission — let the agent finish the job
+
+Give NECRO one instruction and it runs the whole loop on its own:
+
+```
+RECON → PLAN → CHALLENGE → ACT → VERIFY → REPORT
+```
+
+It scans for both revivals and dead code, the planning agent picks the single highest-value
+feature to revive and the safest code to excise, the adversarial agent red-teams the plan,
+and then NECRO **acts** — it opens real GitLab Draft MRs (a revival scaffold and a deletion
+plan), verifies the files landed, and posts a summary issue linking everything. If the
+challenger rejects a revival, NECRO respects that and opens a discussion issue instead of a
+merge request. A dry-run mode plans and prepares everything without writing — you stay in
+control.
 
 ---
 
-## GitLab Integration
+## How it's built
 
-NECRO doesn't just call the GitLab API — it lives inside GitLab:
+Three models with distinct jobs, not one model behind three prompts:
 
-- **Official GitLab MCP Server** (`/-/ide/mcp`, SSE transport) — authoritative, 10 tools
-- **@zereight/mcp-gitlab** (stdio transport) — supplementary, 9 additional tools; **19 tools total**
-- **NECRO as MCP Server** — NECRO exposes itself at `/mcp`. Other GitLab Duo agents can call `scan_repository`, `get_candidates`, and `get_health` as tools
-- **Duo Custom Agent** — `.gitlab/duo/necro-agent.yaml` registers NECRO in the GitLab AI Catalog. Trigger with `@necro` in Duo Chat
-- **Ghost MR** — one click creates a real branch + commits `NECRO_REVIVAL.md` + opens a Draft MR with `@duo_code_review` — 3 GitLab write operations via MCP
-- **Post to GitLab** — post the full graveyard report as a native GitLab issue in any project
-- **CI/CD native** — `.gitlab-ci.yml` runs NECRO as a scan step on every push; findings post as GitLab issues automatically
-- **GitLab webhook** — push events trigger immediate re-evaluation via `POST /api/agent/webhook/gitlab`
-- **Group scan** — scan an entire GitLab namespace in parallel; surfaces cross-repository patterns
-
----
-
-## Tech Stack
-
-| Technology | Role |
+| Role | What it does |
 |---|---|
-| **Google Cloud Agent Builder (ADK)** | Multi-tool agent orchestration — `FunctionTool`, `MCPToolset`, `Runner`, `InMemorySessionService` |
-| **Gemini 3 Flash (`gemini-3-flash-preview`)** | Primary LLM — kill reason extraction, viability scoring, ADK synthesis |
-| **Google Search** (ADK built-in tool) | Live constraint verification — every claim has a cited URL and date |
-| **Google Cloud Vertex AI** | Adversarial challenger agent — separate infrastructure from primary |
-| **Google Cloud Run** | Serverless deployment (`min-instances 1`, no cold start) |
-| **Google Artifact Registry** | Docker image storage |
-| **GitLab MCP — Official SSE** | Authoritative GitLab MCP server (`/-/ide/mcp`) — 10 tools |
-| **GitLab MCP — @zereight/mcp-gitlab** | Community MCP server (stdio) — 9 supplementary tools |
-| **NECRO MCP Server (`/mcp`)** | NECRO exposes itself as an MCP endpoint (FastMCP) |
-| **MongoDB Atlas** | Scan history, feature store, watch list, revival log, embeddings |
-| **MongoDB Vector Search** | Semantic demand matching via `text-embedding-004` |
-| **FastAPI + SSE** | Async backend + real-time scan progress streaming |
-| **Slack SDK** | Revival alerts and autonomous notifications |
-| **Chart.js** | Timeline, kill-category distribution, feasibility heatmap |
+| **Analyst** | Extracts kill reasons, scores revival viability and deletion safety |
+| **Challenger** | Starts from "reject" and must find falsifiable reasons an action will fail |
+| **Synthesis / Planner** | Reasons over all findings, picks priorities, plans the mission |
+
+The analyst and planner run on Google Cloud Agent Builder (ADK) with Gemini and the
+`google_search` tool; the challenger runs on separate infrastructure so its disagreement is
+structural, not cosmetic.
+
+### GitLab integration
+
+NECRO lives inside GitLab rather than just calling its API:
+
+- **GitLab MCP tools** — `list_commits`, `get_commit`, `get_commit_diff`, `list_issues`,
+  `list_merge_requests`, `list_feature_flags`, `search_blobs` (live code search),
+  `get_file_blame` (per-line dating), `create_branch`, `create_file`, `create_merge_request`,
+  `create_issue`, and more.
+- **NECRO as an MCP server** — exposes `scan_repository`, `get_candidates`, `get_health` at
+  `/mcp` so other tools can call it.
+- **Duo Custom Agent** — `.gitlab/duo/necro-agent.yaml` registers NECRO in the GitLab AI
+  Catalog; trigger it with `@necro` in Duo Chat.
+- **Ghost MRs** — one click (or one mission) creates a real branch, commits a plan file, and
+  opens a Draft MR with `@duo_code_review`.
+- **CI** — `.gitlab-ci.yml` runs a scan on every push and can post findings as issues.
+
+### Stack
+
+| | |
+|---|---|
+| **Google Cloud Agent Builder (ADK)** | Multi-tool agent orchestration |
+| **Gemini** | Kill-reason extraction, viability + deletion scoring, mission planning |
+| **Google Search** | Live constraint verification with cited URLs |
+| **Vertex AI** | The adversarial challenger (separate from the primary) |
+| **Google Cloud Run** | Serverless hosting |
+| **MongoDB Atlas + Vector Search** | Scan history, findings, demand matching via embeddings |
+| **FastAPI + SSE** | Async backend with real-time scan streaming |
 
 ---
 
-## Quick Start
+## Quick start
 
-### Try the live app (no setup needed)
+### Try it live
 
 **[https://necro-agent-38381883054.us-central1.run.app](https://necro-agent-38381883054.us-central1.run.app)**
 
-- Click any **INSTANT DEMO** chip for pre-analyzed results (loads in 1 second)
-- Click any **LIVE SCAN** chip or paste your own GitLab URL for a live scan (60–90 seconds)
-- Any public GitLab repository works — paste the full URL like `https://gitlab.com/org/repo`
+- **Instant demo** chips load pre-analyzed results in about a second.
+- **Live scan** chips (or any public GitLab URL) run the real pipeline in 60–120 seconds.
+- **Mission Control** runs the full autonomous loop.
 
 ### Run locally
 
-**Prerequisites:**
-- Python 3.11+
-- Node.js 20+ (for `@zereight/mcp-gitlab`)
-- MongoDB Atlas account (free M0 tier works)
-- GitLab personal access token with `api` + `read_repository` scopes
-- Gemini API key from [aistudio.google.com](https://aistudio.google.com/apikey)
-- Google Cloud project with Vertex AI API enabled
+**Prerequisites:** Python 3.11+, Node 20+, a MongoDB Atlas account (free tier is fine), a
+GitLab personal access token with `api` + `read_repository`, a Gemini API key, and a Google
+Cloud project with Vertex AI enabled.
 
 ```bash
 git clone https://github.com/usv240/necro.git
 cd necro
 pip install -r requirements.txt
 npm install -g @zereight/mcp-gitlab
-cp .env.example .env   # then fill in your credentials
+cp .env.example .env   # fill in your credentials
 uvicorn backend.main:app --port 8080 --reload
 ```
 
 Open `http://localhost:8080`.
 
-**`.env` keys:**
+`.env` keys:
 
 ```env
 GITLAB_TOKEN=glpat-xxxxxxxxxxxx
@@ -180,150 +162,63 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/...   # optional
 ### Run tests
 
 ```bash
-pytest tests/test_necro.py -q
-# 10 unit tests run always (no server needed)
-# 134 integration tests run when backend is live on localhost:8080
+pytest tests/test_necro.py -q          # full suite
+pytest tests/test_necro.py -m unit     # pure-Python units, no server needed
 ```
+
+The unit tests run without a backend; integration tests run when the server is live on
+`localhost:8080`.
 
 ---
 
-## Deploy to Cloud Run
+## API reference
 
-```bash
-gcloud run deploy necro-agent \
-  --source . \
-  --project YOUR_PROJECT_ID \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --memory 1Gi \
-  --timeout 300 \
-  --min-instances 1 \
-  --set-env-vars "MONGODB_URI=...,GITLAB_TOKEN=...,GEMINI_API_KEY=...,GOOGLE_PROJECT_ID=..."
-```
-
-Or push to `main` on GitLab — the `.gitlab-ci.yml` deploy stage runs automatically when `GOOGLE_PROJECT_ID` is set as a CI variable.
-
----
-
-## Architecture
-
-```
-Browser → FastAPI → SSE stream
-              │
-    ┌─────────▼──────────────────────────────────┐
-    │  PHASE 1 — Data Collection (parallel)       │
-    │                                             │
-    │  6 detection strategies via GitLab MCP      │
-    │  ├─ list_commits / get_commit_diff          │
-    │  ├─ list_merge_requests / notes             │
-    │  ├─ list_issues / issue_notes               │
-    │  └─ list_feature_flags (active=false)       │
-    │                                             │
-    │  Per-feature analysis (asyncio batches)     │
-    │  ├─ death_reason.py    → Gemini 3 Flash     │
-    │  ├─ viability_scorer.py                     │
-    │  │   ├─ google_search  → live URL evidence  │
-    │  │   └─ constraint_grounder.py → npm/PyPI   │
-    │  ├─ roi_estimator.py   → issue demand count │
-    │  ├─ competitive_intel.py → market urgency   │
-    │  └─ challenger.py     → Vertex AI red team  │
-    │                                             │
-    │  Resurrection chains + open request match   │
-    └─────────────┬───────────────────────────────┘
-                  │
-    ┌─────────────▼───────────────────────────────┐
-    │  PHASE 2 — ADK Synthesis                     │
-    │                                             │
-    │  ADK Runner (google_search + MCPToolset)    │
-    │  → top 3 priorities                         │
-    │  → graveyard pattern                        │
-    │  → executive action plan                    │
-    └─────────────┬───────────────────────────────┘
-                  │
-    ┌─────────────▼───────────────────────────────┐
-    │  Output                                      │
-    │  MongoDB Atlas · GitLab issue · Ghost MR     │
-    │  graveyard_report.md + .json                │
-    │  Slack alert (optional)                     │
-    └─────────────────────────────────────────────┘
-```
+| Method | Endpoint | What it does |
+|--------|----------|--------------|
+| `POST` | `/api/scan/stream` | Revival scan — SSE stream with live progress |
+| `POST` | `/api/scan/demo` | Load a cached revival scan (instant) |
+| `POST` | `/api/scan/group` | Scan an entire GitLab namespace |
+| `POST` | `/api/necrosis/scan` | Dead-code scan — SSE stream |
+| `POST` | `/api/necrosis/demo` | Load a cached necrosis scan (instant) |
+| `POST` | `/api/agent/mission` | Autonomous mission — SSE stream |
+| `GET`  | `/api/agent/mission/latest` | Replay the most recent mission |
+| `POST` | `/api/revive/{id}` | Create a revival issue |
+| `POST` | `/api/revive/{id}/ghost-mr` | Branch + plan file + Draft MR |
+| `POST` | `/api/necrosis/{id}/deletion-mr` | Branch + deletion plan + Draft MR |
+| `GET`  | `/api/health` | Full stack status |
+| `POST` | `/mcp` | NECRO's own MCP endpoint |
 
 ---
 
-## API Reference
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/scan/stream` | **Primary scan** — SSE stream, real-time progress |
-| `POST` | `/api/scan/quick` | Synchronous scan — returns full JSON (for CI) |
-| `POST` | `/api/scan/demo` | Load pre-seeded demo scan from MongoDB |
-| `POST` | `/api/scan/group` | Scan entire GitLab namespace in parallel |
-| `GET` | `/api/report/latest` | Most recent scan |
-| `GET` | `/api/report/all-features` | All features across all scans |
-| `POST` | `/api/report/post-to-gitlab` | Post graveyard as a GitLab issue |
-| `POST` | `/api/report/notify-slack` | Send report to Slack |
-| `POST` | `/api/revive/{id}` | Create revival issue, auto-assign to kill commit author |
-| `POST` | `/api/revive/{id}/ghost-mr` | Branch + `NECRO_REVIVAL.md` + Draft MR |
-| `POST` | `/api/agent/ask` | Freeform ADK agent query (SSE) |
-| `POST` | `/api/agent/webhook/gitlab` | GitLab push webhook → immediate re-evaluation |
-| `GET` | `/api/watch/list` | Autonomous watch list |
-| `POST` | `/api/watch/add` | Add repo to watch list |
-| `GET` | `/api/health` | Full stack status — MongoDB, MCP, ADK, google_search, Slack |
-| `POST` | `/mcp` | **NECRO MCP endpoint** — consumable by GitLab Duo agents |
-
----
-
-## Project Structure
+## Project structure
 
 ```
 necro/
-├── agent/
-│   ├── agent.py              # ADK agent — google_search + FunctionTools + MCPToolset
-│   └── system_prompt.txt     # 4-step NECRO process with mandatory google_search
+├── agent/                      # ADK agent + system prompt
 ├── backend/
-│   ├── main.py               # FastAPI app + health endpoint
-│   ├── config.py             # Settings via pydantic-settings
-│   ├── db/
-│   │   ├── connection.py     # Motor async MongoDB client
-│   │   ├── schemas.py        # Pydantic models
-│   │   └── seed.py           # Pre-analyzed demo data (real commit SHAs)
+│   ├── main.py                 # FastAPI app + health
 │   ├── routes/
-│   │   ├── stream.py         # SSE scan — resurrection chains + ADK synthesis
-│   │   ├── scan.py           # Background + sync scans
-│   │   ├── report.py         # Retrieval + post-to-gitlab + Slack
-│   │   ├── revive.py         # Create issue + Ghost MR (3 write ops via MCP)
-│   │   ├── agent.py          # ADK ask + revive + GitLab webhook
-│   │   ├── watch.py          # Watchlist CRUD
-│   │   └── monitor.py        # APScheduler 24h loop
+│   │   ├── stream.py           # revival SSE scan
+│   │   ├── scan.py             # background + cached demo scans
+│   │   ├── necrosis.py         # dead-code scan + deletion MR
+│   │   ├── agent.py            # ADK ask + autonomous mission + webhook
+│   │   ├── revive.py           # revival issue + Ghost MR
+│   │   ├── report.py · watch.py · monitor.py
 │   └── services/
-│       ├── gitlab_mcp.py     # GitLab REST client wrapping 19 MCP tools
-│       ├── git_forensics.py  # 6-strategy dead feature detection
-│       ├── death_reason.py   # Kill reason classification (Gemini 3 Flash)
-│       ├── viability_scorer.py  # Revival scoring + CI health check
-│       ├── constraint_grounder.py  # npm / GitHub / PyPI live verification
-│       ├── roi_estimator.py  # Demand signal aggregation from issue counts
-│       ├── competitive_intel.py  # Market urgency analysis
-│       ├── challenger.py     # Adversarial agent (Vertex AI, separate SDK)
-│       ├── adk_runner.py     # ADK runner + synthesis helpers
-│       ├── gemini.py         # Gemini 3 Flash primary client
-│       ├── monitor.py        # APScheduler watchlist loop
-│       ├── slack_client.py   # Slack Block Kit alerts
-│       └── output_writer.py  # Markdown + JSON report output
-├── frontend/
-│   ├── index.html            # Single-page app — 5 tabs, live terminal
-│   ├── style.css             # Dark/light theme, mobile responsive
-│   └── app.js                # SSE client, Chart.js, URL parsing, routing
-├── tests/
-│   ├── conftest.py           # Auto-skip integration tests in CI
-│   └── test_necro.py         # 144 tests — 10 unit + 134 integration
-├── .gitlab-ci.yml            # CI pipeline (test → security → scan → deploy)
-├── .gitlab/duo/
-│   └── necro-agent.yaml      # GitLab Duo Custom Agent registration
-├── .env.example
-├── Dockerfile
-├── requirements.txt
-├── pytest.ini
-└── LICENSE                   # Apache 2.0
+│       ├── git_forensics.py        # dead-feature detection (history)
+│       ├── necrosis_detector.py    # dead-code detection (live codebase)
+│       ├── death_reason.py         # kill-reason classification
+│       ├── viability_scorer.py     # revival scoring + constraint check
+│       ├── deletion_scorer.py      # deletion-safety scoring + caller count
+│       ├── constraint_grounder.py  # npm / GitHub / PyPI verification
+│       ├── challenger.py           # adversarial agent
+│       ├── mission.py              # autonomous closed-loop orchestrator
+│       ├── adk_runner.py · gemini.py · gitlab_mcp.py · ...
+├── frontend/                   # single-page app (revival, necrosis, mission)
+├── tests/                      # unit + integration suite
+├── .gitlab/duo/necro-agent.yaml
+├── .gitlab-ci.yml
+└── LICENSE
 ```
 
 ---

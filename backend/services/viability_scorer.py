@@ -16,6 +16,42 @@ from backend.services.gemini import generate_json
 logger = logging.getLogger(__name__)
 
 
+# Kill-reason categories where a dependency/platform version bump is NOT evidence the
+# original constraint cleared. A feature killed for an unknown reason, a strategic pivot,
+# or a deliberate security/legal decision is not "resolved" just because some incidentally
+# named tech shipped a new release (e.g. grounding a gitlab-workhorse feature against
+# "gitlab v19.0.1"). Categories like api_limitation / technical_debt / infrastructure are
+# absent on purpose — for those a version bump genuinely can resolve the blocker.
+_VERSION_IRRELEVANT_CATEGORIES = {
+    "unknown", "strategic_pivot", "security", "regulatory", "legal", "compliance",
+}
+
+
+def _suppress_tangential_grounding(grounding: dict, category: str) -> bool:
+    """Strip the grounded/resolved framing from `grounding` (in place) when a version
+    bump is irrelevant to the kill reason. Deprecation groundings are never touched.
+
+    Returns True if suppression was applied. (Bug #3/#8 class — tangential evidence)
+    """
+    if (
+        grounding.get("grounded")
+        and not grounding.get("deprecated")
+        and category in _VERSION_IRRELEVANT_CATEGORIES
+    ):
+        grounding["grounded"] = False
+        grounding["is_resolved"] = False
+        grounding["tangential"] = True
+        # Clear the evidence-display fields too — otherwise the timeline still renders a
+        # "2026-05-26 · gitlab v19.0.1" line under the AI-inferred badge, which reads like
+        # evidence for a constraint the version bump never addressed.
+        grounding["evidence_date"] = ""
+        grounding["evidence_url"] = ""
+        grounding["latest_version"] = ""
+        grounding["technology"] = ""
+        return True
+    return False
+
+
 async def score_revival_viability(feature, death_reason: dict, project_path: str = "") -> dict:
     """
     Evaluate if the kill reason is still valid today.
@@ -39,6 +75,7 @@ async def score_revival_viability(feature, death_reason: dict, project_path: str
         grounding = await ground_constraint(
             constraint_text=specific_constraint or primary_reason,
             kill_date=kill_date,
+            feature_name=feature.name,
         )
     except Exception as exc:
         logger.warning("Constraint grounding failed for '%s': %s — continuing without evidence", feature.name, exc)
@@ -47,6 +84,46 @@ async def score_revival_viability(feature, death_reason: dict, project_path: str
             "evidence_date": "", "evidence_url": "", "description": "",
             "source": "error", "is_resolved": False,
         }
+
+    # Permanent-deprecation gate: if the feature depends on a platform capability that
+    # was removed from the ecosystem (HTTP/2 Server Push, Flash, Web SQL, …), no library
+    # version bump revives it. Short-circuit to a deterministic keep_buried verdict with
+    # the citable deprecation evidence — this is the class of kill reason the version
+    # lookups miss, and the reason HTTP/2 Server Push was wrongly "investigate". (Bug #11/#1)
+    if grounding.get("deprecated"):
+        tech = grounding.get("technology", "the underlying platform capability")
+        note = grounding.get("description", "")
+        logger.info("Deprecation gate: '%s' depends on %s — forcing keep_buried", feature.name, tech)
+        return {
+            "is_still_valid": True,
+            "what_changed": f"{tech} is permanently deprecated. {note}",
+            "revival_feasibility": 1,
+            "effort_estimate": "not viable",
+            "effort_category": "months",
+            "technical_risks": [
+                f"{tech} has been removed from the ecosystem — there is no supported path to revive it",
+                "A newer library release cannot restore a removed platform/browser capability",
+            ],
+            "recommendation": "keep_buried",
+            "reasoning": (
+                f"The capability this feature depends on ({tech}) is permanently deprecated, "
+                f"not a temporary constraint. {note} A newer dependency version does not bring "
+                "back a removed platform feature, so this should stay buried."
+            ),
+            "confidence": "high",
+            "deprecated": True,
+            "grounding": grounding,
+        }
+
+    # Tangential-evidence guard (see _suppress_tangential_grounding): when the kill
+    # category is one where a dependency/platform version bump is irrelevant, strip the
+    # grounded/resolved framing so the UI doesn't show a false "verified" badge and Gemini
+    # doesn't reason from irrelevant version evidence. (Bug #3/#8 class)
+    if _suppress_tangential_grounding(grounding, category):
+        logger.info(
+            "Tangential grounding for '%s': version bump irrelevant to a '%s' kill — "
+            "not treating as constraint resolution", feature.name, category,
+        )
 
     # Check GitLab CI health — a broken pipeline signals the codebase is unstable
     ci_health_block = ""
@@ -95,8 +172,11 @@ Do NOT fabricate release dates or version numbers — only use what is listed ab
         evidence_block = f"""EXTERNAL API LOOKUP: No specific package or library could be identified
 from the constraint text ("{specific_constraint or primary_reason}").
 
-Evaluate based on general knowledge of the software ecosystem as of May 2026,
-but mark confidence as "low" and is_still_valid as true if uncertain."""
+Evaluate based on general knowledge of the software ecosystem as of May 2026.
+Without verified external evidence:
+- Mark confidence as "low"
+- Do NOT score revival_feasibility above 6 unless you have very strong ecosystem evidence
+- Prefer "investigate_further" over "revive_now" — unverified assumptions are not safe grounds for immediate action"""
 
     prompt = f"""A software feature called "{feature.name}" was disabled on {kill_date}.
 
@@ -123,16 +203,22 @@ Return a JSON object with these exact fields:
 }}
 
 Recommendation guide:
-- revive_now: ANY of these conditions:
-    * feasibility >= 7 AND verified external evidence shows the constraint is resolved
-    * feasibility >= 7 AND category is "feature_flag" — feature flags are designed to be temporary; if the flag was removed without a clear permanent reason, the feature is a prime revival candidate
-    * feasibility >= 8 AND category is technical_debt, workaround, or performance AND medium/high confidence the original constraint no longer applies
-    * feasibility >= 8 AND confidence is "medium" or "high" AND the kill reason is NOT a clear permanent decision (not a security issue, not a strategic pivot, not a hard platform constraint)
-    * feasibility >= 7 AND is_temporary was true AND the temporary reason is clearly no longer relevant
-- investigate_further: feasibility 5-7 AND no strong evidence either way; OR feasibility 4-7 AND constraint may still apply
-- keep_buried: feasibility <= 3 OR the original kill reason clearly still applies today (hard platform limit, unfixed security issue, intentional product direction with no reversal signal)
+- revive_now: ALL of the following must hold:
+    * feasibility >= 7
+    * confidence is "medium" or "high" (low confidence → investigate_further at best)
+    * kill reason category is NOT "unknown" — if the reason the feature was disabled
+      is unknown, you cannot confirm the original constraint resolved; use investigate_further
+    * AND one of: verified external evidence shows constraint resolved; OR category is
+      "feature_flag" with a clear temporary rationale; OR category is technical_debt /
+      workaround / performance with ecosystem evidence the constraint no longer applies
+- investigate_further: feasibility 4-7; OR kill reason is unknown regardless of feasibility;
+    OR no verified evidence and confidence is "low"; OR constraint may still apply
+- keep_buried: feasibility <= 3; OR the kill reason clearly still applies today (active
+    security issue, hard platform limit, intentional strategic pivot, legal/compliance blocker)
 
-Use your knowledge of the software ecosystem as of May 2026 to assess whether the constraint has likely resolved, even without verified package data. Technical debt workarounds often become unnecessary as libraries and compilers mature. Be willing to recommend revive_now when the evidence (even circumstantial) strongly points that way.
+IMPORTANT: "Unknown kill reason" is a red flag, not a green light. Do NOT reason that
+"unknown = not permanently blocked = safe to revive_now". Unknown means you lack the
+evidence to make a confident call — default to investigate_further.
 
 IMPORTANT: Only cite specific version numbers or dates that appear in the VERIFIED EXTERNAL EVIDENCE block above."""
 
@@ -168,6 +254,10 @@ IMPORTANT: Only cite specific version numbers or dates that appear in the VERIFI
             result["recommendation"] = "keep_buried"
             result["confidence"] = "high"
             result["is_still_valid"] = True
+            # Sticky flag: a graduated feature is LIVE, not dead. Downstream demand
+            # overrides and synthesis upgrades must never promote it to revive_now —
+            # demand for an already-shipped feature is not a reason to "revive" it.
+            result["graduated"] = True
             result["reasoning"] = (
                 "This feature flag was removed because the feature was already enabled "
                 "by default — a graduation event, not a death. The feature is currently "
@@ -175,21 +265,24 @@ IMPORTANT: Only cite specific version numbers or dates that appear in the VERIFI
             )
             result["what_changed"] = "Feature graduated to default — flag cleanup only, feature is live."
 
-        # Post-processing guarantee: feature flags are explicitly temporary by design.
-        # If Gemini assessed feasibility ≥ 7 but didn't say revive_now (e.g. because
-        # no external evidence was found), upgrade it — the flag's existence as a
-        # dead feature is itself the evidence that it should be reconsidered.
-        # SKIP if already marked graduated (keep_buried + high confidence = graduation).
+        # Feature flags are temporary by design, BUT a flag being removed does not by
+        # itself prove the original constraint resolved — it may have graduated, been
+        # abandoned, or the blocker may persist. So we only treat a feature flag as a
+        # confident revive_now when there is VERIFIED external evidence (grounding).
+        # Ungrounded flags stay/become investigate_further — which is the honest
+        # verdict the ADK synthesis also reaches. (ADK google_search can still upgrade
+        # a verified one to revive_now later via _apply_synthesis_verdicts.)
         if (
-            category == "feature_flag"
-            and result.get("revival_feasibility", 0) >= 7
-            and result.get("recommendation") == "investigate_further"
+            result.get("recommendation") == "revive_now"
+            and category == "feature_flag"
+            and not grounding.get("grounded")
             and not _is_graduated
         ):
-            result["recommendation"] = "revive_now"
+            result["recommendation"] = "investigate_further"
             result["reasoning"] = (
                 result.get("reasoning", "") +
-                " Feature flags are explicitly temporary — the flag itself signals intent to revisit."
+                " Downgraded to investigate: no verified external evidence that the original "
+                "constraint resolved — the flag's removal alone doesn't prove the feature is revivable."
             )
 
         # Post-processing guarantee: revert commits are also explicitly temporary actions.
@@ -226,6 +319,24 @@ IMPORTANT: Only cite specific version numbers or dates that appear in the VERIFI
                 result.get("reasoning", "") +
                 " High feasibility for a feature flag removal — escalated to investigate_further for human review."
             )
+
+        # Unknown kill reason must never yield high confidence or revive_now.
+        # Without knowing WHY a feature was disabled there may be a very good reason
+        # invisible in git history (legal, security, contract, architecture decision).
+        # All existing guards key on specific categories (feature_flag, revert_commit
+        # etc.) and skip when category is "unknown" — this is the safety net.
+        if category == "unknown" and not grounding.get("grounded"):
+            if result.get("revival_feasibility", 0) > 6:
+                result["revival_feasibility"] = 6
+            if result.get("recommendation") == "revive_now":
+                result["recommendation"] = "investigate_further"
+                result["reasoning"] = (
+                    result.get("reasoning", "") +
+                    " Feasibility capped: kill reason is unknown — the original disable "
+                    "rationale may still apply and cannot be verified from commit history alone."
+                )
+            if result.get("confidence") not in ("low",):
+                result["confidence"] = "low"
 
         # Downgrade recommendation if CI is currently broken — revival into broken CI is risky
         if ci_broken:

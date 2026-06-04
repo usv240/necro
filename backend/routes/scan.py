@@ -23,8 +23,8 @@ _scans: dict[str, dict] = {}
 
 class ScanRequest(BaseModel):
     repo_url: str
-    max_commits: int = 300
-    lookback_months: int = 24
+    max_commits: int = 500
+    lookback_months: int = 72
 
 
 @router.post("/start")
@@ -52,7 +52,7 @@ async def scan_status(scan_id: str):
 
 
 @router.post("/demo")
-async def load_demo(repo: str = "gitlab-foss", project_path: str | None = None):
+async def load_demo(repo: str = "gitlab-foss", project_path: str | None = None, prefer_results: bool = False):
     """
     Return a pre-seeded or cached demo scan.
 
@@ -71,34 +71,46 @@ async def load_demo(repo: str = "gitlab-foss", project_path: str | None = None):
     if project_path and settings.MONGODB_URI:
         from backend.db.connection import get_db
         db = get_db()
-        # Pick the scan with the most revive_now features for this project,
-        # tie-break by most recent. Falls through to seed fallback if no scan
-        # for this path is cached yet.
+        # Pick the MOST RECENT scan for this project that found something. Recency
+        # matters more than revive-count: the latest scan reflects the current
+        # (corrected) pipeline, whereas "highest revive count" can keep serving an
+        # older scan made before a bug fix. Falls through to seed if none cached.
         scans = await db["scans"].find(
-            {"project_path": project_path},
-            {"_id": 0},
-        ).sort("revive_now_count", -1).limit(20).to_list(length=20)
-        scans.sort(
-            key=lambda s: (s.get("revive_now_count", 0), s.get("started_at") or s.get("scan_id", "")),
-            reverse=True,
-        )
-        best_scan = next(
-            (s for s in scans if (s.get("revive_now_count", 0) + s.get("investigate_count", 0)) > 0),
-            scans[0] if scans else None,
-        )
+            {"project_path": project_path}, {"_id": 0},
+        ).sort("_id", -1).limit(50).to_list(length=50)
+        # Strictly the most recent scan — never fall back to an older one, or a fix
+        # (e.g. a new false-positive filter) would be hidden behind a stale buggy scan
+        # that happened to have more findings.
+        if prefer_results:
+            best_scan = max(
+                scans,
+                key=lambda s: (
+                    s.get("features_found", 0) > 0,
+                    s.get("revive_now_count", 0),
+                    s.get("investigate_count", 0),
+                    s.get("features_found", 0),
+                    str(s.get("scan_date", "")),
+                ),
+                default=None,
+            )
+        else:
+            best_scan = scans[0] if scans else None
         if best_scan:
             scan_id = best_scan.get("scan_id")
             features = await db["features"].find(
                 {"scan_id": scan_id}, {"_id": 0}
             ).to_list(length=100)
-            if features:
-                serialized = _serialize_features(features)
-                repo_url_real = f"https://gitlab.com/{project_path}"
-                return {
-                    **_build_rich_demo_envelope(project_path, repo_url_real, project_path, best_scan, serialized),
-                    "source": "mongodb_cached_scan",
-                    "cached_scan_id": scan_id,
-                }
+            repo_url_real = f"https://gitlab.com/{project_path}"
+            # Return the most-recent scan for THIS repo even if it's clean (0 features).
+            # Honestly showing "no revival candidates" beats silently substituting the
+            # gitlab-foss seed demo (which would mislabel another repo's data).
+            serialized = _serialize_features(features) if features else []
+            return {
+                **_build_rich_demo_envelope(project_path, repo_url_real, project_path, best_scan, serialized),
+                "source": "mongodb_cached_scan",
+                "cached_scan_id": scan_id,
+                "clean_scan": len(serialized) == 0,
+            }
         logger.info("No cached scan in Mongo for project_path=%s — falling through to seed demo", project_path)
 
     # Mode 2: hand-curated seed demos (existing behavior)
@@ -310,9 +322,33 @@ async def _run_scan(
     max_commits: int,
     lookback_months: int,
 ) -> None:
+    """Run the legacy background Revival path with the same durable tracing."""
+    from backend.services.run_trace import RunTrace, bind_trace, reset_trace
+
+    trace = RunTrace("revival", "background_scan", project_path, run_id=scan_id)
+    token = bind_trace(trace)
+    try:
+        await _run_scan_impl(scan_id, project_path, repo_url, max_commits, lookback_months)
+        trace.finish(_scans[scan_id]["status"], error=_scans[scan_id].get("error"))
+    except Exception as exc:
+        trace.finish("failed", error=str(exc), error_type=type(exc).__name__)
+        raise
+    finally:
+        reset_trace(token)
+
+
+async def _run_scan_impl(
+    scan_id: str,
+    project_path: str,
+    repo_url: str,
+    max_commits: int,
+    lookback_months: int,
+) -> None:
     progress_log: list[str] = _scans[scan_id]["progress"]
 
     async def emit(msg: str):
+        from backend.services.run_trace import trace_event
+        trace_event("progress", message=msg)
         progress_log.append(msg)
         logger.info("[scan %s] %s", scan_id, msg)
 
@@ -371,6 +407,8 @@ async def _run_scan(
             "total_commits_scanned": max_commits,
             "features": saved_features,
         }
+        from backend.services.run_trace import current_trace_metadata
+        report["trace"] = current_trace_metadata()
 
         # Persist to MongoDB
         if settings.MONGODB_URI:

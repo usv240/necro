@@ -27,8 +27,8 @@ router = APIRouter()
 
 class StreamScanRequest(BaseModel):
     repo_url: str
-    max_commits: int = 300
-    lookback_months: int = 24
+    max_commits: int = 500
+    lookback_months: int = 72
 
 
 @router.post("/stream")
@@ -69,6 +69,24 @@ async def stream_scan(req: StreamScanRequest):
 
 
 async def _stream_live(emit, project_path: str, max_commits: int, lookback_months: int):
+    """Run Revival with a durable trace shared by SSE and quick-scan callers."""
+    import uuid
+    from backend.services.run_trace import RunTrace, bind_trace, reset_trace
+
+    scan_id = uuid.uuid4().hex[:8]
+    trace = RunTrace("revival", "stream_live", project_path, run_id=scan_id)
+    token = bind_trace(trace)
+    try:
+        await _stream_live_impl(trace.wrap_emit(emit), project_path, max_commits, lookback_months, scan_id)
+        trace.finish("completed")
+    except Exception as exc:
+        trace.finish("failed", error=str(exc), error_type=type(exc).__name__)
+        raise
+    finally:
+        reset_trace(token)
+
+
+async def _stream_live_impl(emit, project_path: str, max_commits: int, lookback_months: int, scan_id: str):
     """
     Three-phase scan:
 
@@ -90,7 +108,6 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
       This is where the multi-step reasoning and planning happens.
       Falls back gracefully and reports the actual status in the final report.
     """
-    import uuid
     import json as _json
     from backend.services.git_forensics import detect_dead_features
     from backend.services.death_reason import extract_death_reason
@@ -101,7 +118,6 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
     from backend.services.output_writer import write_graveyard_report
     from backend.db.schemas import ScanDoc
 
-    scan_id = uuid.uuid4().hex[:8]
     mcp_calls: list = []
 
     # â”€â”€ Phase 0: ADK Autonomous Repository Assessment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -138,6 +154,23 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             "resurrection_chains": [],
             "clean_scan": True,
         }
+        from backend.services.run_trace import current_trace_metadata
+        report["trace"] = current_trace_metadata()
+        # Persist clean scans too, so the instant-demo "most recent scan" reflects
+        # reality. Without this, a freshly-cleaned scan (0 findings after a filter
+        # fix) isn't saved, and the demo keeps serving an older buggy scan.
+        if settings.MONGODB_URI:
+            try:
+                from backend.db.connection import get_db
+                from backend.db.schemas import ScanDoc
+                db = get_db()
+                await db["scans"].insert_one(ScanDoc(
+                    scan_id=scan_id, project_path=project_path,
+                    total_commits_scanned=max_commits, features_found=0,
+                    revive_now_count=0, investigate_count=0, keep_buried_count=0,
+                ).model_dump())
+            except Exception as _e:
+                logger.warning("Clean-scan persist failed: %s", _e)
         await queue_put_report(emit, report)
         return
 
@@ -194,14 +227,18 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         if _tech and _src != "unverified":
             _url = grounding.get("evidence_url", "")
             _ver = grounding.get("latest_version", "")
-            _src_label = _src.replace("_", " ").title()
-            await emit(f"[SEARCH] {_src_label} query: {_tech} v{_ver} -- {_url[:60]}")
+            if _src == "ecosystem_deprecation":
+                await emit(f"[SEARCH] Ecosystem deprecation: {_tech} (permanently removed) -- {_url[:60]}")
+            else:
+                _src_label = _src.replace("_", " ").title()
+                _ver_str = f" v{_ver}" if _ver else ""
+                await emit(f"[SEARCH] {_src_label} query: {_tech}{_ver_str} -- {_url[:60]}")
         elif _dr_reason:
             _cat = dr.get("category", "constraint")
             await emit(f"[SEARCH] Constraint check: {_dr_reason[:60]!r} -- AI-inferred ({_cat})")
         if grounding.get("grounded"):
             await emit(
-                f"[{idx}/{total}] âœ“ Verified: {grounding.get('technology')} {grounding.get('latest_version')} "
+                f"[{idx}/{total}] Verified: {grounding.get('technology')} {grounding.get('latest_version')} "
                 f"({grounding.get('source')}) — {grounding.get('evidence_date')}"
             )
         rec = vi.get("recommendation", "unknown").upper().replace("_", " ")
@@ -253,33 +290,55 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
             f"Analyzing features {batch_start + 1}–{min(batch_start + _BATCH_SIZE, total)} of {total} "
             f"(parallel batch)..."
         )
+        # Bound each feature's analysis so one slow Gemini call can't hold the whole
+        # batch hostage (we saw a single call stall ~4 min). 150s covers a normal
+        # analysis plus one retry; anything beyond that is skipped, not waited on.
+        async def _bounded(feat, idx):
+            return await asyncio.wait_for(_analyze_one(feat, idx), timeout=150)
+
         batch_results = await asyncio.gather(
-            *[_analyze_one(feat, batch_start + i + 1) for i, feat in enumerate(batch)],
+            *[_bounded(feat, batch_start + i + 1) for i, feat in enumerate(batch)],
             return_exceptions=True,
         )
         for r in batch_results:
-            if isinstance(r, Exception):
+            if isinstance(r, asyncio.TimeoutError):
+                await emit("A feature analysis timed out (slow model response) — skipped")
+                logger.warning("Feature analysis timed out — skipped")
+            elif isinstance(r, Exception):
                 logger.warning("Feature analysis failed in batch: %s", r)
             elif isinstance(r, dict):
                 saved_features.append(r)
 
-    # Adversarial Challenger (Vertex AI Gemini 3 Flash — different model)
+    # Adversarial Challenger (Vertex AI Gemini 2.5 Flash — genuinely different model)
+    # Coverage: challenge ALL revive_now candidates first, then fill remaining slots
+    # with the highest-feasibility investigate_further features. Previously only
+    # revive_now got reviewed, so a cautious-but-wrong investigate verdict (e.g. a
+    # protocol-deprecated feature marked "investigate") escaped adversarial scrutiny
+    # entirely. (Bug #10)
+    _CHALLENGER_CAP = 5
+
+    def _feas(f):
+        try:
+            return int(f.get("viability", {}).get("revival_feasibility", 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+
     revive_candidates = [f for f in saved_features if f.get("viability", {}).get("recommendation") == "revive_now"]
-    if revive_candidates:
-        await emit(f"Challenger Agent (Vertex AI Gemini 3 Flash) — stress-testing top {min(len(revive_candidates), 3)} candidates...")
-        assessments = await challenge_top_revival_candidates(revive_candidates[:3])
-        for feat_dict, assessment in zip(revive_candidates[:3], assessments):
-            feat_dict["challenger"] = assessment
-            # Apply challenger verdict — advisory, not a veto.
-            # downgrade: challenger has concerns but primary recommendation stands.
-            # reject:    hard pushback — move one step down (revive_now -> investigate_further).
-            _verdict = assessment.get("challenger_verdict", "")
-            if _verdict == "reject":
-                _cur = feat_dict.get("viability", {}).get("recommendation", "")
-                if _cur == "revive_now":
-                    feat_dict.setdefault("viability", {})["recommendation"] = "investigate_further"
-            # downgrade -> leave revive_now unchanged (challenger is advisory)
-            # confirm   -> unchanged
+    investigate_candidates = sorted(
+        [f for f in saved_features if f.get("viability", {}).get("recommendation") == "investigate_further"],
+        key=_feas, reverse=True,
+    )
+    challenge_pool = (revive_candidates + investigate_candidates)[:_CHALLENGER_CAP]
+    if challenge_pool:
+        _n_rev = sum(1 for f in challenge_pool if f.get("viability", {}).get("recommendation") == "revive_now")
+        _n_inv = len(challenge_pool) - _n_rev
+        await emit(
+            f"Challenger Agent (Vertex AI Gemini 2.5 Flash) — stress-testing {len(challenge_pool)} candidate(s) "
+            f"({_n_rev} revive, {_n_inv} investigate)..."
+        )
+        assessments = await challenge_top_revival_candidates(challenge_pool, limit=_CHALLENGER_CAP)
+        for feat_dict, assessment in zip(challenge_pool, assessments):
+            _apply_challenger_verdict(feat_dict, assessment)
         await emit("Challenger Agent complete — independent adversarial review done")
 
     # â”€â”€ Phase 2: ADK Synthesis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -294,7 +353,7 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
     adk_synthesis = await _run_adk_synthesis(emit, project_path, saved_features)
 
     if adk_synthesis.get("status") == "success":
-        await emit("[ADK] âœ“ Agent Builder synthesis complete — executive summary ready")
+        await emit("[ADK] Agent Builder synthesis complete — executive summary ready")
         orchestrated_by = "google_cloud_agent_builder_adk"
         await _apply_synthesis_verdicts(saved_features, adk_synthesis, emit)
         # Guard the verification_quality badge against overstating evidence.
@@ -324,7 +383,7 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         total_locked = sum(c["feature_count"] for c in resurrection_chains)
         total_fixes = len(resurrection_chains)
         await emit(
-            f"ðŸ”— Resurrection Chains: {total_fixes} shared constraint{'s' if total_fixes != 1 else ''} "
+            f"Resurrection Chains: {total_fixes} shared constraint{'s' if total_fixes != 1 else ''} "
             f"lock {total_locked} features — fix one constraint, unlock multiple features"
         )
 
@@ -342,6 +401,8 @@ async def _stream_live(emit, project_path: str, max_commits: int, lookback_month
         "adk_synthesis": adk_synthesis if adk_synthesis.get("status") == "success" else None,
         "resurrection_chains": resurrection_chains,
     }
+    from backend.services.run_trace import current_trace_metadata
+    report["trace"] = current_trace_metadata()
 
     if settings.MONGODB_URI:
         try:
@@ -477,6 +538,10 @@ def _apply_demand_signal(feat_dict: dict) -> str | None:
     if not demand:
         return None
     vi = feat_dict.setdefault("viability", {})
+    # Graduated features are LIVE, not dead — demand for an already-shipped feature
+    # must never promote it. Respect the sticky graduation verdict.
+    if vi.get("graduated"):
+        return None
     dr = feat_dict.get("death_reason", {})
     rec = vi.get("recommendation", "")
     try:
@@ -492,15 +557,30 @@ def _apply_demand_signal(feat_dict: dict) -> str | None:
     # over-count demand. Only multi-token names (>=2 significant tokens) are specific
     # enough to trust demand for a revive_now promotion; generic names get the safe lift only.
     specific = len([w for w in re.split(r"[\s_\-/]+", name) if len(w) > 3]) >= 2
+    grounded = bool(vi.get("grounding", {}).get("grounded"))
 
-    if not permanent and specific and n >= 2 and feas >= 7 and rec in ("investigate_further", "keep_buried"):
+    # Demand can promote straight to revive_now ONLY when there is also verified
+    # evidence the constraint resolved (grounding). Demand alone means "users still
+    # want this" — not "the blocker is gone" — so without evidence it lifts to
+    # investigate_further, never revive_now. This keeps revive_now = evidence-backed
+    # and stops a self-contradiction with the ADK synthesis.
+    if grounded and not permanent and specific and n >= 2 and feas >= 7 and rec in ("investigate_further", "keep_buried"):
         vi["recommendation"] = "revive_now"
         vi["reasoning"] = (vi.get("reasoning", "") or "") + (
-            f" Promoted to revive_now: {n} open issues are actively requesting this feature "
-            f"(feasibility {feas}/10). Live user demand is direct evidence the feature still has value."
+            f" Promoted to revive_now: {n} open issues are requesting this AND external evidence "
+            f"confirms the constraint resolved (feasibility {feas}/10)."
         )
         feat_dict["demand_promoted"] = True
-        return f"Demand override: '{name}' -> REVIVE NOW ({n} open issues requesting it, feasibility {feas}/10)"
+        return f"Demand override: '{name}' -> REVIVE NOW ({n} open issues + verified evidence)"
+
+    if not permanent and specific and n >= 2 and feas >= 5 and rec == "keep_buried":
+        vi["recommendation"] = "investigate_further"
+        vi["reasoning"] = (vi.get("reasoning", "") or "") + (
+            f" Lifted to investigate: {n} open issues are requesting this — worth a look, "
+            "but no verified evidence the original blocker is resolved."
+        )
+        feat_dict["demand_promoted"] = True
+        return f"Demand override: '{name}' -> INVESTIGATE ({n} open issues requesting it)"
 
     if rec == "keep_buried" and feas >= 4:
         vi["recommendation"] = "investigate_further"
@@ -512,6 +592,27 @@ def _apply_demand_signal(feat_dict: dict) -> str | None:
         return f"Demand override: '{name}' -> INVESTIGATE ({n} open issues requesting it)"
 
     return None
+
+
+def _apply_challenger_verdict(feat_dict: dict, assessment: dict) -> None:
+    """Attach the challenger assessment and apply its verdict — advisory, not a veto.
+
+    The challenger is adversarial BY DESIGN (it starts from "reject"), so a reject is only
+    strong enough to act on against a confident revive_now claim — there it steps the
+    recommendation down one notch (revive_now -> investigate_further). For an already-cautious
+    investigate_further, a reject adds little ("we already weren't sure"), so it stays ADVISORY:
+    the assessment is attached and shown on the card, but the recommendation is unchanged.
+    Otherwise the by-design-skeptical challenger would bury every investigate candidate.
+    (Bug #10: broaden coverage, don't over-bury. Bug #4: reject is respected, not silently
+    re-promoted later by the synthesis step.)
+    """
+    feat_dict["challenger"] = assessment
+    if assessment.get("challenger_verdict") == "reject":
+        cur = feat_dict.get("viability", {}).get("recommendation", "")
+        if cur == "revive_now":
+            feat_dict.setdefault("viability", {})["recommendation"] = "investigate_further"
+    # investigate_further reject -> advisory only (assessment attached, rec unchanged)
+    # downgrade / confirm        -> unchanged
 
 
 async def _apply_synthesis_verdicts(saved_features: list[dict], synthesis: dict, emit) -> None:
@@ -529,25 +630,65 @@ async def _apply_synthesis_verdicts(saved_features: list[dict], synthesis: dict,
         feat = by_name.get(v.get("feature", ""))
         if not feat:
             continue
+        # Never upgrade a graduated (already-live) feature — it isn't dead.
+        if feat.get("viability", {}).get("graduated"):
+            continue
         resolved = (v.get("constraint_resolved") or "").lower()
         new_rec = (v.get("recommendation") or "").lower()
         evidence_url = v.get("evidence_url") or ""
         if new_rec not in rank:
             continue
         cur = feat.get("viability", {}).get("recommendation", "")
-        if resolved == "yes" and evidence_url.startswith("http") and rank[new_rec] > rank.get(cur, 0):
+        if resolved == "yes" and evidence_url.startswith("http"):
             vi = feat.setdefault("viability", {})
-            vi["recommendation"] = new_rec
-            vi["what_changed"] = "ADK google_search verified the original constraint is resolved."
-            vi["evidence_url"] = evidence_url
-            grounding = vi.setdefault("grounding", {})
-            grounding["grounded"] = True
-            grounding["evidence_url"] = evidence_url
-            feat["synthesis_upgraded"] = True
-            await emit(
-                f"[ADK] Evidence upgrade: '{v.get('feature')}' -> "
-                f"{new_rec.upper().replace('_', ' ')} (google_search confirmed constraint resolved)"
-            )
+            # Feasibility guardrail: the viability bar requires feasibility >= 7 for
+            # revive_now. The synthesis upgrade must honor the SAME bar — otherwise a
+            # nondeterministic google_search "resolved: yes" promotes low-feasibility
+            # features (e.g. gitlab-runner "timeout", feasibility 5) to a misleading
+            # "REVIVE NOW" with no real revival case. Cap such upgrades at investigate.
+            try:
+                _feas = int(vi.get("revival_feasibility", 0) or 0)
+            except (TypeError, ValueError):
+                _feas = 0
+            if new_rec == "revive_now" and _feas < 7:
+                new_rec = "investigate_further"
+
+            # Challenger guardrail: a hard "reject" from the adversarial agent is a
+            # strong negative signal. The synthesis must never silently override it —
+            # a Phase-2 "a newer version exists" finding does not address the hidden
+            # risks the challenger raised, and a re-promotion would directly contradict
+            # the card's own "Rejected" badge. Skip the upgrade entirely. (Bug #4)
+            if feat.get("challenger", {}).get("challenger_verdict") == "reject":
+                continue
+
+            # Relevance guardrail: a buried verdict (keep_buried) reflects either a very
+            # low feasibility or a kill reason that clearly still applies. A tangential
+            # "a newer version exists somewhere" must NOT be enough to exhume it. Require
+            # at least moderate feasibility before a synthesis upgrade can lift a buried
+            # feature — otherwise the upgrade fires on unrelated evidence. (Bugs #2/#3)
+            if cur == "keep_buried" and _feas < 4:
+                continue
+
+            if rank[new_rec] > rank.get(cur, 0):
+                vi["recommendation"] = new_rec
+                vi["what_changed"] = "ADK google_search verified the original constraint is resolved."
+                vi["evidence_url"] = evidence_url
+                # Record this as an ADK web-search verification — a DISTINCT, weaker
+                # signal than a Phase-1 registry/release hit. We deliberately do NOT set
+                # grounding.grounded here: that flag drives the green "✓ verified" badge
+                # and must reflect a real registry/release lookup only. A synthesis
+                # upgrade gets its own "ADK search" badge instead, so the UI never
+                # overstates tangential evidence as registry-verified. (Bug #8)
+                vi["synthesis_verified"] = True
+                grounding = vi.setdefault("grounding", {})
+                grounding["evidence_url"] = evidence_url
+                if not grounding.get("grounded"):
+                    grounding["source"] = "adk_google_search"
+                feat["synthesis_upgraded"] = True
+                await emit(
+                    f"[ADK] Evidence upgrade: '{v.get('feature')}' -> "
+                    f"{new_rec.upper().replace('_', ' ')} (google_search confirmed constraint resolved)"
+                )
 
 
 async def _find_demand_signals(
@@ -661,12 +802,28 @@ async def _run_adk_synthesis(emit, project_path: str, saved_features: list[dict]
             + _search_instructions + chr(10)
             + "Here are all " + str(len(saved_features)) + " findings:" + chr(10) + chr(10)
             + findings_json + chr(10) + chr(10)
+            + "CRITICAL RULE: each finding's 'recommendation' field is the FINAL verdict — it"
+            + " already incorporates the adversarial challenger's review. A feature whose"
+            + " challenger_verdict is 'reject' was demoted to investigate_further DESPITE its"
+            + " evidence; the constraint may look resolved but real revival is NOT yet justified."
+            + " You must treat recommendation as ground truth: ONLY a feature with"
+            + " recommendation=='revive_now' may be called revivable / 'revive now' / 'immediately"
+            + " revivable' anywhere in your output (top_3, executive_summary, reasoning). For"
+            + " investigate_further, say 'worth investigating' even if the evidence looks strong."
+            + chr(10) + chr(10)
             + "Your job:" + chr(10)
             + "1. Use google_search to verify top revive_now candidates (MANDATORY -- see above)" + chr(10)
             + "2. Identify the TOP 3 highest-priority revival candidates with specific reasoning" + chr(10)
+            + "   IMPORTANT: match your language to each feature's recommendation field. Only call a" + chr(10)
+            + "   feature 'immediately revivable' / 'revive now' if its recommendation is revive_now." + chr(10)
+            + "   For investigate_further say 'worth investigating'; for keep_buried say 'likely stays buried'." + chr(10)
+            + "   Do NOT describe an investigate_further or keep_buried feature as immediately revivable." + chr(10)
             + "3. Flag inconsistencies where challenger downgraded a revive_now recommendation" + chr(10)
             + "4. Identify the dominant graveyard pattern" + chr(10)
-            + "5. Write a 3-sentence executive action plan" + chr(10)
+            + "5. Write a 3-sentence executive action plan. The executive_summary must NOT call a"
+            + " feature 'immediately revivable' / 'revive now' unless its recommendation field is"
+            + " exactly revive_now. Name only the revive_now features as revivable; refer to"
+            + " investigate_further ones as 'candidates to investigate'." + chr(10)
             + "6. For EVERY finding, output a feature_verdicts entry: based on your google_search, state whether the original constraint is RESOLVED (constraint_resolved: yes/no/unverified). Say yes ONLY with a real evidence URL showing the fix/release. If resolved, set recommendation to revive_now; if the kill reason clearly still applies, keep_buried; otherwise investigate_further." + chr(10) + chr(10)
             + 'Return a JSON object:' + chr(10)
             + '{' + chr(10)
@@ -865,13 +1022,19 @@ def _match_open_requests(feature_name: str, open_issues: list[dict],
     if not open_issues or not feature_name:
         return []
 
-    # Tokenize feature name — filter out short/common words
+    # Tokenize feature name — filter out short/common words AND generic repo-name tokens.
+    # Generic tokens (e.g. "registry" in gitlab-org/container-registry) appear in nearly
+    # every issue title and produce false positives with a single-token threshold.
+    repo_name_tokens = {
+        w.lower() for w in re.split(r"[\s_\-/]+", project_path)
+        if len(w) > 3
+    }
     stop_words = {"the", "and", "for", "with", "from", "that", "this", "was", "are",
                   "has", "have", "been", "feat", "fix", "add", "remove", "update",
                   "revert", "disable", "enable", "support", "use", "via", "allow"}
     name_tokens = {
         w.lower() for w in re.split(r"[\s_\-/]+", feature_name)
-        if len(w) > 3 and w.lower() not in stop_words
+        if len(w) > 3 and w.lower() not in stop_words and w.lower() not in repo_name_tokens
     }
     if not name_tokens:
         return []
@@ -881,11 +1044,14 @@ def _match_open_requests(feature_name: str, open_issues: list[dict],
     for issue in open_issues:
         title = issue.get("title", "")
         body = issue.get("description", "") or ""
-        search_text = (title + " " + body[:200]).lower()
-        # Check overlap: at least 1 strong token match in title, or 2+ in title+body
+        # Require 2+ feature tokens in the title (strict), or 3+ across title+body (loose).
+        # A single shared word is far too broad — e.g. "registry" matches every issue in
+        # container-registry, or "search" matches every search-related issue in gitlab.
         title_tokens = set(re.split(r"[\s_\-/.,;:!?]+", title.lower()))
         title_overlap = name_tokens & title_tokens
-        if len(title_overlap) >= 1 or len(name_tokens & set(re.split(r"\W+", search_text))) >= 2:
+        body_tokens = set(re.split(r"\W+", (title + " " + body[:300]).lower()))
+        body_overlap = name_tokens & body_tokens
+        if len(title_overlap) >= 2 or len(body_overlap) >= 3:
             issue_url = issue.get("web_url") or f"{gitlab_base}/{project_path}/-/issues/{issue.get('iid', '')}"
             matches.append({
                 "iid": issue.get("iid"),
@@ -905,8 +1071,12 @@ _TECH_KEYWORDS = [
     "grpc", "websocket", "sidekiq", "celery", "kafka", "rabbitmq", "nginx", "node",
     "python", "ruby", "golang", "typescript", "safari", "firefox", "chrome", "ie11",
     "internet explorer", "openssl", "jwt", "cors", "csrf", "s3", "gcs", "azure",
-    "terraform", "ansible", "gitlab", "github", "bitbucket", "ldap", "saml", "sso",
+    "terraform", "ansible", "ldap", "saml", "sso",
 ]
+# NOTE: org names (gitlab/github/bitbucket) are deliberately NOT keywords — in their
+# own repos those words appear in almost every commit message and would collapse all
+# features into one bogus "gitlab" chain that claims "1 fix unlocks N" when the
+# features actually share nothing.
 
 
 def _compute_resurrection_chains(features: list[dict]) -> list[dict]:
@@ -934,17 +1104,12 @@ def _compute_resurrection_chains(features: list[dict]) -> list[dict]:
         ]).lower()
 
         keys = set()
+        # Only group on a curated set of SPECIFIC technical constraints. Word-boundary
+        # match so "node" doesn't match "anode", etc. No generic catch-all — arbitrary
+        # first-words produced false chains (e.g. unrelated features grouped as "sso").
         for kw in _TECH_KEYWORDS:
-            if kw in text:
+            if re.search(rf"\b{re.escape(kw)}\b", text):
                 keys.add(kw)
-
-        # Also extract first significant word from specific_constraint as a catch-all
-        constraint = dr.get("specific_constraint", "").strip()
-        if constraint:
-            words = [w for w in re.split(r"\W+", constraint.lower()) if len(w) > 4]
-            if words:
-                keys.add(words[0])
-
         return keys
 
     keyword_to_features: dict[str, list[dict]] = {}
@@ -971,12 +1136,13 @@ def _compute_resurrection_chains(features: list[dict]) -> list[dict]:
             if f.get("viability", {}).get("recommendation") in ("revive_now", "investigate_further")
         ]
 
-        # Build a human-readable fix suggestion
-        what_changed_list = [
-            f.get("viability", {}).get("what_changed", "")
-            for f in matching_feats if f.get("viability", {}).get("what_changed")
-        ]
-        fix_suggestion = what_changed_list[0][:120] if what_changed_list else f"Resolve the {keyword} constraint"
+        # Generic, accurate fix suggestion — never copy one feature's reasoning onto
+        # the whole group (that produced nonsense like Mattermost's RAM note applied
+        # to a 5-feature chain). The shared keyword IS the shared constraint.
+        fix_suggestion = (
+            f"These features all reference '{keyword}'. Resolving the shared "
+            f"'{keyword}' constraint may unlock them together."
+        )
 
         chains.append({
             "constraint_key": keyword,

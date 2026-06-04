@@ -15,6 +15,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _is_err(result) -> bool:
+    """GitLab _post returns {'_error': True, ...} on failure — a truthy dict that
+    must NOT be mistaken for success. Returns True if the write failed."""
+    return result is None or (isinstance(result, dict) and result.get("_error") is True)
+
+
+def _err_detail(result, what: str) -> str:
+    msg = ""
+    if isinstance(result, dict):
+        msg = str(result.get("message") or result.get("_status_code") or "")[:120]
+    return f"{what} failed: {msg or 'no response from GitLab'}. Check GITLAB_TOKEN has 'api' scope + Developer role."
+
+
 class ReviveRequest(BaseModel):
     project_path: str | None = None
 
@@ -74,11 +87,8 @@ async def create_revival_issue(feature_id: str, req: ReviveRequest):
         assignee_ids=assignee_ids,
     )
 
-    if not result:
-        raise HTTPException(
-            status_code=502,
-            detail="GitLab MCP create_issue returned no result. Check GITLAB_TOKEN has 'api' scope.",
-        )
+    if _is_err(result):
+        raise HTTPException(status_code=502, detail=_err_detail(result, "create_issue"))
 
     issue_url = result.get("web_url", "")
     issue_iid = result.get("iid")
@@ -160,11 +170,8 @@ async def create_ghost_mr(feature_id: str, req: ReviveRequest):
 
     # 1. Create branch
     branch_result = await mcp.create_branch(project_path, branch_name, ref=default_branch)
-    if not branch_result:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to create branch '{branch_name}'. Check GITLAB_TOKEN has 'api' scope and Developer+ role.",
-        )
+    if _is_err(branch_result):
+        raise HTTPException(status_code=502, detail=_err_detail(branch_result, f"create_branch '{branch_name}'"))
 
     # 2. Create NECRO_REVIVAL.md on the branch
     plan_content = _build_ghost_mr_plan(feat, project_path)
@@ -175,8 +182,8 @@ async def create_ghost_mr(feature_id: str, req: ReviveRequest):
         branch=branch_name,
         commit_message=f"necro: revival plan for {feat['name']}",
     )
-    if not file_result:
-        logger.warning("[Ghost MR] File creation failed — continuing with MR creation anyway")
+    if _is_err(file_result):
+        logger.warning("[Ghost MR] NECRO_REVIVAL.md commit failed — continuing with MR creation anyway")
 
     # 3. Create Draft MR
     dr = feat.get("death_reason", {})
@@ -205,11 +212,8 @@ async def create_ghost_mr(feature_id: str, req: ReviveRequest):
         draft=True,
     )
 
-    if not mr_result:
-        raise HTTPException(
-            status_code=502,
-            detail="GitLab MR creation failed. Check GITLAB_TOKEN has 'api' scope with Developer+ role.",
-        )
+    if _is_err(mr_result):
+        raise HTTPException(status_code=502, detail=_err_detail(mr_result, "create_merge_request"))
 
     mr_url = mr_result.get("web_url", "")
     mr_iid = mr_result.get("iid")
@@ -268,7 +272,7 @@ def _build_ghost_mr_plan(feat: dict, project_path: str) -> str:
         obj = challenger.get("strongest_objection", "")
         step = challenger.get("recommended_first_step", "")
         challenger_note = f"""
-## Adversarial Review (Challenger Agent — Vertex AI Gemini 3)
+## Adversarial Review (Challenger Agent — Vertex AI Gemini 2.5 Flash)
 
 > **Verdict:** {verdict.upper()} (Score: {score}/10)
 > **Key objection:** {obj}
@@ -364,9 +368,9 @@ async def _get_feature(feature_id: str) -> dict | None:
 def _build_description(feat: dict, dr: dict, vi: dict) -> str:
     sha = feat.get("kill_commit_sha", "")
     sha_ref = f" (commit `{sha[:8]}`)" if sha else ""
-    mr_ref = f" Â· MR #{feat.get('linked_mr_iid')}" if feat.get("linked_mr_iid") else ""
+    mr_ref = f" · MR #{feat.get('linked_mr_iid')}" if feat.get("linked_mr_iid") else ""
     issue_refs = ", ".join(f"#{i}" for i in feat.get("linked_issue_iids", []))
-    issue_ref = f" Â· Issues: {issue_refs}" if issue_refs else ""
+    issue_ref = f" · Issues: {issue_refs}" if issue_refs else ""
     cited = dr.get("cited_evidence", "")
     cited_block = f'\n> *"{cited}"*\n' if cited else ""
     risks = vi.get("technical_risks", [])

@@ -66,6 +66,67 @@ class DeadFeature:
     roi: Optional[dict] = None
 
 
+async def _fetch_commits_stratified(
+    project_path: str,
+    since_date: datetime,
+    until_date: datetime,
+    max_commits: int,
+    log_mcp,
+    emit,
+) -> list[dict]:
+    """
+    Sample commits from evenly-spaced yearly buckets across the full date range.
+
+    GitLab's list_commits API returns newest-first. For large repos (e.g. gitlab-foss
+    at ~2,000 commits/year), a single paginated call capped at 500 only covers the
+    most recent few months of a multi-year window — missing all historical feature
+    kills. Stratified sampling fixes this: one API call per year-bucket ensures every
+    era of the codebase is represented, not just the most recent one.
+    """
+    total_days = max(1, (until_date - since_date).days)
+    bucket_count = max(1, min(8, total_days // 365))
+    bucket_days = total_days / bucket_count
+    per_bucket = min(100, max(50, max_commits // bucket_count))
+
+    all_commits: list[dict] = []
+    seen_shas: set[str] = set()
+
+    for i in range(bucket_count):
+        b_since = since_date + timedelta(days=i * bucket_days)
+        b_until = since_date + timedelta(days=(i + 1) * bucket_days)
+        b_until = min(b_until, until_date)
+
+        batch = await mcp.list_commits(
+            project_path,
+            per_page=per_bucket,
+            page=1,
+            since=b_since.isoformat(),
+            until=b_until.isoformat(),
+        )
+        if log_mcp:
+            log_mcp(
+                "list_commits",
+                repo=project_path,
+                bucket=f"{b_since.strftime('%Y-%m')}→{b_until.strftime('%Y-%m')}",
+                result_count=len(batch),
+            )
+        await emit(
+            f"[MCP] list_commits bucket {i + 1}/{bucket_count} "
+            f"({b_since.strftime('%Y-%m')} → {b_until.strftime('%Y-%m')}): {len(batch)} commits"
+        )
+
+        for c in batch:
+            sha = c.get("id", "")
+            if sha not in seen_shas:
+                seen_shas.add(sha)
+                all_commits.append(c)
+
+        if len(all_commits) >= max_commits:
+            break
+
+    return all_commits
+
+
 async def detect_dead_features(
     project_path: str,
     max_commits: int = 500,
@@ -91,46 +152,29 @@ async def detect_dead_features(
             await progress_cb(msg)
 
     now = datetime.now(timezone.utc)
-    # Fetch commits starting from lookback_months ago, but stop 60 days ago.
-    # Features killed in the last 60 days are too fresh — there isn't enough time
-    # for the original constraint to have resolved, so Gemini correctly labels
-    # them "investigate_further". We skip that window entirely.
+    # Skip the last 60 days — features killed that recently haven't had enough time
+    # for their blocking constraint to resolve, so they all land as "investigate_further".
     since_date = now - timedelta(days=lookback_months * 30)
     until_date = now - timedelta(days=60)
 
+    total_days = max(1, (until_date - since_date).days)
+    bucket_count = max(1, min(8, total_days // 365))
     await emit(
-        f"[MCP] list_commits — scanning {since_date.strftime('%Y-%m')} → "
-        f"{until_date.strftime('%Y-%m')} ({lookback_months}mo, skip last 60d, up to {max_commits} commits)..."
+        f"[MCP] list_commits — stratified {since_date.strftime('%Y-%m')} → "
+        f"{until_date.strftime('%Y-%m')} ({lookback_months}mo, {bucket_count} yearly buckets, "
+        f"up to {max_commits} commits)..."
     )
 
-    # Paginate commits within the date window
-    all_commits: list[dict] = []
-    page = 1
-    while len(all_commits) < max_commits:
-        batch = await mcp.list_commits(
-            project_path,
-            per_page=100,
-            page=page,
-            since=since_date.isoformat(),
-            until=until_date.isoformat(),
-        )
-        if not batch:
-            break
-        all_commits.extend(batch)
-        page += 1
-        if len(batch) < 100:
-            break
+    all_commits = await _fetch_commits_stratified(
+        project_path, since_date, until_date, max_commits, log_mcp, emit
+    )
+    log_mcp("list_commits_total", repo=project_path, result_count=len(all_commits))
 
-    all_commits = all_commits[:max_commits]
-    log_mcp("list_commits", repo=project_path, result_count=len(all_commits))
-
-    # Adaptive fallback: if the date-windowed fetch returns < 20 commits, it means
-    # either the repo is low-activity in that window OR the API doesn't honour
-    # since/until for this repo. Fall back to fetching the most recent commits
-    # without date bounds so we always have enough signal to work with.
+    # Adaptive fallback: if stratified sampling still returns < 20 commits total,
+    # the repo is either very low-activity or the API doesn't honour since/until.
     if len(all_commits) < 20:
         await emit(
-            f"Commit window returned only {len(all_commits)} commits — "
+            f"Stratified sampling returned only {len(all_commits)} commits — "
             f"widening to most recent {max_commits} commits (no date filter)..."
         )
         all_commits = []
@@ -144,11 +188,10 @@ async def detect_dead_features(
             if len(batch) < 100:
                 break
         all_commits = all_commits[:max_commits]
-        # In fallback mode, extend the "fresh" cutoff to 30 days (more lenient)
         until_date = now - timedelta(days=30)
         log_mcp("list_commits_fallback", repo=project_path, result_count=len(all_commits))
         await emit(f"[MCP] Fallback: fetched {len(all_commits)} commits")
-    await emit(f"[MCP] list_commits returned {len(all_commits)} commits")
+    await emit(f"[MCP] list_commits returned {len(all_commits)} commits across {bucket_count} time buckets")
 
     if not all_commits:
         await emit("No commits found — check repository path and token permissions")
@@ -209,14 +252,22 @@ async def detect_dead_features(
     # (usernames, linter pragmas, dangling prepositions from bad slice extraction, etc.).
     # These produce embarrassing false positives in the UI and waste Gemini calls.
     garbage_count = 0
+    cleanup_count = 0
     clean: list[DeadFeature] = []
     for f in unique:
         if _is_garbage_feature_name(f.name):
             garbage_count += 1
+        elif _is_cleanup_removal(f.name, f.kill_commit_message):
+            # Removing something described as redundant/unused/dead/duplicate is correct
+            # housekeeping, NOT a feature that was killed for an external constraint.
+            # Reviving it would re-introduce the very thing that was deliberately cleaned up.
+            cleanup_count += 1
         else:
             clean.append(f)
     if garbage_count:
         await emit(f"Filtered {garbage_count} garbage-name candidates (usernames/pragmas/dangling prepositions)")
+    if cleanup_count:
+        await emit(f"Filtered {cleanup_count} cleanup-removal candidates (redundant/unused/dead code — not revivable)")
     unique = clean
 
     await emit(f"Found {len(unique)} raw candidates — enriching with MR/issue context and scoring signal quality...")
@@ -250,13 +301,19 @@ async def detect_dead_features(
             f"(keyword-only, no diff/MR/issue corroboration)"
         )
 
-    # Adaptive fallback: if the gate filtered everything, lower the bar once.
-    # This prevents empty results on repos that only have keyword hits.
-    if not high_conf and low_conf:
-        await emit("Quality gate: no high-confidence candidates — using best available signals")
-        high_conf = sorted(unique, key=lambda f: f.detection_confidence, reverse=True)[:5]
+    # No dishonest resurrection. If nothing clears the quality gate, the honest
+    # answer is "no strong-signal revival candidates" — NOT to relabel filtered
+    # keyword-noise (routine "Remove X" cleanup) as "high-confidence". Returning []
+    # lets the caller show the accurate "clean codebase" message instead of feeding
+    # weak, contextless candidates to Gemini (which then confabulates kill reasons).
+    if not high_conf:
+        await emit(
+            "Detection complete — 0 strong-signal revival candidates "
+            "(only routine cleanup / keyword-noise removals found in this window)"
+        )
+        return []
 
-    await emit(f"Detection complete — {len(high_conf)} high-confidence dead features")
+    await emit(f"Detection complete — {len(high_conf)} strong-signal dead feature(s)")
     return high_conf
 
 
@@ -678,6 +735,47 @@ _PERSONAL_ROLE_RE = re.compile(
 )
 
 
+# Words that mean the thing was removed BECAUSE it was unwanted — i.e. correct
+# housekeeping, not a feature killed by an external constraint. You don't "revive"
+# something that was deliberately deleted for being redundant/unused/dead.
+_CLEANUP_REMOVAL_RE = re.compile(
+    r"\b(redundant|unused|duplicate|duplicated|obsolete|stray|leftover|"
+    r"unnecessary|no.longer.(?:used|needed|relevant|necessary)|"
+    r"dead.code|dead-code|dead\s+\w+\s+code|"               # "dead code", "dead frontend code"
+    r"old\s+\w+\s+(?:directive|code|helper|util|class|module)|"  # "old gl_introduced directives"
+    r"directives?|"                                          # removing directives = config/lint cleanup
+    r"rubocop.?todo|rubocop_todo|\.rubocop|lint.todo|todo.file|"
+    r"commented.out|commented-out|orphan(?:ed)?|"
+    r"in.favou?r.of|migrat\w*.to|replaced?.with|"
+    r"all\s+\w+\s+use\s+\w+|use\s+\w+\s+now|"               # "all trials use DAP now"
+    r"mock|msw|stub|fixture|"                               # test-infrastructure removal
+    r"spec.tests?|specs?.from|from\s+\w*\s*tests?|"
+    r"flaky.test|skip(?:ped)?.test)\b",
+    re.IGNORECASE,
+)
+
+# But keep it if the removal was clearly about a real feature behind a flag or an
+# external constraint (these CAN be revivable even if the word "unused" appears).
+_REVIVABLE_OVERRIDE_RE = re.compile(
+    r"\b(feature.flag|featureflag|FF_[A-Z]|disabled.(?:due|because|pending|until)|"
+    r"security|vulnerab|deprecated.api|api.limit|infrastructure|performance)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_cleanup_removal(name: str, message: str = "") -> bool:
+    """True when the candidate is housekeeping (removing redundant/unused/dead stuff),
+    not a feature killed for a revisitable reason. Such items must not be surfaced as
+    revival candidates — reviving them re-introduces the junk that was cleaned up."""
+    blob = f"{name or ''} {message or ''}"
+    if not _CLEANUP_REMOVAL_RE.search(blob):
+        return False
+    # Don't filter genuine flag/constraint-driven removals that happen to mention these words.
+    if _REVIVABLE_OVERRIDE_RE.search(blob):
+        return False
+    return True
+
+
 def _is_garbage_feature_name(name: str) -> bool:
     """Reject names that are clearly not features — pre-Gemini filter to avoid
     false positives in the UI and wasted analysis calls.
@@ -740,8 +838,13 @@ def _extract_feature_name_from_message(msg: str) -> str:
     )
     if action_match:
         name = action_match.group(2).strip()
-        # Strip quoted strings wrappers
-        name = re.sub(r'^["\']|["\']$', '', name)
+        # Strip quote wrappers ONLY when they actually wrap the whole string
+        # (matching quote at both ends). A naive ^["']|["']$ strip mangles a quoted
+        # token sitting at the start — e.g. 'Remove "-/" section ...' would lose its
+        # leading quote and leave a dangling '"' ('-/" section ...'). Balanced-only
+        # stripping keeps such names intact.
+        while len(name) >= 2 and name[0] in "\"'" and name[-1] == name[0]:
+            name = name[1:-1].strip()
         # Stop at sentence end (dot followed by space, or ! or ?)
         name = re.split(r"\.\s|[!?]", name)[0].strip()
         return name[:70] if name else ""
