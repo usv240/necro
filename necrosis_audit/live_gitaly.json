@@ -1,0 +1,683 @@
+{
+  "report": {
+    "mode": "necrosis",
+    "project_path": "gitlab-org/gitaly",
+    "scan_id": "a0a97436",
+    "findings": [
+      {
+        "finding_id": "addloggerhook-logger-go",
+        "name": "AddLoggerHook",
+        "file_path": "internal/testhelper/logger.go",
+        "annotation": "return LoggerHook{hook: test.NewLocal(logger.LogrusEntry().Logger)} //nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "func AddLoggerHook(logger log.LogrusLogger) LoggerHook {\n\treturn LoggerHook{hook: test.NewLocal(logger.LogrusEntry().Logger)} //nolint:staticcheck\n}",
+        "age_days": 985,
+        "annotation_date": "September 18, 2023",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "e0dd71b9d9fdc634ea75bfcae6f24112ad5dec25",
+        "startline": 155,
+        "ref": "master",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 985d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 5,
+          "blast_radius": "Internal tests or other internal helper functions might fail if this function is removed without confirming its lack of usage.",
+          "effort_estimate": "30 min",
+          "technical_risks": [
+            "Unidentified internal callers causing test failures or unexpected behavior due to unreliable caller analysis.",
+            "Misinterpretation of the deprecation annotation, which appears to be a code line rather than a standard deprecation comment.",
+            "The function might still be implicitly used or relied upon by other internal helper functions not caught by the search."
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is explicitly marked as unreliable, despite showing 0 external callers. This means there could be uncounted internal callers, which prevents immediate deletion. Given the `internal/testhelper` path, the function is likely used only within the codebase, but its actual usage needs to be confirmed before removal.",
+          "confidence": "medium",
+          "callers_found": 0,
+          "caller_files": [],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "mustclose-praefect-go",
+        "name": "MustClose",
+        "file_path": "internal/testhelper/testserver/praefect.go",
+        "annotation": "logWriter := testhelper.NewLogger(tb, testhelper.WithLoggerName(\"praefect\")).LogrusEntry().WithField(\"component\", \"praefect\").Writer() //nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "// Praefect-specific logger.\n\tlogWriter := testhelper.NewLogger(tb, testhelper.WithLoggerName(\"praefect\")).LogrusEntry().WithField(\"component\", \"praefect\").Writer() //nolint:staticcheck\n\ttb.Cleanup(func() { testhelper.MustClose(tb, logWriter) })",
+        "age_days": 1003,
+        "annotation_date": "August 31, 2023",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "5aca1564c1f6d0df26bb87852e364de50270129f",
+        "startline": 69,
+        "ref": "master",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 1003d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 8,
+          "blast_radius": "Removing `MustClose` would cause compilation failures in at least 7 test helper files that currently reference it, and potentially more due to the unreliable caller analysis.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Breaking existing tests or test setup utilities",
+            "Missing some callers due to unreliable analysis, leading to runtime errors in tests or CI",
+            "Introducing regressions if a replacement is implemented incorrectly"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is explicitly marked as unreliable and indicates at least 7 external files reference `MustClose`. This means its removal would likely cause compilation failures in these files, and potentially more if the true count is higher. Therefore, a deeper investigation is required before deletion.",
+          "confidence": "medium",
+          "callers_found": 7,
+          "caller_files": [
+            "internal/git/gittest/http_server.go",
+            "internal/git/gittest/repo.go",
+            "internal/testhelper/certs.go",
+            "internal/testhelper/directory.go",
+            "internal/testhelper/testdb/db.go",
+            "internal/testhelper/testhelper.go",
+            "internal/testhelper/testserver/gitaly.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "getall-count-commits-go",
+        "name": "GetAll",
+        "file_path": "internal/gitaly/service/commit/count_commits.go",
+        "annotation": "} else if in.GetAll() { //nolint:staticcheck // All is deprecated in favor of revisions field",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "}\n\t} else if in.GetAll() { //nolint:staticcheck // All is deprecated in favor of revisions field\n\t\tsubCmd.Flags = append(subCmd.Flags, gitcmd.Flag{Name: \"--all\"})",
+        "age_days": 143,
+        "annotation_date": "January 07, 2026",
+        "replacement": "revisions",
+        "removal_target": "",
+        "last_commit_sha": "85828290f8d1830260408e971db3b7b5e975710c",
+        "startline": 28,
+        "ref": "master",
+        "detection_confidence": 3,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "replacement named: revisions",
+          "aged 143d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 8,
+          "blast_radius": "Removing 'GetAll' would cause compilation errors or runtime panics in at least 7 identified internal Gitaly and Praefect components, including protobuf definitions, which could lead to service outages.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Compilation failures in dependent services (Gitaly, Praefect)",
+            "Runtime errors if calls are not updated, leading to service instability",
+            "API incompatibility if 'GetAll' is part of a public-facing protobuf message, requiring client updates",
+            "Regression in commit counting logic if the migration to 'revisions' is incomplete or incorrect"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis, though unreliable, indicates at least 7 external files still reference 'GetAll'. The deprecation annotation is only 143 days old, which is less than the 180-day threshold for immediate excision. Therefore, further investigation is required to confirm actual usage and migrate callers before deletion.",
+          "confidence": "medium",
+          "callers_found": 7,
+          "caller_files": [
+            "CHANGELOG.md",
+            "internal/gitaly/service/commit/find_commits.go",
+            "internal/praefect/datastore/datastore.go",
+            "internal/praefect/metrics/prometheus.go",
+            "proto/go/gitalypb/commit.pb.go",
+            "proto/go/gitalypb/conflicts.pb.go",
+            "proto/go/gitalypb/operations.pb.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "latest_version": "",
+            "description": "No specific technology identified in constraint text",
+            "is_resolved": null,
+            "source": "unverified"
+          }
+        }
+      },
+      {
+        "finding_id": "getrevision-count-commits-go",
+        "name": "GetRevision",
+        "file_path": "internal/gitaly/service/commit/count_commits.go",
+        "annotation": "subCmd.Args = []string{string(in.GetRevision())} //nolint:staticcheck // Revision is deprecated in favor of revisions field",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "} else {\n\t\tsubCmd.Args = []string{string(in.GetRevision())} //nolint:staticcheck // Revision is deprecated in favor of revisions field\n\t}",
+        "age_days": 3011,
+        "annotation_date": "March 01, 2018",
+        "replacement": "revisions",
+        "removal_target": "",
+        "last_commit_sha": "816adc4d3f992df8fd156ef14d37da8f718170d3",
+        "startline": 31,
+        "ref": "master",
+        "detection_confidence": 3,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "replacement named: revisions",
+          "aged 3011d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "Removal would break any external callers still using the deprecated `GetRevision` method, potentially causing protobuf deserialization or API call failures.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Breaking external services or clients that still rely on the deprecated `GetRevision` field.",
+            "Unreliable caller analysis means there could be many more un-migrated callers than detected.",
+            "Potential for runtime errors if the field is removed from the protobuf definition without all consumers being updated."
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is explicitly marked as UNRELIABLE and indicates at least 5 external files still reference `GetRevision`. Despite the long deprecation period (3011 days), the unreliability of the caller analysis and the presence of callers prevent immediate deletion. A deeper investigation is required to identify and migrate all remaining callers before removal.",
+          "confidence": "high",
+          "callers_found": 5,
+          "caller_files": [
+            "proto/go/gitalypb/analysis.pb.go",
+            "proto/go/gitalypb/blob.pb.go",
+            "proto/go/gitalypb/commit.pb.go",
+            "proto/go/gitalypb/errors.pb.go",
+            "proto/go/gitalypb/repository.pb.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "latest_version": "",
+            "description": "No specific technology identified in constraint text",
+            "is_resolved": null,
+            "source": "unverified"
+          }
+        }
+      },
+      {
+        "finding_id": "allowemptyrevision-count-commits-go",
+        "name": "AllowEmptyRevision",
+        "file_path": "internal/gitaly/service/commit/count_commits.go",
+        "annotation": "//nolint:staticcheck // Revision is deprecated in favor of revisions field",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "//nolint:staticcheck // Revision is deprecated in favor of revisions field\n\tif err := git.ValidateRevision(in.GetRevision(), git.AllowEmptyRevision()); err != nil {",
+        "age_days": 143,
+        "annotation_date": "January 07, 2026",
+        "replacement": "revisions",
+        "removal_target": "",
+        "last_commit_sha": "85828290f8d1830260408e971db3b7b5e975710c",
+        "startline": 93,
+        "ref": "master",
+        "detection_confidence": 3,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "replacement named: revisions",
+          "aged 143d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "If removed, 6 internal files referencing 'AllowEmptyRevision' would fail to compile or run, specifically within Gitaly's commit service and git revision handling.",
+          "effort_estimate": "2-4 hours",
+          "technical_risks": [
+            "Breaking existing Gitaly commit service functionalities that rely on this field.",
+            "Introducing regressions if the migration to the 'revisions' field is not correctly implemented at all call sites."
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The symbol 'AllowEmptyRevision' cannot be safely deleted today because 6 external files still reference it, as confirmed by reliable caller analysis. Removal would require migrating these call sites to the stated replacement 'revisions' first. Additionally, the deprecation annotation is only 143 days old, which is less than the 180-day threshold for immediate removal.",
+          "confidence": "high",
+          "callers_found": 6,
+          "caller_files": [
+            "internal/git/revision.go",
+            "internal/gitaly/service/commit/commits_by_message.go",
+            "internal/gitaly/service/commit/find_all_commits.go",
+            "internal/gitaly/service/commit/find_commits.go",
+            "internal/gitaly/service/commit/languages.go",
+            "internal/gitaly/service/commit/list_files.go"
+          ],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "latest_version": "",
+            "description": "No specific technology identified in constraint text",
+            "is_resolved": null,
+            "source": "unverified"
+          }
+        }
+      },
+      {
+        "finding_id": "getrequests-find-changed-paths-go",
+        "name": "GetRequests",
+        "file_path": "internal/gitaly/service/diff/find_changed_paths.go",
+        "annotation": "if len(in.GetCommits()) > 0 { //nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "if len(in.GetCommits()) > 0 { //nolint:staticcheck\n\t\tif len(in.GetRequests()) > 0 {",
+        "age_days": 2019,
+        "annotation_date": "November 18, 2020",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "087700d0521862fea582a221d74d0bcd5a3f634e",
+        "startline": 390,
+        "ref": "master",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 2019d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 5,
+          "blast_radius": "Removing this code without migrating its single caller, `proto/go/gitalypb/diff.pb.go`, would cause a compilation error or runtime failure in components relying on that generated protobuf code.",
+          "effort_estimate": "2-3 hours",
+          "technical_risks": [
+            "Build failure if the calling `proto/go/gitalypb/diff.pb.go` is not updated or regenerated correctly.",
+            "Runtime errors if the underlying `.proto` definition is not correctly modified to remove the field or use its replacement.",
+            "Unintended side effects if the purpose of `GetRequests` is misunderstood and its removal impacts other parts of the system that indirectly rely on the protobuf message structure."
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The code cannot be safely deleted today because `1 external file(s) still reference 'GetRequests'`, specifically `proto/go/gitalypb/diff.pb.go`. Removing it without migrating this call site would lead to a build or runtime error. Further investigation is required to identify the correct replacement and update the protobuf definition.",
+          "confidence": "high",
+          "callers_found": 1,
+          "caller_files": [
+            "proto/go/gitalypb/diff.pb.go"
+          ],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "getcommits-find-changed-paths-go",
+        "name": "GetCommits",
+        "file_path": "internal/gitaly/service/diff/find_changed_paths.go",
+        "annotation": "in.Requests = make([]*gitalypb.FindChangedPathsRequest_Request, len(in.GetCommits())) //nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "in.Requests = make([]*gitalypb.FindChangedPathsRequest_Request, len(in.GetCommits())) //nolint:staticcheck\n\t\tfor i, commit := range in.GetCommits() {                                              //nolint:staticcheck",
+        "age_days": 2019,
+        "annotation_date": "November 18, 2020",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "087700d0521862fea582a221d74d0bcd5a3f634e",
+        "startline": 395,
+        "ref": "master",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 2019d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 8,
+          "blast_radius": "Removing `GetCommits` would cause compilation failures or runtime errors in at least two identified files (`internal/gitaly/service/commit/find_commits.go`, `proto/go/gitalypb/commit.pb.go`), and potentially many more due to unreliable caller analysis.",
+          "effort_estimate": "1-2 days (for investigation and migration, assuming a replacement path is identified)",
+          "technical_risks": [
+            "Compilation failures in dependent services/modules",
+            "Runtime errors if the code is dynamically linked or reflected upon",
+            "Unforeseen side effects due to incomplete understanding of its usage (due to unreliable caller analysis)",
+            "Regression in functionality if `GetCommits` is still critical for certain operations"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is explicitly marked as unreliable and indicates at least two external files reference `GetCommits`, with the true count likely higher. Removing it without further investigation would lead to compilation failures or runtime errors in these and potentially other unknown callers. The `//nolint:staticcheck` annotation suggests a static analysis issue at a call site, not necessarily that the `GetCommits` method itself is dead, but rather deprecated and still in use.",
+          "confidence": "high",
+          "callers_found": 2,
+          "caller_files": [
+            "internal/gitaly/service/commit/find_commits.go",
+            "proto/go/gitalypb/commit.pb.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "getbranch-merge-to-ref-go",
+        "name": "GetBranch",
+        "file_path": "internal/gitaly/service/operations/merge_to_ref.go",
+        "annotation": "//nolint:staticcheck // Branch is marked as deprecated in the protobuf",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "//nolint:staticcheck // Branch is marked as deprecated in the protobuf\n\trevision := git.Revision(request.GetBranch())",
+        "age_days": 1040,
+        "annotation_date": "July 25, 2023",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "ab7f392677eded5f3d4a34af0e5af22cfda74c9d",
+        "startline": 30,
+        "ref": "master",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 1040d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "Services or components relying on the `GetBranch` protobuf field or method would experience runtime errors or compilation failures if it's removed while still in use.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Runtime errors in dependent services",
+            "Compilation failures in generated protobuf code",
+            "Unexpected behavior in Gitaly clients",
+            "Potential data inconsistency if `GetBranch` is part of a critical data path"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is marked as UNRELIABLE and indicates at least two external references to `GetBranch`. Despite the long deprecation period (1040 days), the unreliability of the caller analysis and the presence of potential callers prevent immediate deletion. A deeper investigation is required to confirm actual usage and identify any replacement.",
+          "confidence": "high",
+          "callers_found": 2,
+          "caller_files": [
+            "proto/go/gitalypb/operations.pb.go",
+            "proto/go/gitalypb/ref.pb.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "removememberbitmaps-link-go",
+        "name": "removeMemberBitmaps",
+        "file_path": "internal/git/objectpool/link.go",
+        "annotation": "func removeMemberBitmaps(ctx context.Context, pool *localrepo.Repo, repo *localrepo.Repo) error {",
+        "detection_method": "removal_marker",
+        "language": "go",
+        "context_snippet": "// warning. https://gitlab.com/gitlab-org/gitaly/issues/1728\nfunc removeMemberBitmaps(ctx context.Context, pool *localrepo.Repo, repo *localrepo.Repo) error {\n\tpoolPath, err := pool.Path(ctx)",
+        "age_days": 2539,
+        "annotation_date": "June 17, 2019",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "1cf5b64f97010359c717741bb076b0793359caeb",
+        "startline": 95,
+        "ref": "master",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "removal-intent comment",
+          "aged 2539d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": true,
+          "deletion_risk": 0,
+          "blast_radius": "No impact, as the function is not called by any live code.",
+          "effort_estimate": "30 min",
+          "technical_risks": [
+            "None, assuming the reliable caller analysis is 100% accurate."
+          ],
+          "recommendation": "excise_now",
+          "reasoning": "The caller analysis reliably shows zero external references to `removeMemberBitmaps`, indicating it is dead code. It has been deprecated for over 2500 days, providing ample time for any dependencies to be migrated or removed. The healthy CI further confirms a safe environment for removal.",
+          "confidence": "high",
+          "callers_found": 0,
+          "caller_files": [],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      }
+    ],
+    "summary": {
+      "total": 9,
+      "excise_now": 1,
+      "needs_biopsy": 8,
+      "leave_intact": 0
+    },
+    "mcp_calls_log": [
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "Deprecated: true",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "ToBeRemovedWith",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "@deprecated",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "// Deprecated:",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "DeprecationWarning",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "TODO: remove",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "TODO remove after",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "FIXME: remove",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "will be removed in",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "scheduled for removal",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "no longer used",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "REMOVEME",
+        "result_count": 11
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "query": "nolint:staticcheck",
+        "result_count": 20
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/testhelper/logger.go",
+        "line": 155,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/testhelper/testserver/praefect.go",
+        "line": 69,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/gitaly/service/commit/count_commits.go",
+        "line": 28,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/gitaly/service/commit/count_commits.go",
+        "line": 31,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/gitaly/service/commit/count_commits.go",
+        "line": 93,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/gitaly/service/diff/find_changed_paths.go",
+        "line": 390,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/gitaly/service/diff/find_changed_paths.go",
+        "line": 395,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/gitaly/service/operations/merge_to_ref.go",
+        "line": 30,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/gitaly/storage/relational/sqlite.go",
+        "line": 328,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/git/objectpool/link.go",
+        "line": 95,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/gitaly/storage/relational/pool_store.go",
+        "line": 37,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitaly",
+        "file": "internal/gitaly/storage/relational/state_manager.go",
+        "line": 79,
+        "ranges": 1
+      }
+    ],
+    "mcp_tools_used": [
+      "get_file_blame",
+      "search_blobs"
+    ],
+    "mcp_tool_count": 25,
+    "data_source": "gitlab_mcp_blobs",
+    "clean_scan": false
+  }
+}

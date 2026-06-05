@@ -1,0 +1,740 @@
+{
+  "report": {
+    "mode": "necrosis",
+    "project_path": "gitlab-org/gitlab",
+    "scan_id": "2c6b8f49",
+    "findings": [
+      {
+        "finding_id": "finished-checking-helpers-rb",
+        "name": "finished_checking",
+        "file_path": "lib/system_check/helpers.rb",
+        "annotation": "# @deprecated This will no longer be used when all checks were executed using SystemCheck",
+        "detection_method": "annotation_scan",
+        "language": "ruby",
+        "context_snippet": "# @deprecated This will no longer be used when all checks were executed using SystemCheck\n    def finished_checking(component)",
+        "age_days": 3286,
+        "annotation_date": "May 31, 2017",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "13e88c93956b5b350515b919ef7217a3dccf28ff",
+        "startline": 36,
+        "ref": "master",
+        "detection_confidence": 3,
+        "detection_signals": [
+          "explicit @deprecated annotation",
+          "aged 3286d (>= 180d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "If `finished_checking` is removed, the `lib/system_check/rake_task/gitlab_task.rb` and `lib/system_check/simple_executor.rb` files would encounter `NoMethodError` or similar runtime errors.",
+          "effort_estimate": "1-2 hours",
+          "technical_risks": [
+            "Runtime errors in lib/system_check/rake_task/gitlab_task.rb and lib/system_check/simple_executor.rb.",
+            "Potential for unexpected behavior if the replacement logic (SystemCheck) is not fully understood or correctly implemented at the call sites.",
+            "Regression in system checks if the migration is incomplete or incorrect."
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The symbol `finished_checking` cannot be safely deleted today because caller analysis reliably shows 2 external files still reference it. Removing it would cause runtime errors in these files. A migration of these call sites to the new `SystemCheck` mechanism, as implied by the deprecation message, is required first.",
+          "confidence": "high",
+          "callers_found": 2,
+          "caller_files": [
+            "lib/system_check/rake_task/gitlab_task.rb",
+            "lib/system_check/simple_executor.rb"
+          ],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "start-checking-helpers-rb",
+        "name": "start_checking",
+        "file_path": "lib/system_check/helpers.rb",
+        "annotation": "# @deprecated This will no longer be used when all checks were executed using SystemCheck",
+        "detection_method": "annotation_scan",
+        "language": "ruby",
+        "context_snippet": "# @deprecated This will no longer be used when all checks were executed using SystemCheck\n    def start_checking(component)",
+        "age_days": 3286,
+        "annotation_date": "May 31, 2017",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "13e88c93956b5b350515b919ef7217a3dccf28ff",
+        "startline": 43,
+        "ref": "master",
+        "detection_confidence": 3,
+        "detection_signals": [
+          "explicit @deprecated annotation",
+          "aged 3286d (>= 180d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 6,
+          "blast_radius": "Removing this code would cause runtime errors in `lib/system_check/rake_task/gitlab_task.rb` and `lib/system_check/simple_executor.rb`.",
+          "effort_estimate": "2-4 hours",
+          "technical_risks": [
+            "Runtime errors in system checks",
+            "Incomplete migration leading to some checks not running or running incorrectly",
+            "Regression in system health monitoring"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The code cannot be safely deleted today because two external files, `lib/system_check/rake_task/gitlab_task.rb` and `lib/system_check/simple_executor.rb`, still reference `start_checking`. Removing it without migrating these call sites would lead to runtime errors. Further investigation is needed to understand the correct replacement mechanism and migrate these callers before deletion.",
+          "confidence": "high",
+          "callers_found": 2,
+          "caller_files": [
+            "lib/system_check/rake_task/gitlab_task.rb",
+            "lib/system_check/simple_executor.rb"
+          ],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "path-with-namespace-wiki-rb",
+        "name": "path_with_namespace",
+        "file_path": "app/models/wiki.rb",
+        "annotation": "# @deprecated use full_path when you need it for an URL route or disk_path when you want to point to the filesystem",
+        "detection_method": "annotation_scan",
+        "language": "ruby",
+        "context_snippet": "# @deprecated use full_path when you need it for an URL route or disk_path when you want to point to the filesystem\n  alias_method :path_with_namespace, :full_path",
+        "age_days": 2235,
+        "annotation_date": "April 16, 2020",
+        "replacement": "full_path",
+        "removal_target": "",
+        "last_commit_sha": "fe5533a7b102d0f989c00c911b5f20265a92e716",
+        "startline": 412,
+        "ref": "master",
+        "detection_confidence": 4,
+        "detection_signals": [
+          "explicit @deprecated annotation",
+          "replacement named: full_path",
+          "aged 2235d (>= 180d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 9,
+          "blast_radius": "Any code paths still calling `path_with_namespace` will raise a `NoMethodError`, potentially breaking backup tools, analytics features, and project-related functionality.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Runtime errors (NoMethodError) in production",
+            "Broken backup/restore processes if `gitlab-backup-cli` gems are affected",
+            "Incorrect analytics data or broken UI components",
+            "Regression if not all call sites are identified and migrated"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is explicitly marked as UNRELIABLE and indicates at least 8 external callers, with a strong warning 'do NOT excise_now'. Removing this method without a thorough investigation to identify and migrate all call sites would lead to critical runtime errors.",
+          "confidence": "high",
+          "callers_found": 8,
+          "caller_files": [
+            "app/models/project.rb",
+            "ee/app/assets/javascripts/analytics/shared/utils.js",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/models/group_wiki.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/models/personal_snippet.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/models/project_design_management.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/models/project_snippet.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/models/project_wiki.rb",
+            "lib/gitlab/import_export/importer.rb"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "latest_version": "",
+            "description": "No specific technology identified in constraint text",
+            "is_resolved": null,
+            "source": "unverified"
+          }
+        }
+      },
+      {
+        "finding_id": "repository-exists-shell-rb",
+        "name": "repository_exists",
+        "file_path": "lib/gitlab/shell.rb",
+        "annotation": "# @deprecated",
+        "detection_method": "annotation_scan",
+        "language": "ruby",
+        "context_snippet": "#\n    # @deprecated\n    def repository_exists?(storage, dir_name)",
+        "age_days": 2265,
+        "annotation_date": "March 17, 2020",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "7304a594839d179ac185f1028379a536c2adc032",
+        "startline": 103,
+        "ref": "master",
+        "detection_confidence": 3,
+        "detection_signals": [
+          "explicit @deprecated annotation",
+          "aged 2265d (>= 180d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "Core repository and wiki functionality, container registry event processing, and bulk import services would fail if this method is removed while still in use.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Runtime errors in critical application paths",
+            "Regression of features relying on repository existence checks",
+            "Difficulty in identifying the correct replacement if not explicitly stated"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is explicitly marked as unreliable, and it indicates at least 7 external files still reference `repository_exists`. Removing this method without further investigation would lead to runtime errors in critical application components. A biopsy is needed to confirm actual usage and identify the correct migration path.",
+          "confidence": "high",
+          "callers_found": 7,
+          "caller_files": [
+            "app/models/concerns/has_repository.rb",
+            "app/models/concerns/has_wiki.rb",
+            "app/models/container_registry/event.rb",
+            "app/models/wiki.rb",
+            "app/services/bulk_imports/repository_bundle_export_service.rb",
+            "app/services/projects/update_repository_storage_service.rb",
+            "lib/gitlab/import_export/repo_saver.rb"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "human-name-project-rb",
+        "name": "human_name",
+        "file_path": "app/models/project.rb",
+        "annotation": "# @deprecated cannot remove yet because it has an index with its name in elasticsearch",
+        "detection_method": "annotation_scan",
+        "language": "ruby",
+        "context_snippet": "alias_method :human_name, :full_name\n  # @deprecated cannot remove yet because it has an index with its name in elasticsearch\n  alias_method :path_with_namespace, :full_path",
+        "age_days": 3397,
+        "annotation_date": "February 08, 2017",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "2989192d1aa8051aa09164cd097418bd3063d4ad",
+        "startline": 3101,
+        "ref": "master",
+        "detection_confidence": 3,
+        "detection_signals": [
+          "explicit @deprecated annotation",
+          "aged 3397d (>= 180d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 9,
+          "blast_radius": "Removing this would break Elasticsearch indexing and search functionality for projects, and impact numerous other features and backup processes that currently reference 'human_name'.",
+          "effort_estimate": "Several days to a week",
+          "technical_risks": [
+            "Breaking Elasticsearch indexing and search for projects",
+            "Data integrity issues if Elasticsearch index is not properly managed",
+            "Disrupting backup and restore operations",
+            "Breaking functionality in other models (e.g., Group, Namespace) that rely on this method"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The deprecation annotation explicitly states that this code 'cannot remove yet because it has an index with its name in elasticsearch', indicating a critical dependency. Furthermore, the caller analysis, despite being unreliable, shows at least 29 external references, confirming it is still widely used. Deleting it without addressing the Elasticsearch dependency and migrating all callers would lead to significant production breakage. Annotation states an explicit removal blocker \u2014 flagged for human review.",
+          "confidence": "high",
+          "callers_found": 29,
+          "caller_files": [
+            "app/models/group.rb",
+            "app/models/namespace.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/tasks/artifacts.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/tasks/builds.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/tasks/database.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/tasks/lfs.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/tasks/packages.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/tasks/pages.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/tasks/registry.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/tasks/repositories.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/tasks/task.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/tasks/terraform_state.rb",
+            "gems/gitlab-backup-cli/lib/gitlab/backup/cli/tasks/uploads.rb",
+            "lib/api/helpers/notes_helpers.rb",
+            "lib/backup/tasks/agent_plan_content.rb",
+            "lib/backup/tasks/artifacts.rb",
+            "lib/backup/tasks/builds.rb",
+            "lib/backup/tasks/ci_secure_files.rb",
+            "lib/backup/tasks/database.rb",
+            "lib/backup/tasks/external_diffs.rb",
+            "lib/backup/tasks/lfs.rb",
+            "lib/backup/tasks/packages.rb",
+            "lib/backup/tasks/pages.rb",
+            "lib/backup/tasks/registry.rb",
+            "lib/backup/tasks/repositories.rb",
+            "lib/backup/tasks/task.rb",
+            "lib/backup/tasks/terraform_state.rb",
+            "lib/backup/tasks/uploads.rb",
+            "lib/gitlab/health_checks/base_abstract_check.rb"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "example-epic-rb",
+        "name": "example",
+        "file_path": "ee/lib/api/entities/epic.rb",
+        "annotation": "expose :web_edit_url, # @deprecated",
+        "detection_method": "annotation_scan",
+        "language": "ruby",
+        "context_snippet": "end\n      expose :web_edit_url, # @deprecated\n        documentation: { type: 'String', example: \"http://gitlab.example.com/groups/test/-/epics/4/edit\" }",
+        "age_days": 172,
+        "annotation_date": "December 09, 2025",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "8d3cb64cc32188c7e9ff7c2b3cc43d0777d9edea",
+        "startline": 120,
+        "ref": "master",
+        "detection_confidence": 1,
+        "detection_signals": [
+          "explicit @deprecated annotation",
+          "\u26a0 only 172d old \u2014 may be intentional"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 8,
+          "blast_radius": "Removal would cause API consumers (including internal tools like the LLM chain) to fail if they rely on the `web_edit_url` field, and documentation might become inaccurate.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "API breakage for external and internal consumers",
+            "Breakage of the LLM chain tool",
+            "Inaccurate or broken documentation references",
+            "Lack of a stated replacement means consumers have no migration path"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is explicitly marked as unreliable, and it reports at least 4 external references, including an LLM tool and documentation. Despite the deprecation annotation, the presence of potential callers and the unreliability of the analysis necessitate further investigation before deletion.",
+          "confidence": "low",
+          "callers_found": 4,
+          "caller_files": [
+            "doc/development/database/adding_database_indexes.md",
+            "doc/development/database/partitioning/list.md",
+            "doc/development/documentation/topic_types/reference.md",
+            "ee/lib/gitlab/llm/chain/tools/merge_request_reader/executor.rb"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "with-transient-pg-env-database-rb",
+        "name": "with_transient_pg_env",
+        "file_path": "lib/backup/targets/database.rb",
+        "annotation": "# @deprecated This will be removed when restore operation is refactored to use extended_env directly",
+        "detection_method": "annotation_scan",
+        "language": "ruby",
+        "context_snippet": "# @deprecated This will be removed when restore operation is refactored to use extended_env directly\n      def with_transient_pg_env(extended_env)",
+        "age_days": 80,
+        "annotation_date": "March 10, 2026",
+        "replacement": "extended_env",
+        "removal_target": "",
+        "last_commit_sha": "e76089c62b039af13dc0a849f98075376cfb2b1f",
+        "startline": 285,
+        "ref": "master",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "explicit @deprecated annotation",
+          "replacement named: extended_env",
+          "\u26a0 only 80d old \u2014 may be intentional"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "The `lib/gitlab/database/decomposition/migrate.rb` file would fail if `with_transient_pg_env` is removed without migrating its usage.",
+          "effort_estimate": "30 min - 1 hour",
+          "technical_risks": [
+            "Breaking the `lib/gitlab/database/decomposition/migrate.rb` script",
+            "Potential for subtle behavioral differences if `extended_env` is not a drop-in replacement in the specific context of the caller"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis reliably identified one external file, `lib/gitlab/database/decomposition/migrate.rb`, that still references `with_transient_pg_env`. Removing the deprecated code without migrating this call site would break the migration script. The stated replacement `extended_env` suggests a clear path for migration.",
+          "confidence": "high",
+          "callers_found": 1,
+          "caller_files": [
+            "lib/gitlab/database/decomposition/migrate.rb"
+          ],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "latest_version": "",
+            "description": "No specific technology identified in constraint text",
+            "is_resolved": null,
+            "source": "unverified"
+          }
+        }
+      },
+      {
+        "finding_id": "members-remove-member-modal-rb",
+        "name": "Members",
+        "file_path": "qa/qa/page/component/members/remove_member_modal.rb",
+        "annotation": "module RemoveMemberModal",
+        "detection_method": "removal_marker",
+        "language": "ruby",
+        "context_snippet": "module Members\n        module RemoveMemberModal\n          extend QA::Page::PageConcern",
+        "age_days": 1204,
+        "annotation_date": "February 10, 2023",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "4a99af809b86047ce3c8985e6582748bbd23fc84",
+        "startline": 6,
+        "ref": "master",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "removal-intent comment",
+          "aged 1204d (>= 180d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 8,
+          "blast_radius": "Removing this code could break the member removal functionality in projects and related QA tests for both projects and groups.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Breaking core member removal functionality",
+            "Causing QA test failures",
+            "Introducing regressions in user management workflows"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis, though unreliable, indicates at least two external files reference 'Members' and explicitly advises against immediate removal. Further investigation is required to confirm if these references are to the deprecated 'RemoveMemberModal' and if they are still active.",
+          "confidence": "low",
+          "callers_found": 2,
+          "caller_files": [
+            "app/controllers/projects/project_members_controller.rb",
+            "qa/qa/ee/page/group/members.rb"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "gettargetdata-create-merge-request-dropdown-js",
+        "name": "getTargetData",
+        "file_path": "app/assets/javascripts/issues/create_merge_request_dropdown.js",
+        "annotation": "removeMessage(target) {",
+        "detection_method": "removal_marker",
+        "language": "js",
+        "context_snippet": "removeMessage(target) {\n    const { input, message } = this.getTargetData(target);",
+        "age_days": 3108,
+        "annotation_date": "November 25, 2017",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "5bc32b65f1257ca1f2c9fefc1e251be55b0fdc17",
+        "startline": 496,
+        "ref": "master",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "removal-intent comment",
+          "aged 3108d (>= 180d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": true,
+          "deletion_risk": 0,
+          "blast_radius": "No external code would be affected, and if it's truly dead within its own file, nothing would break.",
+          "effort_estimate": "30 min",
+          "technical_risks": [
+            "Unexpected internal usage within the same file that was not detected by the analysis."
+          ],
+          "recommendation": "excise_now",
+          "reasoning": "The caller analysis reliably confirms zero external references to 'getTargetData', indicating it is dead code. Furthermore, the code has carried its deprecation annotation for over 3100 days, providing ample time for any dependencies to be removed or migrated. This combination strongly suggests safe removal.",
+          "confidence": "high",
+          "callers_found": 0,
+          "caller_files": [],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "add-create-merge-request-dropdown-js",
+        "name": "add",
+        "file_path": "app/assets/javascripts/issues/create_merge_request_dropdown.js",
+        "annotation": "this.removeMessage(target);",
+        "detection_method": "removal_marker",
+        "language": "js",
+        "context_snippet": "this.removeMessage(target);\n    input.classList.add('gl-field-success-outline');",
+        "age_days": 3108,
+        "annotation_date": "November 25, 2017",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "5bc32b65f1257ca1f2c9fefc1e251be55b0fdc17",
+        "startline": 520,
+        "ref": "master",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "removal-intent comment",
+          "aged 3108d (>= 180d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 8,
+          "blast_radius": "Unknown due to unreliable caller analysis; removing a generic symbol like 'add' could have widespread, unforeseen consequences if it's still in use.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Unforeseen runtime errors if 'add' is still called by other parts of the application.",
+            "Breaking functionality that relies on this specific 'add' method, especially if it's part of a larger object or module.",
+            "Difficulty in identifying all potential call sites due to the generic nature of the symbol 'add'."
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis for 'add' is unreliable due to its generic nature, making it impossible to confirm zero callers. Despite the code being annotated as deprecated/dead for over 8 years, the unknown blast radius necessitates a thorough investigation before deletion.",
+          "confidence": "high",
+          "callers_found": -1,
+          "caller_files": [],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      }
+    ],
+    "summary": {
+      "total": 10,
+      "excise_now": 1,
+      "needs_biopsy": 9,
+      "leave_intact": 0
+    },
+    "mcp_calls_log": [
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "Deprecated: true",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "ToBeRemovedWith",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "@deprecated",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "// Deprecated:",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "DeprecationWarning",
+        "result_count": 17
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "TODO: remove",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "TODO remove after",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "FIXME: remove",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "will be removed in",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "scheduled for removal",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "no longer used",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "REMOVEME",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "query": "nolint:staticcheck",
+        "result_count": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "file": "lib/system_check/helpers.rb",
+        "line": 36,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "file": "lib/system_check/helpers.rb",
+        "line": 43,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "file": "app/models/wiki.rb",
+        "line": 412,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "file": "lib/gitlab/shell.rb",
+        "line": 103,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "file": "app/models/project.rb",
+        "line": 3101,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "file": "ee/lib/api/entities/epic.rb",
+        "line": 120,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "file": "lib/backup/targets/database.rb",
+        "line": 285,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "file": "qa/qa/page/component/members/remove_member_modal.rb",
+        "line": 6,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "file": "app/assets/javascripts/issues/create_merge_request_dropdown.js",
+        "line": 496,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab",
+        "file": "app/assets/javascripts/issues/create_merge_request_dropdown.js",
+        "line": 520,
+        "ranges": 1
+      }
+    ],
+    "mcp_tools_used": [
+      "get_file_blame",
+      "search_blobs"
+    ],
+    "mcp_tool_count": 23,
+    "data_source": "gitlab_mcp_blobs",
+    "clean_scan": false
+  }
+}

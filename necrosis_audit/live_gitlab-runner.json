@@ -1,0 +1,751 @@
+{
+  "report": {
+    "mode": "necrosis",
+    "project_path": "gitlab-org/gitlab-runner",
+    "scan_id": "f6858be7",
+    "findings": [
+      {
+        "finding_id": "ff-test-feature-flags-go",
+        "name": "FF_TEST_FEATURE",
+        "file_path": "helpers/featureflags/flags.go",
+        "annotation": "DefaultValue: false,",
+        "detection_method": "flag_tombstone",
+        "language": "go",
+        "context_snippet": "DefaultValue: false,\n\t\tDeprecated:   true,\n\t\tDescription:  \"FF_TEST_FEATURE is a feature flag that is used to test the feature flag functionality in tests.\",",
+        "age_days": 843,
+        "annotation_date": "February 06, 2024",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "fb41c7a3e25c089db2f3aea21bef9c26dbeeb830",
+        "startline": 80,
+        "ref": "main",
+        "detection_confidence": 3,
+        "detection_signals": [
+          "machine-readable deprecation flag",
+          "aged 843d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 3,
+          "blast_radius": "Tests related to buildlogger might fail, and the feature flag documentation generation script would break.",
+          "effort_estimate": "30 min - 1 hour",
+          "technical_risks": [
+            "Breaking existing tests",
+            "Disrupting documentation generation process",
+            "Potential build failures if scripts are part of CI"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "Caller analysis reliably indicates 2 external files still reference 'FF_TEST_FEATURE'. These references, located in test data and a documentation generation script, must be migrated before the flag can be safely deleted. Although the flag is old (843 days) and CI is healthy, the presence of callers prevents immediate removal.",
+          "confidence": "high",
+          "callers_found": 2,
+          "caller_files": [
+            "common/buildlogger/internal/testdata/corpus/log-2",
+            "scripts/update-feature-flags-docs/main.go"
+          ],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "logdeprecationwarning-config-go",
+        "name": "logDeprecationWarning",
+        "file_path": "common/config.go",
+        "annotation": "func (c *DockerMachine) logDeprecationWarning() {",
+        "detection_method": "annotation_scan",
+        "language": "go",
+        "context_snippet": "func (c *DockerMachine) logDeprecationWarning() {\n\tif len(c.OffPeakPeriods) != 0 {",
+        "age_days": 2214,
+        "annotation_date": "May 06, 2020",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "e60b887e0a3e9fa9cc9b8608578b3e3d68d6d1ab",
+        "startline": 2180,
+        "ref": "main",
+        "detection_confidence": 3,
+        "detection_signals": [
+          "explicit @deprecated annotation",
+          "aged 2214d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": true,
+          "deletion_risk": 0,
+          "blast_radius": "Removing this function will not break any external code, as a reliable live GitLab search confirms 0 external callers.",
+          "effort_estimate": "30 min",
+          "technical_risks": [
+            "Unexpected internal usage not caught by caller analysis (low probability given 'reliable' analysis)",
+            "Potential for subtle side effects if the function was implicitly relied upon (very low probability for a logging function)"
+          ],
+          "recommendation": "excise_now",
+          "reasoning": "The function `logDeprecationWarning` has no external callers according to a reliable live GitLab search, indicating it is dead code. It has been deprecated for over 6 years (2214 days) and its removal carries a deletion risk of 0. The CI is healthy, providing a safe environment for immediate removal.",
+          "confidence": "high",
+          "callers_found": 0,
+          "caller_files": [],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "buildnametocertificate-client-go",
+        "name": "BuildNameToCertificate",
+        "file_path": "network/client.go",
+        "annotation": "//nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "tlsConfig.Certificates = []tls.Certificate{certificate}\n\t//nolint:staticcheck\n\ttlsConfig.BuildNameToCertificate()",
+        "age_days": 2192,
+        "annotation_date": "May 29, 2020",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "1c9e0b467be3ba85439aca346cd558134cd2b634",
+        "startline": 181,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 2192d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": true,
+          "deletion_risk": 0,
+          "blast_radius": "Removing this code is not expected to break anything as the caller analysis reliably confirms zero external references.",
+          "effort_estimate": "5-10 min",
+          "technical_risks": [
+            "None identified given the reliable caller analysis."
+          ],
+          "recommendation": "excise_now",
+          "reasoning": "The caller analysis reliably confirms zero external references to 'BuildNameToCertificate', indicating it is dead code. It has carried a deprecation annotation for over six years, further supporting its disuse. Given its age and lack of callers, removal is safe and will not impact the codebase.",
+          "confidence": "high",
+          "callers_found": 0,
+          "caller_files": [],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "error-server-go",
+        "name": "Error",
+        "file_path": "session/server.go",
+        "annotation": "if session == nil || session.Handler() == nil { //nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "session := s.sessionFinder(r.RequestURI)\n\tif session == nil || session.Handler() == nil { //nolint:staticcheck\n\t\tlogger.Error(\"Mux handler not found\")",
+        "age_days": 2845,
+        "annotation_date": "August 14, 2018",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "2979aa0623d58e5af746b6d69b49bbb3613b8443",
+        "startline": 137,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 2845d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "Code that relies on the 'Error' symbol in 'session/server.go' would fail at compile time or runtime.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Breaking existing functionality that relies on the 'Error' symbol",
+            "Introducing compilation errors in dependent modules",
+            "Missing critical usages due to unreliable caller analysis"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is explicitly marked as UNRELIABLE and indicates at least 6 external references to the 'Error' symbol. Despite the long deprecation period, direct removal is unsafe without further investigation into these potential callers to prevent breaking existing functionality.",
+          "confidence": "low",
+          "callers_found": 6,
+          "caller_files": [
+            "common/config.go",
+            "executors/custom/command/errors.go",
+            "executors/docker/internal/volumes/parser/errors.go",
+            "executors/kubernetes/internal/pull/errors.go",
+            "helpers/docker/errors/errors.go",
+            "helpers/secrets/errors.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "handler-session-go",
+        "name": "Handler",
+        "file_path": "session/session.go",
+        "annotation": "//nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "//nolint:staticcheck\nfunc (s *Session) Handler() http.Handler {",
+        "age_days": 2564,
+        "annotation_date": "May 23, 2019",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "ced6d4a61fbd684321613cffa3a11fd9c689def4",
+        "startline": 250,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 2564d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "Removal would likely break functionality in at least 5 identified external files, and potentially more, as the caller analysis is unreliable.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Breaking existing functionality in `commands/builds_helper.go`, `commands/helpers/artifacts_uploader.go`, `common/config.go`, `magefiles/docutils/section_replacer.go`, and `scripts/update-feature-flags-docs/main.go`.",
+            "Unforeseen breakage in other parts of the codebase due to unreliable caller analysis.",
+            "Introducing regressions if `Handler` is still critical for certain operations."
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is explicitly marked as unreliable and found at least 5 external references to `Handler`. Despite the code being very old (2564 days), the unreliability of the caller analysis and the presence of callers prevent immediate deletion. A manual investigation is required to confirm actual usage and potential impact.",
+          "confidence": "high",
+          "callers_found": 5,
+          "caller_files": [
+            "commands/builds_helper.go",
+            "commands/helpers/artifacts_uploader.go",
+            "common/config.go",
+            "magefiles/docutils/section_replacer.go",
+            "scripts/update-feature-flags-docs/main.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "lessthan-docker-go",
+        "name": "LessThan",
+        "file_path": "executors/docker/docker.go",
+        "annotation": "//nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "if e.serverAPIVersion.LessThan(version1_44) {\n\t\t//nolint:staticcheck\n\t\tconfig.MacAddress = e.Config.Docker.MacAddress",
+        "age_days": 611,
+        "annotation_date": "September 25, 2024",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "8fdb838bd999d3b3ce1ede022200ba846a30fc40",
+        "startline": 968,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 611d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": true,
+          "deletion_risk": 0,
+          "blast_radius": "None, as the symbol is entirely unused according to the caller analysis.",
+          "effort_estimate": "30 min",
+          "technical_risks": [
+            "The primary risk is that the caller analysis is incorrect, and some code (internal or external) actually relies on it."
+          ],
+          "recommendation": "excise_now",
+          "reasoning": "The caller analysis reliably confirms 0 external files reference 'LessThan', and it's stated that nothing outside its own file uses it. It has been deprecated for 611 days, and CI is healthy. This indicates the code is truly dead and safe to remove without impact.",
+          "confidence": "high",
+          "callers_found": 0,
+          "caller_files": [],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "ipaddress-docker-go",
+        "name": "IPAddress",
+        "file_path": "executors/docker/docker.go",
+        "annotation": "if inspect.NetworkSettings.IPAddress != \"\" { //nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "var ip []string\n\tif inspect.NetworkSettings.IPAddress != \"\" { //nolint:staticcheck\n\t\tip = append(ip, inspect.NetworkSettings.IPAddress) //nolint:staticcheck",
+        "age_days": 159,
+        "annotation_date": "December 22, 2025",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "349f97b01d30662d8eb67df375e573635e7f612d",
+        "startline": 1877,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 159d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "The files 'executors/parallels/parallels.go', 'helpers/certificate/x509.go', and 'helpers/parallels/control.go' would fail to compile or encounter runtime errors.",
+          "effort_estimate": "2-4 hours",
+          "technical_risks": [
+            "Compilation failures in 3 identified call sites",
+            "Potential runtime issues if the replacement logic is complex or introduces regressions",
+            "Unforeseen side effects if IPAddress is used in other non-obvious ways"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The reliable caller analysis indicates that 3 external files still reference 'IPAddress'. Removing this code without first migrating these call sites would lead to compilation errors. Further investigation is required to identify the appropriate replacement and plan the migration for these callers.",
+          "confidence": "high",
+          "callers_found": 3,
+          "caller_files": [
+            "executors/parallels/parallels.go",
+            "helpers/certificate/x509.go",
+            "helpers/parallels/control.go"
+          ],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "globalipv6address-docker-go",
+        "name": "GlobalIPv6Address",
+        "file_path": "executors/docker/docker.go",
+        "annotation": "if inspect.NetworkSettings.GlobalIPv6Address != \"\" { //nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "}\n\tif inspect.NetworkSettings.GlobalIPv6Address != \"\" { //nolint:staticcheck\n\t\tip = append(ip, inspect.NetworkSettings.GlobalIPv6Address) //nolint:staticcheck",
+        "age_days": 159,
+        "annotation_date": "December 22, 2025",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "349f97b01d30662d8eb67df375e573635e7f612d",
+        "startline": 1880,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 159d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 0,
+          "blast_radius": "If removed prematurely without further investigation, there's a low but non-zero risk of impacting an unforeseen internal dependency within `executors/docker/docker.go`.",
+          "effort_estimate": "1-2 hours",
+          "technical_risks": [
+            "Unforeseen internal dependency within `executors/docker/docker.go`",
+            "Misinterpretation of the `nolint:staticcheck` annotation's full context",
+            "Potential for the caller analysis to have missed an internal, non-indexed usage"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "While caller analysis reliably confirms 0 external references and a healthy CI, the annotation is only 159 days old, falling short of the 180-day threshold for immediate excision. Although the inherent risk appears low, a biopsy is recommended to fully confirm its dead status and adhere to the deprecation process guidelines.",
+          "confidence": "high",
+          "callers_found": 0,
+          "caller_files": [],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "dualstackenabled-s3-go",
+        "name": "DualStackEnabled",
+        "file_path": "cache/s3v2/s3.go",
+        "annotation": "o.UseDualstack = s3Config.DualStackEnabled() // nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "} else {\n\t\t\to.UseDualstack = s3Config.DualStackEnabled() // nolint:staticcheck\n\t\t\to.UseAccelerate = s3Config.Accelerate",
+        "age_days": 620,
+        "annotation_date": "September 16, 2024",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "5cfd15c9e952f94a9fe425fde56655b8e17b3aa1",
+        "startline": 491,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 620d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 6,
+          "blast_radius": "Removing 'DualStackEnabled' would cause compilation failures in 'cache/cacheconfig/cacheconfig.go' and 'cache/s3v2/adapter.go'.",
+          "effort_estimate": "2-3 hours",
+          "technical_risks": [
+            "Compilation errors at call sites",
+            "Potential for runtime misconfiguration if replacement logic is incorrect",
+            "Unintended change in S3 dual-stack behavior if not properly migrated"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The symbol 'DualStackEnabled' has 2 identified external callers in 'cache/cacheconfig/cacheconfig.go' and 'cache/s3v2/adapter.go'. Removing it today would lead to compilation failures at these call sites. Although the annotation is old (620 days), migration of these callers is required before deletion.",
+          "confidence": "high",
+          "callers_found": 2,
+          "caller_files": [
+            "cache/cacheconfig/cacheconfig.go",
+            "cache/s3v2/adapter.go"
+          ],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "withcredentialsfile-adapter-go",
+        "name": "WithCredentialsFile",
+        "file_path": "cache/gcsv2/adapter.go",
+        "annotation": "options = append(options, option.WithCredentialsFile(a.config.CredentialsFile)) // nolint:staticcheck",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "case a.config.CredentialsFile != \"\":\n\t\toptions = append(options, option.WithCredentialsFile(a.config.CredentialsFile)) // nolint:staticcheck\n\tcase a.config.AccessID != \"\" || a.config.PrivateKey != \"\":",
+        "age_days": 760,
+        "annotation_date": "April 30, 2024",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "2157288be37885271e9927a95bc0a662c0e9ff66",
+        "startline": 83,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 760d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": true,
+          "deletion_risk": 0,
+          "blast_radius": "No external files reference this symbol, so its removal should not break any other parts of the codebase.",
+          "effort_estimate": "30 min",
+          "technical_risks": [
+            "undetected external callers (though analysis states 0 and reliable)"
+          ],
+          "recommendation": "excise_now",
+          "reasoning": "The caller analysis is reliable and confirms 0 external references to 'WithCredentialsFile'. The code has been deprecated for 760 days, far exceeding the 365-day threshold for safe removal of long-lived dead code with no risk. The CI is healthy, indicating a stable environment for deletion.",
+          "confidence": "high",
+          "callers_found": 0,
+          "caller_files": [],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "stage-custom-go",
+        "name": "Stage",
+        "file_path": "executors/custom/custom.go",
+        "annotation": "// TODO: Remove this translation - https://gitlab.com/groups/gitlab-org/-/epics/6112",
+        "detection_method": "removal_marker",
+        "language": "go",
+        "context_snippet": "// TODO: Remove this translation - https://gitlab.com/groups/gitlab-org/-/epics/6112\n\tstage := cmd.Stage",
+        "age_days": 2517,
+        "annotation_date": "July 08, 2019",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "1547ed78f30b58f6136761d518cca7dedf41407a",
+        "startline": 334,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "removal-intent comment",
+          "aged 2517d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "Any code paths still referencing 'Stage' would fail to compile or crash at runtime, potentially impacting build processes or executor logic.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Compilation failures in dependent modules",
+            "Runtime errors if the code is dynamically loaded or used in reflection",
+            "Unforeseen side effects due to the 'translation' aspect mentioned in the TODO",
+            "Breaking existing CI/CD pipelines or local development environments"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is marked as UNRELIABLE and indicates at least two external files reference 'Stage', with the true count likely higher due to the saturated 30-result window. Removing this symbol without a thorough investigation of its actual usage would be risky and could lead to compilation or runtime failures. A biopsy is required to understand all callers and their implications.",
+          "confidence": "high",
+          "callers_found": 2,
+          "caller_files": [
+            "common/build.go",
+            "common/executor.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      }
+    ],
+    "summary": {
+      "total": 11,
+      "excise_now": 4,
+      "needs_biopsy": 7,
+      "leave_intact": 0
+    },
+    "mcp_calls_log": [
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "Deprecated: true",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "ToBeRemovedWith",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "@deprecated",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "// Deprecated:",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "DeprecationWarning",
+        "result_count": 2
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "TODO: remove",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "TODO remove after",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "FIXME: remove",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "will be removed in",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "scheduled for removal",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "no longer used",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "REMOVEME",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "query": "nolint:staticcheck",
+        "result_count": 16
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "file": "helpers/featureflags/flags.go",
+        "line": 80,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "file": "common/config.go",
+        "line": 2180,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "file": "network/client.go",
+        "line": 181,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "file": "session/server.go",
+        "line": 137,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "file": "session/session.go",
+        "line": 250,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "file": "executors/docker/docker.go",
+        "line": 968,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "file": "executors/docker/docker.go",
+        "line": 1877,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "file": "executors/docker/docker.go",
+        "line": 1880,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "file": "cache/s3v2/s3.go",
+        "line": 491,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "file": "cache/gcsv2/adapter.go",
+        "line": 83,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-runner",
+        "file": "executors/custom/custom.go",
+        "line": 334,
+        "ranges": 1
+      }
+    ],
+    "mcp_tools_used": [
+      "get_file_blame",
+      "search_blobs"
+    ],
+    "mcp_tool_count": 24,
+    "data_source": "gitlab_mcp_blobs",
+    "clean_scan": false
+  }
+}

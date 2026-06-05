@@ -1,7 +1,7 @@
-"""
+﻿"""
 Challenger Agent — independent adversarial review of revival recommendations.
 
-Uses Vertex AI Gemini 2.5 Flash (via generate_json_adversarial) to ensure genuine
+Uses Gemini 3 Flash (via generate_json_adversarial) to ensure genuine
 model independence from the primary analysis (Gemini 3 Flash via AI Studio API key).
 
 The Challenger's job is to REJECT, not confirm. It starts from a position of
@@ -185,4 +185,5 @@ async def challenge_top_revival_candidates(features: list[dict], limit: int = 3)
             assessments.append(r)
 
     return assessments
+
 

@@ -85,3 +85,12 @@ DEPTH.md
 
 # Internal feature design docs (not part of public submission)
 NECROSIS_FEATURE.md
+
+# Temporary test/dev artifacts
+body.json
+_ui_v.png
+devlog/
+
+# Screenshots inside audit folder
+necrosis_audit/*.png
+necrosis_audit/shot_*

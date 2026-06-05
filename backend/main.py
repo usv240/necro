@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -186,7 +186,7 @@ async def health():
         "slack": "configured" if settings.SLACK_BOT_TOKEN else "not configured",
         "monitor": get_monitor_status(),
         "gemini_primary": "gemini-3-flash-preview",
-        "gemini_fallback": "gemini-2.5-flash (vertex-ai)",
+        "gemini_adversarial": "gemini-3-flash (adversarial challenger, Vertex AI)",
     }
 
 
@@ -194,4 +194,5 @@ async def health():
 frontend_path = Path("frontend")
 if frontend_path.exists():
     app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+
 

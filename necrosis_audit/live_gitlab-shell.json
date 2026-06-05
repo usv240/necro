@@ -1,0 +1,658 @@
+{
+  "report": {
+    "mode": "necrosis",
+    "project_path": "gitlab-org/gitlab-shell",
+    "scan_id": "bbcdfad1",
+    "findings": [
+      {
+        "finding_id": "sshkeyclaim-claims-go",
+        "name": "SSHKeyClaim",
+        "file_path": "internal/topology/claims.go",
+        "annotation": "// Deprecated: Use SSHFingerprintClaim instead to classify by SHA-256 fingerprint.",
+        "detection_method": "annotation_scan",
+        "language": "go",
+        "context_snippet": "//\n// Deprecated: Use SSHFingerprintClaim instead to classify by SHA-256 fingerprint.\nfunc SSHKeyClaim(key string) *types_proto.Claim {",
+        "age_days": 3,
+        "annotation_date": "May 26, 2026",
+        "replacement": "SSHFingerprintClaim",
+        "removal_target": "",
+        "last_commit_sha": "d1f8fd0c425d6f580ebb6aa3b18a711e0eab218d",
+        "startline": 16,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "explicit @deprecated annotation",
+          "replacement named: SSHFingerprintClaim",
+          "\u26a0 only 3d old \u2014 may be intentional"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 2,
+          "blast_radius": "The file internal/topology/resolver.go would fail to compile due to an unresolved reference to SSHKeyClaim.",
+          "effort_estimate": "30 min",
+          "technical_risks": [
+            "Compilation failure in internal/topology/resolver.go",
+            "Potential for subtle behavioral changes if SSHFingerprintClaim is not a direct drop-in replacement",
+            "The deprecation is very recent (3 days), meaning the replacement might not be fully integrated or tested in all scenarios yet"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The symbol SSHKeyClaim cannot be safely deleted today because reliable caller analysis confirms that internal/topology/resolver.go still references it. The deprecation is also very recent, only 3 days old, indicating that the migration to SSHFingerprintClaim may not have been completed yet. Therefore, the call site must be migrated before deletion.",
+          "confidence": "high",
+          "callers_found": 1,
+          "caller_files": [
+            "internal/topology/resolver.go"
+          ],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "latest_version": "",
+            "description": "No specific technology identified in constraint text",
+            "is_resolved": null,
+            "source": "unverified"
+          }
+        }
+      },
+      {
+        "finding_id": "type-server-config-go",
+        "name": "Type",
+        "file_path": "internal/sshd/server_config.go",
+        "annotation": "//nolint:staticcheck // SA1019: Intentionally checking for deprecated DSA to reject it",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "}\n\t//nolint:staticcheck // SA1019: Intentionally checking for deprecated DSA to reject it\n\tif key.Type() == ssh.KeyAlgoDSA {",
+        "age_days": 1718,
+        "annotation_date": "September 15, 2021",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "e96e13301904bfa6eb514667df9a7803828a7da9",
+        "startline": 204,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 1718d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "Removing this code could lead to a regression where deprecated DSA keys are no longer rejected, potentially impacting security or policy enforcement in SSH connections.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Allowing deprecated DSA keys to be used, bypassing intended rejection logic.",
+            "Unexpected behavior in SSH connection establishment or authentication.",
+            "Introducing security vulnerabilities if the rejection was for security reasons.",
+            "Breaking existing SSH configurations that rely on this rejection behavior."
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is unreliable but indicates at least 3 external references to 'Type', explicitly advising against immediate excision. Furthermore, the deprecation annotation states the code is 'Intentionally checking for deprecated DSA to reject it', suggesting it is actively serving a critical rejection function rather than being dead code. A biopsy is required to understand its current role and impact.",
+          "confidence": "high",
+          "callers_found": 3,
+          "caller_files": [
+            "internal/command/commandargs/command_args.go",
+            "internal/command/commandargs/shell.go",
+            "internal/gitlabnet/accessverifier/client.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "new-shell-go",
+        "name": "New",
+        "file_path": "internal/command/commandargs/shell.go",
+        "annotation": "ErrOnlySSHAllowed = errors.New(\"Only SSH allowed\") //nolint:staticcheck // message is customer facing",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "// a non ssh connection is passed.\n\tErrOnlySSHAllowed = errors.New(\"Only SSH allowed\") //nolint:staticcheck // message is customer facing\n)",
+        "age_days": 127,
+        "annotation_date": "January 23, 2026",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "4c79624efd0d50c327f2b4f3394d249c2b50586f",
+        "startline": 40,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 127d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "If `ErrOnlySSHAllowed` is still in use and removed, any code paths that rely on this specific error value for comparison or display to customers would break, potentially leading to panics or incorrect error handling.",
+          "effort_estimate": "1-2 hours",
+          "technical_risks": [
+            "Runtime errors if `ErrOnlySSHAllowed` is still referenced.",
+            "Incorrect error handling logic if code compares against this specific error.",
+            "Impact on customer-facing error messages if the message is still displayed.",
+            "Unforeseen side effects due to unreliable caller analysis."
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is unreliable, making it impossible to confirm if `ErrOnlySSHAllowed` is still in use. Additionally, the code has only been deprecated for 127 days, which is less than the 180-day threshold for immediate removal. Further investigation is required to determine actual usage and impact.",
+          "confidence": "high",
+          "callers_found": -1,
+          "caller_files": [],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "issshconnection-shell-go",
+        "name": "IsSSHConnection",
+        "file_path": "internal/command/commandargs/shell.go",
+        "annotation": "return ErrOnlySSHAllowed //nolint:staticcheck // message is customer facing",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "if !s.Env.IsSSHConnection {\n\t\treturn ErrOnlySSHAllowed //nolint:staticcheck // message is customer facing\n\t}",
+        "age_days": 1901,
+        "annotation_date": "March 15, 2021",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "d539068dc372e46d10adee89e9b96b59156a2bb6",
+        "startline": 83,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 1901d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "If removed, at least two identified files (`internal/sshd/session.go`, `internal/sshenv/sshenv.go`) and potentially others would fail to compile or crash, impacting SSH-related functionality.",
+          "effort_estimate": "2-3 hours",
+          "technical_risks": [
+            "Compilation failures in calling code",
+            "Runtime errors if calling code is not updated",
+            "Disruption of SSH connection handling"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is explicitly unreliable but indicates at least two external callers. Removing this function without a manual investigation (biopsy) to understand its current usage would lead to compilation failures or runtime errors in critical SSH-related components. Despite the function always returning an error, its removal would still break existing call sites.",
+          "confidence": "high",
+          "callers_found": 2,
+          "caller_files": [
+            "internal/sshd/session.go",
+            "internal/sshenv/sshenv.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "errorf-shell-go",
+        "name": "Errorf",
+        "file_path": "internal/command/commandargs/shell.go",
+        "annotation": "return fmt.Errorf(\"Invalid SSH command: %w\", err) //nolint:staticcheck // message is customer facing",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "if err := s.ParseCommand(s.Env.OriginalCommand); err != nil {\n\t\treturn fmt.Errorf(\"Invalid SSH command: %w\", err) //nolint:staticcheck // message is customer facing\n\t}",
+        "age_days": 1705,
+        "annotation_date": "September 27, 2021",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "5564ea9ca23217687a6e6c091f3b4fc11e375a2f",
+        "startline": 87,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 1705d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 10,
+          "blast_radius": "If the symbol 'Errorf' is misinterpreted as the standard library function 'fmt.Errorf', its removal would lead to catastrophic failure of all Go error handling across the entire codebase.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Catastrophic failure if 'fmt.Errorf' is mistakenly targeted for deletion.",
+            "Misinterpretation of a core language function as a deletable symbol.",
+            "The 'deprecation annotation' is a linter suppression and comment on a specific line, not a standard deprecation marker for a function, indicating a fundamental misunderstanding of the code's status.",
+            "Unreliable caller analysis means actual dependencies on the specific line of code are unknown."
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The symbol 'Errorf' almost certainly refers to the standard library function 'fmt.Errorf', which cannot be deleted. The 'deprecation annotation' is a linter suppression and comment on a specific line of code, not a deprecation of a user-defined symbol. The caller analysis is unreliable and likely misinterprets calls to 'fmt.Errorf' as calls to a deletable symbol, necessitating a manual investigation to correct this misidentification.",
+          "confidence": "high",
+          "callers_found": 7,
+          "caller_files": [
+            "client/gitlabnet.go",
+            "client/httpclient.go",
+            "internal/clients/gitlab/client.go",
+            "internal/config/config.go",
+            "internal/gitlabnet/client.go",
+            "internal/gitlabnet/discover/client.go",
+            "internal/sshd/server_config.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "errorf-discover-go",
+        "name": "Errorf",
+        "file_path": "internal/command/discover/discover.go",
+        "annotation": "return ctx, fmt.Errorf(\"Failed to get username: %v\", err) //nolint:staticcheck // message is customer facing",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "if err != nil {\n\t\treturn ctx, fmt.Errorf(\"Failed to get username: %v\", err) //nolint:staticcheck // message is customer facing\n\t}",
+        "age_days": 2634,
+        "annotation_date": "March 14, 2019",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "53511f3655a5eed9976164fbd88d14df3490000c",
+        "startline": 27,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 2634d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "Removing this specific error return could break error handling logic in at least 8 external files that potentially rely on this error or its context, potentially leading to silent failures or panics.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Breaking error handling logic in dependent code",
+            "Introducing silent failures if callers expect this specific error",
+            "Impact on customer-facing error messages if this specific message is relied upon for debugging or user feedback"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is explicitly marked as UNRELIABLE and indicates at least 8 external files reference 'Errorf'. Despite the code being annotated for a very long time (2634 days), the presence of potential callers and the unreliability of the analysis necessitate a manual investigation (biopsy) to confirm actual usage and impact before any deletion.",
+          "confidence": "medium",
+          "callers_found": 8,
+          "caller_files": [
+            "client/gitlabnet.go",
+            "client/httpclient.go",
+            "internal/clients/gitlab/client.go",
+            "internal/command/commandargs/shell.go",
+            "internal/config/config.go",
+            "internal/gitlabnet/client.go",
+            "internal/gitlabnet/discover/client.go",
+            "internal/sshd/server_config.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "new-personalaccesstoken-go",
+        "name": "New",
+        "file_path": "internal/command/personalaccesstoken/personalaccesstoken.go",
+        "annotation": "return errors.New(usageText) //nolint:staticcheck // usageText is customer facing",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "if len(c.Args.SSHArgs) < 3 || len(c.Args.SSHArgs) > 4 {\n\t\treturn errors.New(usageText) //nolint:staticcheck // usageText is customer facing\n\t}",
+        "age_days": 607,
+        "annotation_date": "September 29, 2024",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "a703b51e5a9a4eec3738022b3d8012e67488ad7c",
+        "startline": 63,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 607d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 8,
+          "blast_radius": "Removing this code would break any internal callers within the `personalaccesstoken` package or related modules that rely on this `New` function, as its usage is unknown due to the generic symbol and unreliable caller analysis.",
+          "effort_estimate": "1-2 days",
+          "technical_risks": [
+            "Unidentified callers due to generic symbol 'New'",
+            "Breaking core functionality if 'New' is a constructor or critical factory function",
+            "Unexpected runtime errors if called dynamically or via reflection",
+            "Misinterpretation of 'deprecated/dead' status given the annotation is a linter suppression, not an explicit deprecation comment"
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis is unreliable due to the generic symbol 'New', making the blast radius unknown. While the code has been flagged as deprecated/dead for over 600 days, the lack of reliable caller information means direct deletion carries significant risk of breaking existing functionality. Further investigation is required to confirm its actual usage.",
+          "confidence": "high",
+          "callers_found": -1,
+          "caller_files": [],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "errorf-personalaccesstoken-go",
+        "name": "Errorf",
+        "file_path": "internal/command/personalaccesstoken/personalaccesstoken.go",
+        "annotation": "return fmt.Errorf(\"Invalid value for days_ttl: '%s'\", rawTTL) //nolint:staticcheck // message is customer facing",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "if err != nil || TTL < 0 {\n\t\treturn fmt.Errorf(\"Invalid value for days_ttl: '%s'\", rawTTL) //nolint:staticcheck // message is customer facing\n\t}",
+        "age_days": 2112,
+        "annotation_date": "August 17, 2020",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "b8d66d7923150402f54f13d793d3051efab3a832",
+        "startline": 90,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 2112d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 10,
+          "blast_radius": "The entire codebase would fail to compile as 'Errorf' almost certainly refers to the standard Go library function `fmt.Errorf`, which cannot be removed.",
+          "effort_estimate": "N/A - cannot be deleted",
+          "technical_risks": [
+            "Attempting to remove a standard library function.",
+            "Misinterpretation of the symbol 'Errorf' and the provided 'deprecation annotation'."
+          ],
+          "recommendation": "leave_intact",
+          "reasoning": "The symbol 'Errorf' very likely refers to the standard Go library function `fmt.Errorf`. The provided 'deprecation annotation' is a `nolint` directive for a specific call to `fmt.Errorf`, not a deprecation annotation for the function itself. Standard library functions cannot be removed from a codebase. The caller analysis further supports its widespread use, reinforcing that it is not a custom, deprecated component.",
+          "confidence": "high",
+          "callers_found": 8,
+          "caller_files": [
+            "client/gitlabnet.go",
+            "client/httpclient.go",
+            "internal/clients/gitlab/client.go",
+            "internal/command/commandargs/shell.go",
+            "internal/config/config.go",
+            "internal/gitlabnet/client.go",
+            "internal/gitlabnet/discover/client.go",
+            "internal/sshd/server_config.go"
+          ],
+          "caller_count_reliable": false,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      },
+      {
+        "finding_id": "new-disallowedcommand-go",
+        "name": "New",
+        "file_path": "internal/command/shared/disallowedcommand/disallowedcommand.go",
+        "annotation": "Error = errors.New(\"Disallowed command\") //nolint:staticcheck // message is customer facing",
+        "detection_method": "suppressed_deprecation",
+        "language": "go",
+        "context_snippet": "// Error is returned when a disallowed command is encountered.\n\tError = errors.New(\"Disallowed command\") //nolint:staticcheck // message is customer facing\n)",
+        "age_days": 635,
+        "annotation_date": "September 02, 2024",
+        "replacement": "",
+        "removal_target": "",
+        "last_commit_sha": "6fdab581a987b2db195adbd6f61b492bc55e4360",
+        "startline": 7,
+        "ref": "main",
+        "detection_confidence": 2,
+        "detection_signals": [
+          "deprecation suppression (nolint)",
+          "aged 635d (>= 90d threshold)"
+        ],
+        "deletion_safety": {
+          "is_safe_to_delete": false,
+          "deletion_risk": 7,
+          "blast_radius": "If the 'Error' variable in 'disallowedcommand.go' is still referenced by other parts of the codebase, its removal would lead to compilation errors or runtime panics.",
+          "effort_estimate": "1-2 hours",
+          "technical_risks": [
+            "Compilation errors if 'disallowedcommand.Error' is still referenced.",
+            "Runtime panics if 'disallowedcommand.Error' is still referenced and not caught by compilation.",
+            "Impact on customer-facing error messages if the 'Error' variable is removed without a proper replacement or migration."
+          ],
+          "recommendation": "needs_biopsy",
+          "reasoning": "The caller analysis for the generic 'errors.New' function is unreliable, making it impossible to determine if the specific 'Error' variable in 'disallowedcommand.go' is still in use. Despite the annotation's age, a manual investigation (biopsy) is required to assess its usage and potential impact before deletion.",
+          "confidence": "high",
+          "callers_found": -1,
+          "caller_files": [],
+          "caller_count_reliable": true,
+          "grounding": {
+            "grounded": false,
+            "technology": "",
+            "latest_version": "",
+            "evidence_date": "",
+            "evidence_url": "",
+            "description": "",
+            "source": "unverified",
+            "is_resolved": null
+          }
+        }
+      }
+    ],
+    "summary": {
+      "total": 9,
+      "excise_now": 0,
+      "needs_biopsy": 8,
+      "leave_intact": 1
+    },
+    "mcp_calls_log": [
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "Deprecated: true",
+        "result_count": 5
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "ToBeRemovedWith",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "@deprecated",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "// Deprecated:",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "DeprecationWarning",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "TODO: remove",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "TODO remove after",
+        "result_count": 14
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "FIXME: remove",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "will be removed in",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "scheduled for removal",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "no longer used",
+        "result_count": 20
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "REMOVEME",
+        "result_count": 0
+      },
+      {
+        "tool": "search_blobs",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "query": "nolint:staticcheck",
+        "result_count": 10
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "file": "internal/topology/claims.go",
+        "line": 16,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "file": "internal/sshd/server_config.go",
+        "line": 204,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "file": "internal/command/commandargs/shell.go",
+        "line": 40,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "file": "internal/command/commandargs/shell.go",
+        "line": 83,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "file": "internal/command/commandargs/shell.go",
+        "line": 87,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "file": "internal/command/discover/discover.go",
+        "line": 27,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "file": "internal/command/personalaccesstoken/personalaccesstoken.go",
+        "line": 63,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "file": "internal/command/personalaccesstoken/personalaccesstoken.go",
+        "line": 90,
+        "ranges": 1
+      },
+      {
+        "tool": "get_file_blame",
+        "source": "gitlab_mcp",
+        "repo": "gitlab-org/gitlab-shell",
+        "file": "internal/command/shared/disallowedcommand/disallowedcommand.go",
+        "line": 7,
+        "ranges": 1
+      }
+    ],
+    "mcp_tools_used": [
+      "get_file_blame",
+      "search_blobs"
+    ],
+    "mcp_tool_count": 22,
+    "data_source": "gitlab_mcp_blobs",
+    "clean_scan": false
+  }
+}

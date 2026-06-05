@@ -107,9 +107,16 @@ async def run_mission(
     if dry_run:
         await emit("━━ PHASE 4 / ACT ━━ DRY RUN — preparing artifacts without writing...")
         if revive_target:
-            actions.append({"type": "revival_mr", "status": "prepared",
-                            "feature": revive_target["name"],
-                            "detail": "Revival Ghost MR prepared (dry run — not created)"})
+            # Mirror the LIVE decision: a challenger REJECT means live would open a
+            # discussion issue, not a Draft MR — preview that, so dry_run is honest.
+            if challenge.get("challenger_verdict") == "reject":
+                actions.append({"type": "revival_issue", "status": "prepared",
+                                "feature": revive_target["name"],
+                                "detail": "Challenger rejected — discussion issue prepared (dry run — not created)"})
+            else:
+                actions.append({"type": "revival_mr", "status": "prepared",
+                                "feature": revive_target["name"],
+                                "detail": "Revival Ghost MR prepared (dry run — not created)"})
         if excise_target:
             actions.append({"type": "deletion_mr", "status": "prepared",
                             "symbol": excise_target["name"],

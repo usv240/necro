@@ -1,4 +1,4 @@
-"""
+﻿"""
 POST /api/revive/{feature_id} — create a GitLab revival issue + log to MongoDB.
 """
 
@@ -272,7 +272,7 @@ def _build_ghost_mr_plan(feat: dict, project_path: str) -> str:
         obj = challenger.get("strongest_objection", "")
         step = challenger.get("recommended_first_step", "")
         challenger_note = f"""
-## Adversarial Review (Challenger Agent — Vertex AI Gemini 2.5 Flash)
+## Adversarial Review (Challenger Agent — Gemini 3 Flash)
 
 > **Verdict:** {verdict.upper()} (Score: {score}/10)
 > **Key objection:** {obj}
@@ -431,4 +431,5 @@ def _build_description(feat: dict, dr: dict, vi: dict) -> str:
 *GitLab MCP tools used: list_commits, get_commit, get_commit_diff, list_issues, list_merge_requests, list_merge_request_notes, list_pipelines, search_users, create_issue*
 *All claims are cited from repository history. ROI estimates are rough signal-based projections, not revenue forecasts.*
 """
+
 

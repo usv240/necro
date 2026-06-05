@@ -1,11 +1,11 @@
-/* ── NECRO — The Code Necromancer — Frontend App ─────────────────────────── */
+﻿/* ── NECRO — The Code Necromancer — Frontend App ─────────────────────────── */
 'use strict';
 
 // ── Core Simulated Console Log Telemetry ──
 const INITIAL_SIMULATED_MESSAGES = [
   { t: 'NECRO Forensic Laboratory active // ADK orchestrator online', type: 'info' },
   { t: 'Google Cloud Gemini 3 Flash connection: STABLE · ping 45ms', type: 'gemini' },
-  { t: 'Vertex AI Gemini 2.5 Flash Adversarial agent: ACTIVE · monitoring target range', type: 'gemini' },
+  { t: 'Gemini 3 Adversarial agent: ACTIVE · monitoring target range', type: 'gemini' },
   { t: 'Google Search grounding: ACTIVE · constraint verification enabled · live URL evidence', type: 'gemini' },
   { t: 'MongoDB Atlas vector database clusters: SYNCED · 1,827 records mapped', type: 'mcp' },
   { t: 'GitLab Official MCP Server (SSE): CONNECTED · 10 tools active', type: 'mcp' },
@@ -32,17 +32,24 @@ function bootSimulatedLogs() {
 
 // ── Interactive ROI Calculator ──
 function calculateROI(val) {
-  const devCountLabel = document.getElementById('devCountLabel');
-  const calcWastedHours = document.getElementById('calcWastedHours');
-  const calcBuriedROI = document.getElementById('calcBuriedROI');
-  if (!devCountLabel || !calcWastedHours || !calcBuriedROI) return;
+  const devCountLabel  = document.getElementById('devCountLabel');
+  const calcDeadCode   = document.getElementById('calcDeadCodeCost');
+  const calcBuriedROI  = document.getElementById('calcBuriedROI');
+  const calcTotal      = document.getElementById('calcTotal');
+  if (!devCountLabel) return;
 
-  devCountLabel.textContent = val;
-  const features = Math.round(val * 0.16);
-  const dollars = Math.round(val * 5625);
+  const n = parseInt(val);
+  devCountLabel.textContent = n;
 
-  calcWastedHours.textContent = features;
-  calcBuriedROI.textContent = '$' + dollars.toLocaleString();
+  const deadCodeOverhead = Math.round(n * 3.5 * 52 * 150); // 3.5h/wk/dev × 52wks × $150/hr
+  const features         = Math.max(1, Math.round(n * 0.16));
+  const revivalValue     = features * 40 * 150;             // 40h rebuild avoided × $150/hr
+  const total            = deadCodeOverhead + revivalValue;
+
+  const fmt = x => '$' + x.toLocaleString();
+  if (calcDeadCode)  calcDeadCode.textContent  = fmt(deadCodeOverhead);
+  if (calcBuriedROI) calcBuriedROI.textContent = fmt(revivalValue);
+  if (calcTotal)     calcTotal.textContent     = fmt(total);
 }
 
 // ── URL hash routing ────────────────────────────────────────────────────────
@@ -89,7 +96,7 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
 // ── Theme toggle ────────────────────────────────────────────────────────────
 const themeBtn = document.getElementById('themeToggle');
 themeBtn.addEventListener('click', () => {
-  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
   const next = current === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem('necro-theme', next);
@@ -198,16 +205,16 @@ function renderActiveIntegrations(h) {
   const slackStatus = h.slack === 'configured' ? 'active' : 'inactive';
   
   const geminiName = h.gemini_primary || 'Gemini 3 Flash';
-  const vertexName = h.gemini_fallback || 'Vertex AI Gemini 2.5 Flash';
+  const vertexName = h.gemini_fallback || 'Gemini 3 Flash';
 
   container.innerHTML = `
     <span class="tech-stack-label">Active integrations:</span>
     <span class="tech-tag-status active" title="Model: ${geminiName}">${geminiName}</span>
     <span class="tech-tag-status active" title="Model: ${vertexName}">Vertex AI (Adversarial)</span>
     <span class="tech-tag-status ${agentStatus}" title="ADK Agent status">${h.adk_agent === 'initialized' ? 'Agent Builder Active' : 'Agent Builder Initializing'}</span>
-    <span class="tech-tag-status active" title="ADK agent calls Google Search to verify constraint-resolution claims live — every 'what changed' has a cited URL">Google Search Grounding</span>
+    <span class="tech-tag-status active" title="ADK agent calls Google Search to verify constraint-resolution claims live: every 'what changed' has a cited URL">Google Search Grounding</span>
     <span class="tech-tag-status ${mcpStatus}" title="GitLab Official MCP Server (SSE) + @zereight/mcp-gitlab (stdio) · ${h.mcp_tool_count} tools total">GitLab MCP (official SSE + stdio) · ${h.mcp_tool_count} tools</span>
-    <span class="tech-tag-status ${mcpStatus}" title="NECRO exposes itself as MCP server at /mcp — consumable by GitLab Duo agents">NECRO → MCP Server (/mcp)</span>
+    <span class="tech-tag-status ${mcpStatus}" title="NECRO exposes itself as MCP server at /mcp, consumable by GitLab Duo agents">NECRO → MCP Server (/mcp)</span>
     <span class="tech-tag-status ${mongoStatus}" title="MongoDB Atlas DB connection">MongoDB Atlas (${h.features_in_db} features)</span>
     <span class="tech-tag-status ${slackStatus}" title="Slack bot alerts integration">${h.slack === 'configured' ? 'Slack Notifications' : 'Slack Disabled'}</span>
   `;
@@ -330,7 +337,7 @@ async function startScan() {
     }
   } catch (e) {
     addTerminalLine(terminal, `ERROR: ${e.message}`, 'error');
-    toast('Scan failed — check console', 'error');
+    toast('Scan failed, check console', 'error');
   } finally {
     btn.disabled = false;
     btn.innerHTML = 'Run Forensic Scan';
@@ -386,17 +393,16 @@ const _DEMO_REPO_MAP = {
   'gitlab-org/gitlab-foss': { mode: 'seed', key: 'gitlab-foss', label: 'gitlab-org/gitlab-foss' },
   'inkscape/inkscape':       { mode: 'seed', key: 'inkscape',    label: 'inkscape/inkscape' },
 
-  // ── Cached real-scan demos (verified post bug-fix) ──
-  'gitlab-org/gitlab':           { mode: 'cached', label: 'gitlab-org/gitlab' },
-  'gitlab-org/gitaly':           { mode: 'cached', label: 'gitlab-org/gitaly' },
-  'gitlab-org/container-registry': { mode: 'cached', label: 'gitlab-org/container-registry' },
-  'gitlab-org/gitlab-pages':     { mode: 'cached', label: 'gitlab-org/gitlab-pages' },
-  'gitlab-org/gitlab-runner':    { mode: 'cached', label: 'gitlab-org/gitlab-runner' },
+  // ── Cached real-scan demos (sorted by revival yield, best first) ──
+  'gitlab-org/gitlab-pages':     { mode: 'cached', label: 'gitlab-org/gitlab-pages' },   // 3 revive_now
+  'gitlab-org/gitlab-shell':     { mode: 'cached', label: 'gitlab-org/gitlab-shell' },   // 2 revive_now
+  'gitlab-org/gitlab':           { mode: 'cached', label: 'gitlab-org/gitlab' },          // 3 revive_now
   'gitlab-org/gitlab-workhorse': { mode: 'cached', label: 'gitlab-org/gitlab-workhorse' },
+  'gitlab-org/container-registry': { mode: 'cached', label: 'gitlab-org/container-registry' },
+  'gitlab-org/gitaly':           { mode: 'cached', label: 'gitlab-org/gitaly' },
+  'gitlab-org/gitlab-runner':    { mode: 'cached', label: 'gitlab-org/gitlab-runner' },
   'gitlab-org/omnibus-gitlab':   { mode: 'cached', label: 'gitlab-org/omnibus-gitlab' },
-  'fdroid/fdroidclient':         { mode: 'cached', label: 'fdroid/fdroidclient' },
-  'fdroid/fdroidserver':         { mode: 'cached', label: 'fdroid/fdroidserver' },
-  'gstreamer/gstreamer':         { mode: 'cached', label: 'gstreamer/gstreamer' },
+  'gitlab-org/gitlab-development-kit': { mode: 'cached', label: 'gitlab-org/gitlab-development-kit' },
   'godotengine/godot':           { mode: 'cached', label: 'godotengine/godot' },
 };
 
@@ -413,16 +419,16 @@ async function loadDemoData(projectPath) {
     `[MongoDB] Loading cached live scan for ${entry.label}...`,
     '[MongoDB] Query: scans by project_path, sorted by revive_now_count DESC',
     '[MongoDB] Pulling features collection for matched scan_id',
-    'Cached scan retrieved — replaying real pipeline output',
-    'SCAN COMPLETE — instant cached result',
+    'Cached scan retrieved, replaying real pipeline output',
+    'SCAN COMPLETE: instant cached result',
   ] : [
-    `[MCP] GitLab MCP — loading pre-analyzed ${entry.label} report...`,
+    `[MCP] GitLab MCP: loading pre-analyzed ${entry.label} report...`,
     '[MCP] list_commits · list_issues · list_merge_requests · get_commit',
-    'Detection complete — dead features identified',
-    'Gemini 3 Flash — analyzing kill reasons and revival viability...',
-    '[SEARCH] Google Search — verifying each kill constraint against live release notes + registries',
-    '[ADK] Google Cloud Agent Builder — strategic synthesis complete',
-    'SCAN COMPLETE — cached report loaded',
+    'Detection complete: dead features identified',
+    'Gemini 3 Flash: analyzing kill reasons and revival viability...',
+    '[SEARCH] Google Search: verifying each kill constraint against live release notes + registries',
+    '[ADK] Google Cloud Agent Builder: strategic synthesis complete',
+    'SCAN COMPLETE: cached report loaded',
   ];
   for (const line of lines) addTerminalLine(terminal, line);
 
@@ -843,10 +849,13 @@ async function loadVitalitySparklines(features) {
       const data = await r.json();
       const sp = data.sparkline;
       if (!sp || !sp.points || !sp.points.length) {
-        document.getElementById(`sparkline-row-${featureId}`)?.remove();
+        // no data — row stays hidden (was hidden by default)
         continue;
       }
       container.innerHTML = renderSparklineSVG(sp, feat);
+      // only reveal the row once real sparkline data is ready
+      const row = document.getElementById(`sparkline-row-${featureId}`);
+      if (row) row.style.display = '';
     } catch {
       document.getElementById(`sparkline-row-${featureId}`)?.remove();
     }
@@ -1048,28 +1057,27 @@ function buildFeatureCard(feat, isDemo) {
         </div>
       </div>
 
-      <!-- Primary actions sit right under the decision — no scrolling needed to act -->
+      <!-- Primary actions -->
       <div class="card-actions">
         ${rec !== 'keep_buried' ? `
-          <div class="ghost-mr-hero">
-            <button class="btn btn-ghost-mr" onclick="createGhostMR('${featureId}', this)" title="NECRO creates a real GitLab Draft MR: branch + NECRO_REVIVAL.md plan + kill commit linked — 3 MCP write operations">
-              👻 Open Revival MR
-            </button>
-            <span class="ghost-mr-sub">NECRO creates a real Draft MR with revival plan</span>
-          </div>
-          <button class="btn btn-secondary btn-sm" onclick="createRevivalIssue('${featureId}', this)">
+          <button class="btn btn-action-primary" onclick="createGhostMR('${featureId}', this)"
+            title="NECRO creates a real GitLab Draft MR: branch + NECRO_REVIVAL.md plan + kill commit linked — 3 MCP write operations">
+            Open Revival MR
+          </button>
+          <button class="btn btn-action-secondary" onclick="createRevivalIssue('${featureId}', this)">
             Create Issue
           </button>
         ` : ''}
         ${feat.linked_mr_iid ? `
           <a href="https://gitlab.com/${feat.project_path || ''}/-/merge_requests/${feat.linked_mr_iid}"
-             target="_blank" rel="noopener" class="btn btn-sm">MR #${feat.linked_mr_iid} ↗</a>
+             target="_blank" rel="noopener" class="btn btn-action-link">MR !${feat.linked_mr_iid} ↗</a>
         ` : ''}
         ${feat.linked_issue_iids && feat.linked_issue_iids.length ? feat.linked_issue_iids.slice(0,2).map(id =>
           `<a href="https://gitlab.com/${feat.project_path || ''}/-/issues/${id}"
-              target="_blank" rel="noopener" class="btn btn-sm">Issue #${id} ↗</a>`
+              target="_blank" rel="noopener" class="btn btn-action-link">Issue #${id} ↗</a>`
         ).join('') : ''}
       </div>
+      ${rec !== 'keep_buried' ? `<div class="card-actions-sub">NECRO creates a real Draft MR with revival plan</div>` : ''}
 
       </div><!-- /card-primary -->
 
@@ -1115,21 +1123,7 @@ function buildFeatureCard(feat, isDemo) {
         </ul>
       ` : ''}
 
-      ${feat.challenger ? `
-        <div class="section-label">Challenger Agent — independent verification</div>
-        <div class="challenger-box ${feat.challenger.challenger_verdict || ''}">
-          <div class="challenger-verdict">
-            ${feat.challenger.challenger_verdict === 'confirm' ? 'Confirmed — ' : feat.challenger.challenger_verdict === 'downgrade' ? 'Downgraded — ' : 'Rejected — '}
-            Challenger score: ${feat.challenger.challenger_score || '?'}/10
-            <span class="challenger-source">${feat.challenger.source || ''}</span>
-          </div>
-          ${feat.challenger.strongest_objection ? `<div class="challenger-text">Key objection: ${esc(feat.challenger.strongest_objection)}</div>` : ''}
-          ${feat.challenger.recommended_first_step ? `<div class="challenger-text">First step: ${esc(feat.challenger.recommended_first_step)}</div>` : ''}
-          ${feat.challenger.hidden_risks && feat.challenger.hidden_risks.length ? `
-            <div class="challenger-risks">Hidden risks: ${feat.challenger.hidden_risks.map(r => esc(r)).join(' · ')}</div>
-          ` : ''}
-        </div>
-      ` : ''}
+      <!-- challenger moved to full-width row; placeholder removed from here -->
 
       <!-- Detection provenance — how NECRO found this feature (live scans only) -->
       ${(() => {
@@ -1190,15 +1184,46 @@ function buildFeatureCard(feat, isDemo) {
         </div>
       ` : ''}
 
-      <!-- Feature EKG — Vitality Sparkline (demand over time) -->
-      <div class="vitality-sparkline-row" id="sparkline-row-${featureId}">
+      <!-- Feature EKG — hidden until sparkline data actually loads (avoids stuck "loading...") -->
+      <div class="vitality-sparkline-row" id="sparkline-row-${featureId}" style="display:none">
         <div class="section-label" style="margin-top:0.6rem">Feature EKG — demand trend since kill</div>
-        <div class="sparkline-container" id="sparkline-${featureId}">
-          <span class="sparkline-loading">loading...</span>
-        </div>
+        <div class="sparkline-container" id="sparkline-${featureId}"></div>
       </div>
 
       </div><!-- /card-forensics -->
+
+      ${feat.challenger ? (() => {
+        const cv = feat.challenger.challenger_verdict || '';
+        const vLabel = cv === 'confirm' ? 'Confirmed' : cv === 'downgrade' ? 'Downgraded' : 'Rejected';
+        const risks = (feat.challenger.hidden_risks || []).filter(Boolean);
+        const shown = risks.slice(0, 3);
+        const extra = risks.length - shown.length;
+        return `
+      <div class="card-challenger">
+        <div class="section-label">Challenger Agent — independent verification</div>
+        <div class="challenger-box ${cv}">
+          <div class="challenger-head">
+            <span class="challenger-chip challenger-chip-${cv}">${vLabel} · ${feat.challenger.challenger_score ?? '?'}/10</span>
+            <span class="challenger-source">${esc(feat.challenger.source || '')}</span>
+          </div>
+          <div class="challenger-cols">
+            <div class="challenger-col-main">
+              ${feat.challenger.strongest_objection ? `<div class="challenger-row"><span class="challenger-row-label">Key objection</span><span class="challenger-row-text">${esc(feat.challenger.strongest_objection)}</span></div>` : ''}
+              ${feat.challenger.recommended_first_step ? `<div class="challenger-row"><span class="challenger-row-label">First step</span><span class="challenger-row-text">${esc(feat.challenger.recommended_first_step)}</span></div>` : ''}
+            </div>
+            ${shown.length ? `
+            <div class="challenger-col-risks">
+              <div class="challenger-row-label">Hidden risks the primary missed</div>
+              <ul class="challenger-risk-list">
+                ${shown.map(r => `<li>${esc(r)}</li>`).join('')}
+              </ul>
+              ${extra > 0 ? `<div class="challenger-more">+ ${extra} more risk${extra !== 1 ? 's' : ''} identified</div>` : ''}
+            </div>` : ''}
+          </div>
+        </div>
+      </div>`;
+      })() : ''}
+
     </div>
   `;
   return card;
@@ -1422,7 +1447,7 @@ async function createGhostMR(featureId, btn) {
     loadAuditLog();
   } catch (e) {
     btn.disabled = false;
-    btn.innerHTML = '👻 Ghost MR';
+    btn.innerHTML = 'Open Revival MR';
     toast(`Ghost MR: ${e.message}`, 'error');
   }
 }
@@ -1521,7 +1546,7 @@ async function startNecrosisScan() {
     }
   } catch (e) {
     addTerminalLine(terminal, `ERROR: ${e.message}`, 'error');
-    toast('Necrosis scan failed — check console', 'error');
+    toast('Necrosis Scan failed, check console', 'error');
   } finally {
     btn.disabled = false;
     btn.innerHTML = 'Run Necrosis Scan';
@@ -1695,36 +1720,51 @@ function buildNecrosisCard(f) {
       </div>
       <span class="fc-badge ${badgeClass}">${badgeLabel}</span>
     </div>
-    <div class="feature-card-body">
-      <div class="fc-section">
-        <div class="section-label">Deprecation annotation</div>
-        <div class="fc-annotation"><code>${escHtml(f.annotation || '')}</code></div>
-      </div>
-      ${f.replacement ? `<div class="fc-section"><div class="section-label">Stated replacement</div><div>${escHtml(f.replacement)}</div></div>` : ''}
-      ${f.removal_target ? `<div class="fc-section"><div class="section-label">Promised removal target</div><div>${escHtml(f.removal_target)}</div></div>` : ''}
-      <div class="fc-section">
-        <div class="section-label">Deletion analysis</div>
-        <div class="nec-grid">
-          <span><strong>Verdict:</strong> ${badgeLabel}</span>
-          <span><strong>Risk:</strong> ${safety.deletion_risk ?? '?'}/10</span>
-          <span><strong>Callers:</strong> ${callerLabel}</span>
+    <div class="feature-card-body nec-body">
+      <div class="nec-col nec-col-main">
+        <div class="fc-section">
+          <div class="section-label">Deprecation annotation</div>
+          <pre class="fc-annotation"><code>${escHtml(f.annotation || '')}</code></pre>
         </div>
-        <div class="fc-reasoning">${escHtml(safety.reasoning || '')}</div>
-        ${safety.blast_radius ? `<div class="fc-blast"><strong>Blast radius:</strong> ${escHtml(safety.blast_radius)}</div>` : ''}
+        <div class="fc-section">
+          <div class="section-label">Deletion analysis</div>
+          <div class="nec-verdict-row">
+            <div class="nec-metric"><span class="nm-label">Verdict</span><span class="nm-val nm-val-${rec}">${badgeLabel}</span></div>
+            <div class="nec-metric"><span class="nm-label">Risk</span><span class="nm-val">${safety.deletion_risk ?? '?'}<span class="nm-sub">/10</span></span></div>
+            <div class="nec-metric"><span class="nm-label">Callers</span><span class="nm-val">${escHtml(callerLabel)}</span></div>
+          </div>
+          <div class="fc-reasoning">${escHtml(safety.reasoning || '')}</div>
+          ${safety.blast_radius ? `<div class="fc-blast"><span class="fc-blast-label">Blast radius</span> ${escHtml(safety.blast_radius)}</div>` : ''}
+        </div>
+        ${f.replacement ? `<div class="fc-section"><div class="section-label">Stated replacement</div><div class="fc-inline-val"><code>${escHtml(f.replacement)}</code></div></div>` : ''}
+        ${f.removal_target ? `<div class="fc-section"><div class="section-label">Promised removal target</div><div class="fc-inline-val">${escHtml(f.removal_target)}</div></div>` : ''}
+        <div class="card-actions">
+          ${rec === 'excise_now' ? `
+            <div class="ghost-mr-hero">
+              <button class="btn btn-ghost-mr" onclick="createDeletionMR('${f.finding_id}', this)"
+                      title="NECRO creates a real GitLab Draft MR with a NECRO_DELETION.md removal plan via MCP">
+                🪦 Open Deletion MR
+              </button>
+              <span class="ghost-mr-sub">NECRO creates a real Draft MR with the removal plan</span>
+            </div>
+          ` : rec === 'needs_biopsy' ? `
+            <div class="nec-action-note">Investigate the live callers before removing — NECRO won't auto-open a deletion MR for code that's still referenced.</div>
+          ` : `
+            <div class="nec-action-note">Load-bearing or recently deprecated — safest to leave intact for now.</div>
+          `}
+        </div>
       </div>
-      ${callerFiles ? `<div class="fc-section"><div class="section-label">Live callers (GitLab search_blobs)</div><div class="nec-callers">${callerFiles}</div></div>` : ''}
-      ${risks ? `<div class="fc-section"><div class="section-label">Removal risks</div><ul class="fc-risks">${risks}</ul></div>` : ''}
-      <div class="fc-section">
-        <div class="section-label">Detection signals</div>
-        <div class="fc-signals">${(f.detection_signals || []).map(sg => `<span class="signal-chip">${escHtml(sg)}</span>`).join('')}</div>
-      </div>
-      <div class="card-actions">
-        ${rec === 'excise_now' ? `
-          <button class="btn btn-primary btn-sm" onclick="createDeletionMR('${f.finding_id}', this)"
-                  title="NECRO creates a real Draft MR with NECRO_DELETION.md removal plan via GitLab MCP">
-            🪦 Ghost Deletion MR
-          </button>
-        ` : ''}
+
+      <div class="nec-col nec-col-side">
+        <div class="fc-section">
+          <div class="section-label">Live callers <span class="sl-sub">GitLab search_blobs</span></div>
+          ${callerFiles ? `<div class="nec-callers">${callerFiles}</div>` : `<div class="nec-callers-none">No external callers found — nothing else references this symbol.</div>`}
+        </div>
+        ${risks ? `<div class="fc-section"><div class="section-label">Removal risks</div><ul class="fc-risks">${risks}</ul></div>` : ''}
+        <div class="fc-section">
+          <div class="section-label">Detection signals</div>
+          <div class="fc-signals">${(f.detection_signals || []).map(sg => `<span class="signal-chip">${escHtml(sg)}</span>`).join('')}</div>
+        </div>
       </div>
     </div>
   `;
@@ -2923,4 +2963,55 @@ function restorePanelCollapses() {
     if (btn) btn.textContent = '▲';
   }
 }
+
+/* ── Nav-info tooltip — rendered at body root to escape sidebar stacking context ── */
+(function initNavTooltips() {
+  const tip = document.createElement('div');
+  tip.id = 'navTip';
+  document.body.appendChild(tip);
+
+  let hideTimer = null;
+
+  function show(el) {
+    clearTimeout(hideTimer);
+    const text = el.getAttribute('data-tip');
+    if (!text) return;
+    tip.textContent = text;
+    tip.classList.add('visible');
+    position(el);
+  }
+
+  function hide() {
+    hideTimer = setTimeout(() => tip.classList.remove('visible'), 80);
+  }
+
+  function position(el) {
+    const r = el.getBoundingClientRect();
+    const tw = tip.offsetWidth;
+    const th = tip.offsetHeight;
+    let left = r.right + 12;
+    let top = r.top + r.height / 2 - th / 2;
+    if (left + tw > window.innerWidth - 8) left = r.left - tw - 12;
+    if (top < 8) top = 8;
+    if (top + th > window.innerHeight - 8) top = window.innerHeight - th - 8;
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+  }
+
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest('.nav-info');
+    if (el) show(el);
+  });
+  document.addEventListener('mouseout', e => {
+    if (e.target.closest('.nav-info')) hide();
+  });
+  document.addEventListener('focusin', e => {
+    const el = e.target.closest('.nav-info');
+    if (el) show(el);
+  });
+  document.addEventListener('focusout', e => {
+    if (e.target.closest('.nav-info')) hide();
+  });
+})();
+
 

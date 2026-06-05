@@ -33,7 +33,7 @@
   --text-secondary: #cbd5e1;
   --text-muted: #64748b;
   
-  --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   --radius: 12px;
   --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -48,35 +48,54 @@
   --sidebar-nav-active-text: var(--text);
 }
 
-/* Light Mode Overrides (for standard theme capability) */
+/* Light Mode Overrides — refined "clinical forensic lab" light theme (2026).
+   Neutral slate hairlines (not purple-washed) + a real elevation scale = premium feel. */
 [data-theme="light"] {
-  --bg: #f8fafc;
-  --bg-gradient: radial-gradient(circle at 50% 50%, #ffffff 0%, #f1f5f9 100%);
-  --surface: rgba(255, 255, 255, 0.95);
-  --surface-hover: rgba(255, 255, 255, 1);
+  --bg: #f4f5fb;                 /* calm cool canvas so white cards lift off it */
+  --bg-gradient: radial-gradient(circle at 50% -8%, #ffffff 0%, #f4f5fb 55%);
+  --surface: #ffffff;
+  --surface-hover: #ffffff;
   --surface-solid: #ffffff;
-  --surface-subtle: rgba(15, 23, 42, 0.04);
-  --track: rgba(15, 23, 42, 0.08);
-  --border: rgba(99, 102, 241, 0.2);
-  --border-glow: rgba(99, 102, 241, 0.35);
+  --surface-subtle: rgba(15, 23, 42, 0.03);
+  --track: rgba(15, 23, 42, 0.07);
+  --border: rgba(15, 23, 42, 0.09);          /* crisp neutral hairline */
+  --border-strong: rgba(15, 23, 42, 0.14);
+  --border-glow: rgba(79, 70, 229, 0.30);
   --border-neon: #4f46e5;
-  --accent: #6366f1;
-  --accent-glow: rgba(99, 102, 241, 0.25);
+  --accent: #4f46e5;                          /* deeper indigo for actions */
+  --accent-soft: #6366f1;
+  --accent-glow: rgba(79, 70, 229, 0.20);
   --accent-hover: #4338ca;
-  --text: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
+  --text: #0b1220;
+  --text-secondary: #475569;
+  --text-muted: #7c8698;
   --neon-cyan: #0891b2;
-  --neon-cyan-glow: rgba(8, 145, 178, 0.2);
+  --neon-cyan-glow: rgba(8, 145, 178, 0.18);
+
+  /* Amber/investigate: dark-mode fbbf24 is neon-bright — override to sophisticated warm brown
+     that reads confidently on white without screaming. Everything using var(--amber) inherits. */
+  --amber: #b45309;
+  --amber-glow: rgba(180, 83, 9, 0.15);
+
+  /* Green/revive: dark-mode #10b981 is emerald-lime on white — override to a deeper,
+     richer teal-green that reads as "go" without looking neon. */
+  --green: #047857;
+  --green-glow: rgba(4, 120, 87, 0.15);
 
   /* Clean Input light variables */
   --input-bg: #ffffff;
-  --input-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+  --input-shadow: inset 0 1px 2px rgba(2, 6, 23, 0.05);
 
   /* Sidebar light variables */
-  --sidebar-nav-hover: rgba(99, 102, 241, 0.05);
-  --sidebar-nav-active: rgba(99, 102, 241, 0.08);
+  --sidebar-nav-hover: rgba(79, 70, 229, 0.06);
+  --sidebar-nav-active: rgba(79, 70, 229, 0.10);
   --sidebar-nav-active-text: var(--accent);
+
+  /* Elevation scale — neutral, low-opacity layered shadows read as "expensive". */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 10px -2px rgba(16, 24, 40, 0.06), 0 2px 6px -2px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 18px 36px -10px rgba(16, 24, 40, 0.12), 0 6px 14px -6px rgba(16, 24, 40, 0.07);
+  --shadow-accent: 0 10px 26px -8px rgba(79, 70, 229, 0.30);
 }
 
 /* Reset and Global Viewport Constraints */
@@ -971,12 +990,14 @@ body {
 
 /* ── Summary statistics row ────────────────────────────────────────── */
 .summary-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.85rem;
   width: 100%;
 }
 .stat-card, .summary-stat {
+  flex: 1 1 140px;
+  min-width: 0;
   background: rgba(255, 255, 255, 0.015);
   border: 1px solid rgba(255, 255, 255, 0.03);
   border-radius: 10px;
@@ -988,7 +1009,7 @@ body {
   min-height: 72px;
 }
 .repo-stat {
-  grid-column: span 2;
+  flex: 2 1 220px;
   text-align: left;
 }
 .stat-value, .summary-val {
@@ -1769,14 +1790,44 @@ body {
 .card-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-  padding-top: 0.75rem;
-  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 0.85rem;
+  margin-top: 1rem;
 }
-.card-actions button {
-  flex: 1;
+.card-actions-sub {
+  font-size: 0.67rem; color: var(--text-muted); width: 100%; margin-top: -0.2rem;
 }
+
+/* Unified action button trio — clear hierarchy, white text on hover for all */
+.btn-action-primary {
+  height: 40px; padding: 0 1.25rem;
+  background: var(--accent); border: 1px solid var(--accent); border-radius: 9px;
+  color: #fff; font-family: var(--font-sans); font-size: 0.88rem; font-weight: 700;
+  cursor: pointer; transition: var(--transition); white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(79,70,229,0.25);
+}
+.btn-action-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); box-shadow: 0 6px 18px rgba(79,70,229,0.35); }
+.btn-action-primary:active { transform: translateY(1px); }
+
+.btn-action-secondary {
+  height: 40px; padding: 0 1.1rem;
+  background: transparent; border: 1px solid var(--border-strong, rgba(15,23,42,0.18)); border-radius: 9px;
+  color: var(--text-secondary); font-family: var(--font-sans); font-size: 0.88rem; font-weight: 600;
+  cursor: pointer; transition: var(--transition); white-space: nowrap;
+}
+.btn-action-secondary:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-action-secondary:active { transform: translateY(1px); }
+
+.btn-action-link {
+  height: 40px; padding: 0 0.9rem;
+  background: transparent; border: 1px solid var(--border); border-radius: 9px;
+  color: var(--text-muted); font-family: var(--font-sans); font-size: 0.85rem; font-weight: 500;
+  text-decoration: none; display: inline-flex; align-items: center;
+  cursor: pointer; transition: var(--transition); white-space: nowrap;
+}
+.btn-action-link:hover { color: var(--accent); border-color: var(--accent); background: rgba(79,70,229,0.05); }
 
 /* ── Timeline Forensics (Charts grid) ────────────────────────────────── */
 
@@ -2651,18 +2702,30 @@ body {
 }
 
 .snippets-list, .risks-list {
-  padding-left: 1.25rem;
+  list-style: none;
+  padding-left: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 .snippets-list li, .risks-list li {
+  position: relative;
+  padding-left: 1.05rem;
   font-size: 0.78rem;
   color: var(--text-secondary);
-  line-height: 1.45;
+  line-height: 1.5;
 }
-.risks-list li {
-  color: #fda4af;
+/* Calm danger marker — readable text, color carried only by a small dot */
+.risks-list li::before {
+  content: "";
+  position: absolute; left: 0.1rem; top: 0.5em;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--red); opacity: 0.6;
+}
+.snippets-list li::before {
+  content: "›";
+  position: absolute; left: 0.1rem; top: 0;
+  color: var(--text-muted); font-weight: 700;
 }
 
 /* Why Now Timeline widget */
@@ -2813,41 +2876,78 @@ body {
 }
 
 /* Challenger Agent independent panel */
+/* Challenger full-width row — sits below both columns, spans the full card width */
+.card-challenger { display: none; }
+.card-expanded-full .card-challenger {
+  display: block;
+  grid-column: 1 / -1;        /* span both columns */
+  border-top: 1px solid var(--border);
+  padding-top: 1.1rem;
+  margin-top: 0.25rem;
+}
+
+/* 2-column layout inside the challenger: left = objection+step, right = risk list */
+.challenger-cols {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-top: 0.6rem;
+}
+@media (min-width: 920px) {
+  .challenger-cols { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); column-gap: 1.75rem; }
+  .challenger-col-risks { border-left: 1px solid var(--border); padding-left: 1.75rem; }
+}
+.challenger-col-main, .challenger-col-risks { display: flex; flex-direction: column; gap: 0.55rem; }
+
+/* Challenger — a calm, scannable "adversarial review" card (not a red wall) */
 .challenger-box {
-  background: rgba(124, 58, 237, 0.04);
-  border: 1px solid rgba(124, 58, 237, 0.15);
-  border-radius: 8px;
-  padding: 0.75rem 0.9rem;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.6rem;
 }
-.challenger-box.confirm {
-  border-left: 3px solid var(--green);
+.challenger-box.confirm { border-left-color: var(--green); }
+.challenger-box.downgrade { border-left-color: var(--amber); }
+.challenger-box.reject { border-left-color: var(--red); }
+.challenger-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
 }
-.challenger-box.downgrade, .challenger-box.reject {
-  border-left: 3px solid var(--amber);
+.challenger-chip {
+  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.02em;
+  padding: 0.18rem 0.55rem; border-radius: 999px; white-space: nowrap;
 }
-.challenger-verdict {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--text);
-}
+.challenger-chip-confirm  { background: rgba(16,185,129,0.14); color: var(--green);  border: 1px solid rgba(16,185,129,0.3); }
+.challenger-chip-downgrade{ background: rgba(251,191,36,0.16); color: #b45309;       border: 1px solid rgba(251,191,36,0.35); }
+.challenger-chip-reject   { background: rgba(239,68,68,0.12);  color: #dc2626;       border: 1px solid rgba(239,68,68,0.28); }
 .challenger-source {
-  font-size: 0.65rem;
+  font-size: 0.62rem; color: var(--text-muted); font-family: var(--font-mono);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%;
+}
+.challenger-row { display: flex; flex-direction: column; gap: 0.15rem; }
+.challenger-row-label {
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--text-muted);
-  font-family: var(--font-mono);
-  float: right;
 }
-.challenger-text {
-  font-size: 0.76rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
+.challenger-row-text { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
+.challenger-risk-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 0.4rem;
 }
-.challenger-risks {
-  font-size: 0.72rem;
-  color: #fda4af;
-  font-style: italic;
+.challenger-risk-list li {
+  position: relative; padding-left: 1.05rem;
+  font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5;
+}
+.challenger-risk-list li::before {
+  content: "▴"; position: absolute; left: 0; top: 0.05rem;
+  color: var(--amber); font-size: 0.7rem;
+}
+.challenger-box.reject .challenger-risk-list li::before { color: var(--red); }
+.challenger-more {
+  font-size: 0.72rem; font-weight: 600; color: var(--text-muted); font-style: italic;
 }
 
 /* Open issue matching blocks */
@@ -3137,6 +3237,192 @@ body {
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   PREMIUM LIGHT REFINEMENT — elevation, hierarchy, restraint.
+   Applies design principles: one elevation system, disciplined accent, consistent
+   "eyebrow" labels (uppercase/tracked/muted), generous focus rings, calm chrome.
+   Light-mode only; dark theme is untouched. (2026 UI/UX pass)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* — Chrome: calm canvas, crisp white rails — */
+[data-theme="light"] .cyber-workspace { background: var(--bg); }
+[data-theme="light"] .cyber-sidebar {
+  background: #ffffff;
+  border-right: 1px solid var(--border);
+  box-shadow: 1px 0 0 rgba(15, 23, 42, 0.04);
+}
+[data-theme="light"] .workspace-header {
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="light"] .workspace-title { letter-spacing: 0.08em; color: #0b1220; }
+
+/* — Sidebar nav: quiet default, confident active pill — */
+[data-theme="light"] .sidebar-nav-item.nav-tab { color: #56627a; font-weight: 500; }
+[data-theme="light"] .sidebar-nav-item.nav-tab .nav-item-icon { color: #9aa6bd; }
+[data-theme="light"] .sidebar-nav-item.nav-tab:hover { color: #0b1220; }
+[data-theme="light"] .sidebar-nav-item.nav-tab.active {
+  background: var(--sidebar-nav-active);
+  border-left: 3px solid var(--accent);
+  color: var(--accent); font-weight: 600;
+}
+[data-theme="light"] .sidebar-nav-item.nav-tab.active .nav-item-icon { color: var(--accent); }
+[data-theme="light"] .sidebar-nav-item.nav-tab .tab-badge {
+  background: rgba(15, 23, 42, 0.05); border: 1px solid var(--border); color: #64748b;
+}
+[data-theme="light"] .brand-subtitle { color: #94a3b8; letter-spacing: 0.06em; }
+
+/* — Top metric tiles: clean number-forward cards — */
+[data-theme="light"] .ls-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.9rem 1.1rem;
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="light"] .ls-card:hover {
+  background: #ffffff;
+  border-color: rgba(79, 70, 229, 0.28);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+[data-theme="light"] .ls-value { color: #0b1220; font-size: 1.5rem; letter-spacing: -0.015em; }
+[data-theme="light"] .ls-label {
+  color: #7c8698; text-transform: uppercase; letter-spacing: 0.07em;
+  font-size: 0.58rem; font-weight: 600;
+}
+[data-theme="light"] .ls-card-integration {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.05), #ffffff);
+  border-color: rgba(79, 70, 229, 0.18);
+}
+
+/* — Result summary cards: give them genuine card presence — */
+[data-theme="light"] .stat-card,
+[data-theme="light"] .summary-stat {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="light"] .stat-label,
+[data-theme="light"] .summary-lbl {
+  text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.58rem;
+  font-weight: 600; color: #7c8698;
+}
+[data-theme="light"] .revive-stat .stat-value { text-shadow: none; }
+[data-theme="light"] .investigate-stat .stat-value { text-shadow: none; }
+
+/* — Hero scanner card — */
+[data-theme="light"] .scanner-console-card,
+[data-theme="light"] .scanner-card {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-top: 3px solid var(--accent);
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06), 0 8px 24px -6px rgba(79, 70, 229, 0.10);
+  padding: 1.75rem 1.75rem 1.5rem;
+}
+[data-theme="light"] .scanner-console-glow { display: none; }
+[data-theme="light"] .scanner-console-header h3,
+[data-theme="light"] .scanner-title {
+  color: #0b1220;
+  -webkit-text-fill-color: #0b1220;
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+  letter-spacing: -0.02em;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+[data-theme="light"] .scanner-console-header p,
+[data-theme="light"] .scanner-sub {
+  color: #64748b;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  max-width: 72ch;
+}
+
+/* — Inputs: crisp field, eyebrow label, generous indigo focus ring — */
+[data-theme="light"] .cyber-input,
+[data-theme="light"] .input-group input,
+[data-theme="light"] .mlc-input,
+[data-theme="light"] .form-input {
+  background: #ffffff; border: 1px solid var(--border);
+  box-shadow: var(--input-shadow); color: #0b1220;
+}
+[data-theme="light"] .cyber-field label,
+[data-theme="light"] .input-group label,
+[data-theme="light"] .mlc-label {
+  text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: 0.62rem; font-weight: 600; color: #7c8698;
+}
+[data-theme="light"] .cyber-input:focus,
+[data-theme="light"] .input-group input:focus,
+[data-theme="light"] .mlc-input:focus,
+[data-theme="light"] .form-input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
+}
+
+/* — Button hierarchy: ONE clear hero, calm secondaries — */
+[data-theme="light"] .btn-neon {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border: none; box-shadow: var(--shadow-accent);
+}
+[data-theme="light"] .btn-neon:hover { box-shadow: 0 14px 30px -8px rgba(79, 70, 229, 0.40); }
+[data-theme="light"] .btn-cyber {
+  background: #ffffff; border: 1px solid var(--border);
+  color: #475569; box-shadow: var(--shadow-sm);
+}
+[data-theme="light"] .btn-cyber:hover:not(:disabled) {
+  background: #ffffff; border-color: rgba(79, 70, 229, 0.32); color: var(--accent);
+}
+[data-theme="light"] .btn-hint { color: #94a3b8; }
+
+/* — Chips: crisp white, calm, indigo on hover — */
+[data-theme="light"] .chip-neon,
+[data-theme="light"] .chip-live {
+  background: #ffffff; border: 1px solid var(--border);
+  color: #475569; box-shadow: var(--shadow-sm);
+}
+[data-theme="light"] .chip-neon:hover,
+[data-theme="light"] .chip-live:hover {
+  background: #ffffff; border-color: rgba(79, 70, 229, 0.32);
+  color: var(--accent); box-shadow: var(--shadow-md);
+}
+[data-theme="light"] .chip-featured,
+[data-theme="light"] .chip-flagship {
+  border-color: rgba(79, 70, 229, 0.22);
+}
+[data-theme="light"] .chip-row-title { color: #0b1220; font-weight: 700; }
+[data-theme="light"] .chip-row-desc { color: #94a3b8; }
+[data-theme="light"] .chip-row-icon.live-icon { color: #16a34a; }
+
+/* — Filter bar — */
+[data-theme="light"] .filter-btn {
+  background: #ffffff; border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm); color: #475569;
+}
+[data-theme="light"] .filter-btn:hover { border-color: rgba(79, 70, 229, 0.3); color: var(--accent); }
+[data-theme="light"] .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: var(--shadow-accent); }
+[data-theme="light"] .filter-title,
+[data-theme="light"] .filter-label {
+  text-transform: uppercase; letter-spacing: 0.07em; color: #7c8698;
+}
+
+/* — Onboarding / quick-start card — */
+[data-theme="light"] .onboarding-card {
+  background: #ffffff; border: 1px solid var(--border); box-shadow: var(--shadow-md);
+}
+[data-theme="light"] .onboarding-step { background: #f8f9fd; border: 1px solid var(--border); }
+
+/* — Section eyebrows used across the detail panel — */
+[data-theme="light"] .section-label {
+  text-transform: uppercase; letter-spacing: 0.07em; color: #7c8698; font-weight: 700;
+}
+
 /* Right-Side Dashboard Scanner Card styling */
 .scanner-console-card {
   position: relative;
@@ -3312,17 +3598,7 @@ body {
   gap: 0.4rem;
 }
 
-/* Light Theme tweaks for Scanner Console Card */
-[data-theme="light"] .scanner-console-card {
-  background: rgba(255, 255, 255, 0.8);
-  border-color: rgba(99, 102, 241, 0.2);
-  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.08);
-}
-[data-theme="light"] .scanner-console-header h3 {
-  background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
+/* Light Theme tweaks for Scanner Console Card — deferred to the hero block above */
 
 /* Onboarding Card for Empty State */
 .onboarding-card {
@@ -4423,4 +4699,303 @@ body {
 @keyframes fadeSlideIn {
   from { opacity: 0; transform: translateX(-5px); }
   to { opacity: 1; transform: translateX(0); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   COLOR HARMONIZATION + RESPONSIVE (2026 UI/UX pass, cont.)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ADK synthesis panel: clean white card with an indigo accent edge — replaces the
+   washed lavender gradient that fought the rest of the palette. */
+[data-theme="light"] .adk-synthesis-panel {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  box-shadow: var(--shadow-md);
+}
+[data-theme="light"] .synth-pattern,
+[data-theme="light"] .synth-exec,
+[data-theme="light"] .synth-summary { color: #475569; }
+[data-theme="light"] .synth-reason { color: #64748b; }
+
+/* Challenger-disagreement tags: readable amber, not low-contrast wash */
+[data-theme="light"] .synth-tag-warn {
+  background: rgba(251,191,36,0.14); color: #b45309; border: 1px solid rgba(251,191,36,0.35);
+}
+
+/* Action ribbon: keep brand colors, but make the export button a calm neutral so the
+   row reads as one consistent control group. */
+[data-theme="light"] .action-ribbon > .btn-secondary#exportJsonBtn {
+  background: #ffffff; border: 1px solid var(--border); color: #475569; box-shadow: var(--shadow-sm);
+}
+[data-theme="light"] .action-ribbon > .btn-secondary#exportJsonBtn:hover {
+  border-color: rgba(79,70,229,0.3); color: var(--accent);
+}
+
+/* Challenger box light tint */
+[data-theme="light"] .challenger-box { background: #fbfbfe; }
+[data-theme="light"] .challenger-row-text,
+[data-theme="light"] .challenger-risk-list li { color: #475569; }
+
+/* Action buttons in light mode */
+[data-theme="light"] .btn-action-secondary {
+  border-color: rgba(15,23,42,0.14); color: #334155;
+}
+[data-theme="light"] .btn-action-link {
+  border-color: rgba(15,23,42,0.1); color: #64748b;
+}
+
+/* Green/revive colour system — light mode overrides.
+   Dark-mode #10b981 is lime-bright on white. Use deep teal-green (#047857)
+   with very low-opacity warm fills for badges. */
+[data-theme="light"] .badge-revive,
+[data-theme="light"] .badge-intact {
+  background: rgba(4, 120, 87, 0.07);
+  color: #047857;
+  border-color: rgba(4, 120, 87, 0.22);
+}
+[data-theme="light"] .filter-btn.revive-filter.active {
+  background: rgba(4, 120, 87, 0.09);
+  border-color: rgba(4, 120, 87, 0.35);
+  color: #047857;
+}
+[data-theme="light"] .revive-stat .stat-value { color: #047857; text-shadow: none; }
+[data-theme="light"] .summary-intact .summary-val { color: #047857; text-shadow: none; }
+[data-theme="light"] .synth-verdict-revive {
+  background: rgba(4, 120, 87, 0.08);
+  color: #047857;
+  border-color: rgba(4, 120, 87, 0.25);
+}
+[data-theme="light"] .tl-ready .tl-dot {
+  background: #047857;
+  box-shadow: 0 0 5px rgba(4, 120, 87, 0.25);
+}
+[data-theme="light"] .registry-row[data-rec="revive_now"] { border-left-color: rgba(4, 120, 87, 0.55); }
+[data-theme="light"] .challenger-chip-confirm {
+  background: rgba(4, 120, 87, 0.08);
+  color: #047857;
+  border-color: rgba(4, 120, 87, 0.25);
+}
+[data-theme="light"] .tl-ins-green::before { background: #047857; }
+
+/* Amber/investigate colour system — light mode overrides.
+   Dark mode uses neon #fbbf24 for legibility on near-black.
+   Light mode needs warm brown (#b45309) with very low-opacity warm fills
+   so badges and highlights feel refined, not neon-yellow on white. */
+[data-theme="light"] .badge-investigate,
+[data-theme="light"] .badge-biopsy {
+  background: rgba(180, 83, 9, 0.07);
+  color: #b45309;
+  border-color: rgba(180, 83, 9, 0.22);
+}
+[data-theme="light"] .filter-btn.investigate-filter.active {
+  background: rgba(180, 83, 9, 0.09);
+  border-color: rgba(180, 83, 9, 0.35);
+  color: #b45309;
+}
+[data-theme="light"] .investigate-stat .stat-value {
+  color: #b45309; text-shadow: none;
+}
+[data-theme="light"] .synth-tag-warn {
+  background: rgba(180, 83, 9, 0.07);
+  color: #b45309;
+  border-color: rgba(180, 83, 9, 0.22);
+}
+[data-theme="light"] .synth-verdict-investigate {
+  background: rgba(180, 83, 9, 0.08);
+  color: #b45309;
+  border-color: rgba(180, 83, 9, 0.28);
+}
+[data-theme="light"] .source-inline {
+  background: rgba(180, 83, 9, 0.06);
+  color: #b45309;
+  border-color: rgba(180, 83, 9, 0.18);
+}
+[data-theme="light"] .challenger-chip-downgrade {
+  background: rgba(180, 83, 9, 0.08);
+  color: #b45309;
+  border-color: rgba(180, 83, 9, 0.25);
+}
+[data-theme="light"] .m-badge-prep {
+  background: rgba(180, 83, 9, 0.08);
+  color: #b45309;
+}
+[data-theme="light"] .tl-resolved .tl-dot,
+[data-theme="light"] .tl-investigate .tl-dot {
+  background: #b45309;
+  box-shadow: 0 0 5px rgba(180, 83, 9, 0.25);
+}
+[data-theme="light"] .registry-row[data-rec="investigate_further"] {
+  border-left-color: rgba(180, 83, 9, 0.55);
+}
+/* Demand badge in light mode */
+[data-theme="light"] .demand-medium { color: #b45309; border-color: rgba(180, 83, 9, 0.25); }
+/* text-amber helper */
+[data-theme="light"] .text-amber { color: #b45309; text-shadow: none; }
+
+/* ── Responsive: never clip, gracefully stack on smaller viewports ──────────── */
+[data-theme="light"] .cyber-workspace,
+.cyber-workspace { min-width: 0; }                 /* prevent flex children overflow */
+.main-viewport { min-width: 0; }
+
+@media (max-width: 1180px) {
+  .main-viewport { padding: 1.25rem 1.4rem; }
+  .live-stats-bar { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+}
+@media (max-width: 960px) {
+  .main-viewport { padding: 1rem; gap: 1.1rem; }
+  .mission-split { grid-template-columns: 1fr; }
+  .charts-grid-layout { grid-template-columns: 1fr; }
+  .live-stats-bar { grid-template-columns: repeat(2, 1fr); }
+  .scanner-form-row { flex-direction: column; align-items: stretch; }
+  .cyber-field.field-param { width: 100%; }
+}
+@media (max-width: 760px) {
+  .cyber-sidebar { width: 64px; }
+  .cyber-sidebar .brand-text,
+  .cyber-sidebar .nav-item-text,
+  .cyber-sidebar .tab-badge,
+  .cyber-sidebar .nav-info { display: none; }
+  .sidebar-nav-item.nav-tab { justify-content: center; }
+  .live-stats-bar { grid-template-columns: 1fr 1fr; }
+  .workspace-title { font-size: 0.95rem !important; }
+}
+
+/* ── Nav info affordance — hover/focus tooltip that educates per section ───── */
+.cyber-sidebar, .sidebar-nav { overflow: visible; }   /* let tooltips escape the rail */
+.nav-info {
+  flex-shrink: 0;
+  width: 16px; height: 16px; margin-left: 0.3rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; line-height: 1;
+  color: var(--text-muted); opacity: 0.4;
+  cursor: help; border-radius: 50%;
+  transition: opacity 0.18s ease, color 0.18s ease;
+  position: relative;
+}
+.sidebar-nav-item:hover .nav-info { opacity: 0.65; }
+.nav-info:hover, .nav-info:focus-visible { opacity: 1; color: var(--accent); outline: none; }
+/* tooltip rendered via JS #navTip at body root — no ::after needed */
+
+/* ── Body-root tooltip (escapes sidebar stacking context) ── */
+#navTip {
+  position: fixed;
+  max-width: 260px;
+  padding: 0.65rem 0.85rem;
+  background: #0f1626;
+  color: #e2e8f0;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.55;
+  letter-spacing: 0;
+  text-align: left;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(2, 6, 23, 0.45);
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+#navTip.visible {
+  opacity: 1;
+}
+[data-theme="light"] #navTip {
+  background: #1e293b;
+  border-color: rgba(30, 41, 59, 0.22);
+  color: #f1f5f9;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.28);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   NECROSIS DETAIL CARD — structured 2-column dossier (was unstyled stacked text)
+   ════════════════════════════════════════════════════════════════════════════ */
+.feature-card-header {
+  display: flex; align-items: center; gap: 0.85rem; padding-left: 0.85rem;
+}
+.fc-icon { font-size: 1.45rem; flex-shrink: 0; line-height: 1; }
+.fc-title-wrap { display: flex; flex-direction: column; gap: 0.22rem; min-width: 0; flex: 1; }
+.fc-name { font-size: 1.05rem; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+.fc-meta {
+  font-size: 0.74rem; color: var(--text-muted);
+  display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center;
+}
+.fc-meta code { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-secondary); }
+
+.nec-body {
+  display: flex; flex-direction: column; gap: 1.1rem;
+  border-top: 1px dashed var(--border); margin-top: 0.9rem; padding-top: 1.1rem;
+}
+@media (min-width: 1080px) {
+  .card-expanded-full .nec-body.expanded {
+    display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+    column-gap: 2.5rem; align-items: start;
+  }
+  .card-expanded-full .nec-body .nec-col-side {
+    border-left: 1px solid var(--border); padding-left: 2.5rem;
+  }
+}
+.nec-col { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+.fc-section { display: flex; flex-direction: column; gap: 0.5rem; }
+
+/* Annotation: a real code block (dark, mono) — not loose amber text */
+.fc-annotation {
+  margin: 0; padding: 0.7rem 0.85rem; border-radius: 8px;
+  background: #0b1220; border: 1px solid rgba(15, 23, 42, 0.25); overflow-x: auto;
+}
+.fc-annotation code {
+  font-family: var(--font-mono); font-size: 0.76rem; color: #fbbf24;
+  white-space: pre; word-break: normal;
+}
+
+/* Verdict metrics as compact KPI tiles */
+.nec-verdict-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.nec-metric {
+  flex: 1 1 88px; min-width: 80px;
+  display: flex; flex-direction: column; gap: 0.2rem;
+  background: var(--surface-subtle); border: 1px solid var(--border);
+  border-radius: 10px; padding: 0.55rem 0.7rem;
+}
+.nm-label { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); font-weight: 700; }
+.nm-val { font-size: 0.95rem; font-weight: 800; color: var(--text); line-height: 1.15; }
+.nm-sub { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); }
+.nm-val-excise_now { color: var(--red); }
+.nm-val-needs_biopsy { color: #d97706; }
+.nm-val-leave_intact { color: var(--text-secondary); }
+
+.fc-reasoning { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.55; }
+.fc-blast {
+  font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;
+  background: var(--surface-subtle); border-radius: 8px; padding: 0.55rem 0.7rem;
+}
+.fc-blast-label {
+  font-weight: 700; color: var(--text-muted); text-transform: uppercase;
+  font-size: 0.58rem; letter-spacing: 0.06em; margin-right: 0.35rem;
+}
+.fc-inline-val { font-size: 0.82rem; color: var(--text-secondary); }
+.fc-inline-val code { font-family: var(--font-mono); font-size: 0.76rem; color: var(--accent); }
+
+/* Removal risks — calm danger marker, readable text */
+.fc-risks { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.fc-risks li {
+  position: relative; padding-left: 1.05rem;
+  font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5;
+}
+.fc-risks li::before {
+  content: ""; position: absolute; left: 0.1rem; top: 0.5em;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--amber); opacity: 0.75;
+}
+
+.fc-signals { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.signal-chip {
+  font-size: 0.68rem; padding: 0.22rem 0.55rem; border-radius: 6px;
+  background: var(--surface-subtle); border: 1px solid var(--border); color: var(--text-secondary);
+}
+.nec-callers-none, .nec-action-note {
+  font-size: 0.78rem; color: var(--text-muted); line-height: 1.5; font-style: italic;
+}
+.sl-sub {
+  font-weight: 500; text-transform: none; letter-spacing: 0;
+  color: var(--text-muted); font-size: 0.62rem; opacity: 0.85;
 }

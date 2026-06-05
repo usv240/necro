@@ -1,4 +1,4 @@
-"""
+﻿"""
 POST /api/scan/stream — SSE streaming scan endpoint.
 
 Two-phase architecture:
@@ -309,7 +309,7 @@ async def _stream_live_impl(emit, project_path: str, max_commits: int, lookback_
             elif isinstance(r, dict):
                 saved_features.append(r)
 
-    # Adversarial Challenger (Vertex AI Gemini 2.5 Flash — genuinely different model)
+    # Adversarial Challenger (Gemini 3 Flash — genuinely different model)
     # Coverage: challenge ALL revive_now candidates first, then fill remaining slots
     # with the highest-feasibility investigate_further features. Previously only
     # revive_now got reviewed, so a cautious-but-wrong investigate verdict (e.g. a
@@ -333,7 +333,7 @@ async def _stream_live_impl(emit, project_path: str, max_commits: int, lookback_
         _n_rev = sum(1 for f in challenge_pool if f.get("viability", {}).get("recommendation") == "revive_now")
         _n_inv = len(challenge_pool) - _n_rev
         await emit(
-            f"Challenger Agent (Vertex AI Gemini 2.5 Flash) — stress-testing {len(challenge_pool)} candidate(s) "
+            f"Challenger Agent (Gemini 3 Flash) — stress-testing {len(challenge_pool)} candidate(s) "
             f"({_n_rev} revive, {_n_inv} investigate)..."
         )
         assessments = await challenge_top_revival_candidates(challenge_pool, limit=_CHALLENGER_CAP)
@@ -1155,4 +1155,5 @@ def _compute_resurrection_chains(features: list[dict]) -> list[dict]:
         })
 
     return chains[:6]  # top 6 chains max
+
 

@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     APP_URL: str = "https://necro-agent-38381883054.us-central1.run.app"
     OUTPUT_DIR: str = "outputs"
     DEMO_MODE: bool = False
+    CONTACT_EMAIL: str = "ujwalsureshv@gmail.com"
 
     # Autonomous monitoring
     MONITOR_INTERVAL_HOURS: int = 24

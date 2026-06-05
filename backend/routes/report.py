@@ -1,4 +1,4 @@
-"""
+﻿"""
 GET /api/report/latest           — most recent scan from MongoDB
 GET /api/report/scans            — all past scans (history)
 GET /api/report/feature/{id}     — single feature with competitive intel
@@ -227,7 +227,7 @@ async def post_report_to_gitlab(req: PostToGitLabRequest):
         "6. **GitLab native Feature Flags API** (`/api/v4/projects/:id/feature_flags`)",
         "",
         "Each revival recommendation is independently challenged by a second AI agent "
-        "(Vertex AI Gemini 2.5 Flash) that stress-tests the primary finding from a "
+        "(Gemini 3 Flash) that stress-tests the primary finding from a "
         "skeptical perspective, producing specific failure scenarios.",
         "",
         f"[View full interactive report]({settings.APP_URL})",
@@ -360,4 +360,5 @@ async def get_stats():
             "revivals_logged_count": 0,
             "mcp_tool_calls_count": 35,
         }
+
 
