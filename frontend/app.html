@@ -582,9 +582,14 @@
 
           <div class="scan-inputs">
             <div class="input-group" style="flex:1">
-              <label for="necrosisRepoUrl">GitLab Repository URL</label>
+              <label for="necrosisRepoUrl">GitLab Repository URL <span style="font-size:0.7rem;color:var(--text-muted)">(scan target)</span></label>
               <input type="text" id="necrosisRepoUrl" placeholder="https://gitlab.com/org/repo  or  org/repo"
                      value="gitlab-org/gitlab-runner" />
+            </div>
+            <div class="input-group" style="flex:1">
+              <label for="necrosisActionRepo">Action Repository <span style="font-size:0.7rem;color:var(--text-muted)">(where MRs are created)</span></label>
+              <input type="text" id="necrosisActionRepo" placeholder="your-group/your-project"
+                     value="ujwal240-group/ujwal240-project" />
             </div>
             <div class="input-group">
               <label for="necrosisMaxFindings">Max Findings</label>

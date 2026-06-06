@@ -1358,10 +1358,10 @@ function getFeatureMonthLabel(feat) {
 // ── Create revival issue ─────────────────────────────────────────────────────
 async function createRevivalIssue(featureId, btn) {
   const project = currentFeatures.find(f => (f.feature_id || f.id) === featureId);
-  const projectPath = project ? (project.project_path || '') : '';
+  const projectPath = (project && project.project_path) || _reportMeta.project_path || '';
 
   if (!projectPath) {
-    toast('Cannot determine project path for this feature.', 'error');
+    toast('Cannot determine project path. Run a scan first or load a demo.', 'error');
     return;
   }
   if (!_canWriteToRepo(projectPath)) return;
@@ -1413,10 +1413,10 @@ async function createRevivalIssue(featureId, btn) {
 // ── Create Ghost MR — NECRO creates a real draft GitLab MR ──────────────────
 async function createGhostMR(featureId, btn) {
   const project = currentFeatures.find(f => (f.feature_id || f.id) === featureId);
-  const projectPath = project ? (project.project_path || '') : '';
+  const projectPath = (project && project.project_path) || _reportMeta.project_path || '';
 
   if (!projectPath) {
-    toast('Cannot determine project path for this feature.', 'error');
+    toast('Cannot determine project path. Run a scan first or load a demo.', 'error');
     return;
   }
   if (!_canWriteToRepo(projectPath)) return;
@@ -1817,9 +1817,11 @@ function applyNecrosisFilter() {
 
 async function createDeletionMR(findingId, btn) {
   const f = _necrosisFindings.find(x => x.finding_id === findingId);
-  const projectPath = document.getElementById('necRepo').textContent || '';
-  if (!f || !projectPath || projectPath === '—') {
-    toast('Cannot determine project path for this finding.', 'error');
+  // Use the action repo (where we have write access), not the scanned repo
+  const actionRepoEl = document.getElementById('necrosisActionRepo');
+  const projectPath = (actionRepoEl && actionRepoEl.value.trim()) || '';
+  if (!f || !projectPath) {
+    toast('Set an Action Repository in the scanner form above before creating a Deletion MR.', 'error');
     return;
   }
   btn.disabled = true;
