@@ -46,7 +46,7 @@
                 </feMerge>
               </filter>
             </defs>
-            <polygon points="50,5 90,28 90,72 50,95 10,72 10,28" fill="none" stroke="url(#logo-grad)" stroke-width="2.5" stroke-dasharray="240" stroke-dashoffset="0" />
+            <polygon points="50,5 90,28 90,72 50,95 10,72 10,28" fill="none" stroke="url(#logo-grad)" stroke-width="2.5" />
             <circle cx="50" cy="50" r="22" fill="none" stroke="url(#logo-grad)" stroke-width="2.5" filter="url(#logo-glow)" />
             <path d="M50,20 L50,40 M50,60 L50,80 M20,50 L40,50 M60,50 L80,50" stroke="url(#logo-grad)" stroke-width="2" />
             <polygon points="50,38 58,50 50,62 42,50" fill="url(#logo-grad)" filter="url(#logo-glow)" />
@@ -73,7 +73,7 @@
       </button>
       <button class="sidebar-nav-item nav-tab" data-tab="necrosis">
         <div style="display:flex;align-items:center;gap:0.55rem;width:100%">
-          <span class="nav-item-icon">☠</span>
+          <span class="nav-item-icon">✕</span>
           <span class="nav-item-text">Necrosis Registry</span>
           <span class="tab-badge" id="tabBadgeNecrosis" style="margin-left:auto">0</span>
           <span class="nav-info" tabindex="0" onclick="event.stopPropagation()" data-tip="The opposite of revival: finds deprecated / dead code still living in the repo, checks who still calls it, and flags only what is genuinely safe to delete, never load-bearing code.">ⓘ</span>
@@ -239,7 +239,7 @@
                 </div>
                 <div class="btn-with-hint">
                   <button class="btn-cyber btn-group-scan" id="groupScanToggle" onclick="toggleGroupScanInput()">
-                    ⛓ GROUP SCAN
+                    GROUP SCAN
                   </button>
                   <span class="btn-hint">Scan entire GitLab namespace</span>
                 </div>
@@ -249,7 +249,7 @@
                 <!-- Chip rows -->
                 <div class="chip-section">
                   <div class="chip-row-label">
-                    <span class="chip-row-icon">⚡</span>
+                    <span class="chip-row-icon">▸</span>
                     <span class="chip-row-title">Instant demo</span>
                     <span class="chip-row-desc">Pre-analyzed, loads in 1 second, no API calls needed</span>
                   </div>
@@ -320,7 +320,7 @@
               <div class="group-scan-input" id="groupScanInput" style="display:none">
                 <div class="group-scan-divider"></div>
                 <div class="group-scan-header">
-                  <span class="group-scan-badge">⛓ Cross-Repository Graveyard Federation</span>
+                  <span class="group-scan-badge">Cross-Repository Graveyard Federation</span>
                   <span class="group-scan-desc">Scan an entire GitLab namespace to find features killed by the same constraint across multiple repos. Fix once, unlock org-wide</span>
                 </div>
                 <div class="group-scan-form">
@@ -505,7 +505,7 @@
 
             <div class="mlc-secondary-row">
               <button class="btn btn-sm" id="missionReplayBtn" onclick="loadMissionLatest()" title="Instantly replay the most recent mission report, no live run">
-                ⚡ Replay last mission
+                Replay last mission
               </button>
               <label class="mission-dryrun">
                 <input type="checkbox" id="missionDryRun" /> Dry run
@@ -604,7 +604,7 @@
 
           <div class="chip-section" style="margin-top:0.9rem">
             <div class="chip-row-label">
-              <span class="chip-row-icon">⚡</span>
+              <span class="chip-row-icon">▸</span>
               <span class="chip-row-title">Instant demo</span>
               <span class="chip-row-desc">Pre-analyzed cached scan, loads in 1 second</span>
             </div>
@@ -769,7 +769,6 @@
         </div>
         <div id="watchGrid">
           <div class="empty-state">
-            <div class="empty-icon">👁</div>
             <p>No repositories monitored yet.<br>Add a GitLab URL above to start autonomous scanning.</p>
           </div>
         </div>

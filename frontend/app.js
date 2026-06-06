@@ -100,12 +100,11 @@ themeBtn.addEventListener('click', () => {
   const next = current === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem('necro-theme', next);
-  themeBtn.textContent = next === 'dark' ? '🌙' : '☀️';
+  themeBtn.textContent = '◑';
 });
 // Restore icon
 (function() {
-  const t = localStorage.getItem('necro-theme') || 'light';
-  themeBtn.textContent = t === 'dark' ? '🌙' : '☀️';
+  themeBtn.textContent = '◑';
 })();
 
 // ── Welcome Hero Onboarding Toggle ──────────────────────────────────────────
@@ -1132,11 +1131,11 @@ function buildFeatureCard(feat, isDemo) {
         const signals = feat.detection_signals || [];
         const conf = feat.detection_confidence || 0;
         const methodLabel = {
-          feature_flag_removal:      '🚩 Feature flag removal',
+          feature_flag_removal:      'Feature flag removal',
           revert_commit:             '↩ Revert commit',
-          commit_message_keyword:    '🔍 Commit keyword match',
-          shelved_issue:             '📋 Shelved issue',
-          gitlab_feature_flags_api:  '🚩 GitLab Feature Flags API',
+          commit_message_keyword:    'Commit keyword match',
+          shelved_issue:             'Shelved issue',
+          gitlab_feature_flags_api:  'GitLab Feature Flags API',
         }[method] || method.replace(/_/g, ' ');
         const posSignals = signals.filter(s => !s.startsWith('⚠'));
         const negSignals = signals.filter(s => s.startsWith('⚠'));
@@ -1633,7 +1632,7 @@ function buildNecrosisRow(f) {
   row.dataset.rec = rec;
   row.setAttribute('role', 'option');
 
-  const icon = { excise_now: '☠', needs_biopsy: '🔬', leave_intact: '⬩' }[rec] || '⬩';
+  const icon = { excise_now: '✕', needs_biopsy: '◦', leave_intact: '⬩' }[rec] || '⬩';
   const badgeClass = { excise_now: 'badge-excise', needs_biopsy: 'badge-biopsy', leave_intact: 'badge-intact' }[rec] || 'badge-intact';
   const badgeLabel = { excise_now: 'Excise', needs_biopsy: 'Biopsy', leave_intact: 'Intact' }[rec] || rec;
   const scoreColor = safety.deletion_risk <= 3 ? 'var(--green)' : safety.deletion_risk <= 6 ? 'var(--amber)' : 'var(--red)';
@@ -1689,7 +1688,7 @@ function buildNecrosisCard(f) {
   card.className = 'feature-card';
   card.dataset.rec = rec;
 
-  const icon = { excise_now: '☠', needs_biopsy: '🔬', leave_intact: '⬩' }[rec] || '⬩';
+  const icon = { excise_now: '✕', needs_biopsy: '◦', leave_intact: '⬩' }[rec] || '⬩';
   const badgeClass = { excise_now: 'badge-excise', needs_biopsy: 'badge-biopsy', leave_intact: 'badge-intact' }[rec] || 'badge-intact';
   const badgeLabel = { excise_now: 'Excise Now', needs_biopsy: 'Needs Biopsy', leave_intact: 'Leave Intact' }[rec] || rec;
   const strokeColor = rec === 'excise_now' ? '#ef4444' : rec === 'needs_biopsy' ? '#f59e0b' : '#6b7280';
@@ -1743,7 +1742,7 @@ function buildNecrosisCard(f) {
             <div class="ghost-mr-hero">
               <button class="btn btn-ghost-mr" onclick="createDeletionMR('${f.finding_id}', this)"
                       title="NECRO creates a real GitLab Draft MR with a NECRO_DELETION.md removal plan via MCP">
-                🪦 Open Deletion MR
+                Open Deletion MR
               </button>
               <span class="ghost-mr-sub">NECRO creates a real Draft MR with the removal plan</span>
             </div>
@@ -1827,7 +1826,7 @@ async function createDeletionMR(findingId, btn) {
     toast(`Ghost Deletion MR created — branch ${d.branch_name}, plan ${d.plan_file}`, 'success');
   } catch (e) {
     btn.disabled = false;
-    btn.innerHTML = '🪦 Ghost Deletion MR';
+    btn.innerHTML = 'Open Deletion MR';
     toast(`Deletion MR: ${e.message}`, 'error');
   }
 }
@@ -1923,7 +1922,7 @@ async function loadMissionLatest() {
   } catch (e) {
     toast(`Replay failed: ${e.message}`, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '⚡ Replay last mission'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Replay last mission'; }
   }
 }
 
@@ -1962,7 +1961,7 @@ function renderMissionReport(d) {
     const isExcise = a.type === 'deletion_mr';
     const isIssue  = a.type === 'revival_issue';
     const name     = a.feature || a.symbol || '';
-    const icon     = isExcise ? '☠' : '✦';
+    const icon     = isExcise ? '✕' : '✦';
     const verb     = isExcise ? 'Excise' : isIssue ? 'Revive (flagged)' : 'Revive';
     const badge    = created
       ? `<span class="m-badge m-badge-ok">Created</span>`
@@ -1981,7 +1980,7 @@ function renderMissionReport(d) {
 
   const challengeBlock = challenge.challenger_verdict ? `
     <div class="m-section">
-      <div class="m-section-label">⚔ Adversarial Challenge</div>
+      <div class="m-section-label">Adversarial Challenge</div>
       <div class="m-challenge m-verdict-${escHtml(challenge.challenger_verdict)}">
         <strong>Verdict: ${escHtml((challenge.challenger_verdict || '').toUpperCase())}</strong>
         ${challenge.strongest_objection ? `<div class="m-obj">${escHtml(challenge.strongest_objection)}</div>` : ''}
@@ -2017,7 +2016,7 @@ function renderMissionReport(d) {
       <div class="m-report-body">
         <!-- Agent plan -->
         <div class="m-section">
-          <div class="m-section-label">🧠 Agent's Plan</div>
+          <div class="m-section-label">Agent's Plan</div>
           ${plan.mission_summary ? `<div class="m-plan">${escHtml(plan.mission_summary)}</div>` : ''}
           <div class="m-plan-cards">
             <div class="m-plan-card m-pc-revive">
@@ -2029,7 +2028,7 @@ function renderMissionReport(d) {
               </div>
             </div>
             <div class="m-plan-card m-pc-excise">
-              <div class="m-pc-icon">☠</div>
+              <div class="m-pc-icon">✕</div>
               <div class="m-pc-body">
                 <div class="m-pc-verb">Excise</div>
                 <div class="m-pc-name">${escHtml(obj.excision || '—')}</div>
@@ -2043,7 +2042,7 @@ function renderMissionReport(d) {
 
         <!-- Actions -->
         <div class="m-section">
-          <div class="m-section-label">${d.dry_run ? '📋 Prepared Artifacts' : '🚀 Actions Taken'}</div>
+          <div class="m-section-label">${d.dry_run ? 'Prepared Artifacts' : 'Actions Taken'}</div>
           <div class="m-actions">${actions.map(actionCard).join('') || '<div class="m-prep-note">No action-worthy objectives this run.</div>'}</div>
           ${summaryLink}
         </div>
@@ -2617,7 +2616,6 @@ async function loadWatchList() {
     if (!repos.length) {
       grid.innerHTML = `
         <div class="empty-state">
-          <div class="empty-icon">👁</div>
           <p>No repositories monitored yet.<br>Add a GitLab URL above to start autonomous scanning.</p>
         </div>`;
       return;
@@ -2795,7 +2793,7 @@ function toggleGroupScanInput() {
   const open = panel.style.display !== 'none';
   panel.style.display = open ? 'none' : 'block';
   if (btn) {
-    btn.textContent = open ? '⛓ GROUP SCAN' : '⛓ HIDE GROUP SCAN';
+    btn.textContent = open ? 'GROUP SCAN' : 'HIDE GROUP SCAN';
     btn.classList.toggle('active', !open);
   }
   if (!open) {
@@ -2855,7 +2853,7 @@ function renderGroupScanResults(data, namespace) {
       <div class="cross-chain-head">
         <span class="cross-chain-key">${escHtml(chain.constraint_key)}</span>
         <span class="cross-chain-count">${chain.cross_repo_count} features across ${(chain.repos_affected || []).length} repos</span>
-        <span class="cross-chain-unlock">⚡ ${escHtml(chain.org_unlock || 'Fix once → unlock org-wide')}</span>
+        <span class="cross-chain-unlock">${escHtml(chain.org_unlock || 'Fix once → unlock org-wide')}</span>
       </div>
       <div class="cross-chain-repos">
         ${(chain.repos_affected || []).map(r => `<span class="cross-chain-repo">${escHtml(r.split('/').pop() || r)}</span>`).join('')}
@@ -2873,7 +2871,7 @@ function renderGroupScanResults(data, namespace) {
   panel.innerHTML = `
     <div class="group-scan-results">
       <div class="group-scan-results-header">
-        <span class="group-scan-results-badge">⛓ Cross-Repository Graveyard Federation</span>
+        <span class="group-scan-results-badge">Cross-Repository Graveyard Federation</span>
         <span class="group-scan-namespace">${escHtml(namespace)}</span>
         <span class="group-scan-summary">${reposScanned} repos · ${totalFeats} dead features · ${chains.length} cross-repo chain${chains.length !== 1 ? 's' : ''}</span>
       </div>

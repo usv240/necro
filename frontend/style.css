@@ -3272,7 +3272,7 @@ body {
 [data-theme="light"] .sidebar-nav-item.nav-tab .tab-badge {
   background: rgba(15, 23, 42, 0.05); border: 1px solid var(--border); color: #64748b;
 }
-[data-theme="light"] .brand-subtitle { color: #94a3b8; letter-spacing: 0.06em; }
+[data-theme="light"] .brand-subtitle { color: #0891b2; letter-spacing: 0.06em; }
 
 /* — Top metric tiles: clean number-forward cards — */
 [data-theme="light"] .ls-card {
@@ -4631,11 +4631,14 @@ body {
 
 /* Light Theme WCAG Enhancements for high contrast */
 [data-theme="light"] .ls-card-integration .ls-value,
-[data-theme="light"] .brand-subtitle,
 [data-theme="light"] .sidebar-nav-item.nav-tab.active .nav-item-icon,
 [data-theme="light"] .tab-badge,
 [data-theme="light"] .nav-tab.active {
   color: #4f46e5 !important;
+  text-shadow: none !important;
+}
+[data-theme="light"] .brand-subtitle {
+  color: #0891b2 !important;
   text-shadow: none !important;
 }
 [data-theme="light"] .chip-neon:hover {
