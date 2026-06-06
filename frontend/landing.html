@@ -754,17 +754,17 @@
       </div>
       <div class="hero-stats">
         <div class="hero-stat">
-          <div class="hero-stat-value">469+</div>
+          <div class="hero-stat-value" id="lp-scans">476+</div>
           <div class="hero-stat-label">Scans Run</div>
         </div>
         <div class="hero-stat-div"></div>
         <div class="hero-stat">
-          <div class="hero-stat-value">505</div>
+          <div class="hero-stat-value" id="lp-findings">524</div>
           <div class="hero-stat-label">Findings Surfaced</div>
         </div>
         <div class="hero-stat-div"></div>
         <div class="hero-stat">
-          <div class="hero-stat-value">5.6k</div>
+          <div class="hero-stat-value" id="lp-mcp">5.7k</div>
           <div class="hero-stat-label">GitLab MCP Calls</div>
         </div>
       </div>
@@ -1139,15 +1139,15 @@
     </div>
     <div class="stats-dark-grid">
       <div class="stat-cell">
-        <div class="stat-cell-value">469+</div>
+        <div class="stat-cell-value" id="lp-scans2">476+</div>
         <div class="stat-cell-label">Scans Executed</div>
       </div>
       <div class="stat-cell">
-        <div class="stat-cell-value">505</div>
+        <div class="stat-cell-value" id="lp-findings2">524</div>
         <div class="stat-cell-label">Dead Code Findings Surfaced</div>
       </div>
       <div class="stat-cell">
-        <div class="stat-cell-value">5.6k</div>
+        <div class="stat-cell-value" id="lp-mcp2">5.7k</div>
         <div class="stat-cell-label">Live GitLab MCP Calls</div>
       </div>
       <div class="stat-cell">
@@ -1423,6 +1423,22 @@ function lpCalc(v) {
   </div>
 </footer>
 
+<script>
+(async () => {
+  try {
+    const r = await fetch('/api/report/stats', { signal: AbortSignal.timeout(4000) });
+    if (!r.ok) return;
+    const d = await r.json();
+    const scans = d.total_scans || 0;
+    const findings = d.total_features_found || 0;
+    const mcp = d.mcp_tool_calls_count || 0;
+    const fmtMcp = mcp >= 1000 ? (mcp / 1000).toFixed(1) + 'k' : mcp;
+    ['lp-scans','lp-scans2'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = scans + '+'; });
+    ['lp-findings','lp-findings2'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = findings; });
+    ['lp-mcp','lp-mcp2'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = fmtMcp; });
+  } catch (_) { /* silently keep the fallback hardcoded values */ }
+})();
+</script>
 </body>
 </html>
 
