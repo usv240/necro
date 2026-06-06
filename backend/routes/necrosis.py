@@ -236,10 +236,10 @@ async def create_deletion_mr(finding_id: str, req: DeletionMRRequest):
     if not project_path:
         raise HTTPException(status_code=400, detail="project_path required.")
 
-    import re
+    import re, time
     slug = re.sub(r"[^a-z0-9-]", "-", (finding.get("name", "") or "code").lower())
     slug = re.sub(r"-{2,}", "-", slug).strip("-")[:40] or "necrosis"
-    branch_name = f"necro/deletion/{slug}"
+    branch_name = f"necro/deletion/{slug}-{int(time.time()) % 100000}"
 
     default_branch = await mcp.get_default_branch(project_path)
     logger.info("[Deletion MR] default_branch=%s project=%s", default_branch, project_path)

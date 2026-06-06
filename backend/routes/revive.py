@@ -158,11 +158,11 @@ async def create_ghost_mr(feature_id: str, req: ReviveRequest):
     if not project_path:
         raise HTTPException(status_code=400, detail="project_path required.")
 
-    # Slugify feature name for branch name
-    import re
+    # Slugify feature name for branch name — timestamp suffix prevents collisions on reruns
+    import re, time
     slug = re.sub(r"[^a-z0-9-]", "-", feat["name"].lower())
     slug = re.sub(r"-{2,}", "-", slug).strip("-")[:40]
-    branch_name = f"necro/revival/{slug}"
+    branch_name = f"necro/revival/{slug}-{int(time.time()) % 100000}"
 
     # Get default branch
     default_branch = await mcp.get_default_branch(project_path)
