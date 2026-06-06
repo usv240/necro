@@ -219,8 +219,9 @@ body {
   border-radius: 0 6px 6px 0;
 }
 .sidebar-nav-item.nav-tab .nav-item-icon {
-  font-size: 1rem;
+  display: flex; align-items: center; flex-shrink: 0;
   color: var(--neon-cyan);
+  width: 16px; height: 16px;
 }
 .sidebar-nav-item.nav-tab.active .nav-item-icon {
   color: var(--border-neon);
@@ -1520,7 +1521,7 @@ body {
 }
 
 .mlc-header { display: flex; align-items: center; gap: 0.75rem; }
-.mlc-orb { font-size: 1.75rem; line-height: 1; color: var(--accent); }
+.mlc-orb { display: flex; align-items: center; color: var(--accent); }
 .mlc-title { font-size: 1rem; font-weight: 800; color: var(--text); letter-spacing: -0.01em; }
 .mlc-tagline { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.1rem; }
 
@@ -1590,7 +1591,7 @@ body {
   gap: 1rem; padding: 2rem; text-align: center;
 }
 .mi-orb {
-  font-size: 3.5rem; line-height: 1; color: var(--accent); opacity: 0.22;
+  display: flex; align-items: center; color: var(--accent); opacity: 0.22;
   animation: mi-breathe 3.5s ease-in-out infinite;
 }
 @keyframes mi-breathe {
@@ -1637,7 +1638,7 @@ body {
   background: linear-gradient(90deg, rgba(99,102,241,0.06) 0%, transparent 100%);
 }
 .m-result-bar-left { display: flex; align-items: center; gap: 0.65rem; }
-.m-result-icon { font-size: 1.5rem; color: var(--accent); line-height: 1; }
+.m-result-icon { display: flex; align-items: center; color: var(--accent); }
 .m-result-title { font-size: 1rem; font-weight: 800; color: var(--text); }
 .m-result-sub { font-size: 0.74rem; color: var(--text-secondary); margin-top: 0.1rem; }
 .m-result-status {
@@ -1659,7 +1660,7 @@ body {
 }
 .m-plan-card.m-pc-revive { border-left: 3px solid var(--green); }
 .m-plan-card.m-pc-excise { border-left: 3px solid #ef4444; }
-.m-pc-icon { font-size: 1.25rem; line-height: 1; flex-shrink: 0; margin-top: 0.1rem; }
+.m-pc-icon { display: flex; align-items: center; flex-shrink: 0; margin-top: 0.1rem; width: 18px; height: 18px; }
 .m-pc-body { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
 .m-pc-verb {
   font-size: 0.62rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
@@ -4917,7 +4918,7 @@ body {
 .feature-card-header {
   display: flex; align-items: center; gap: 0.85rem; padding-left: 0.85rem;
 }
-.fc-icon { font-size: 1.45rem; flex-shrink: 0; line-height: 1; }
+.fc-icon { display: flex; align-items: center; flex-shrink: 0; width: 20px; height: 20px; }
 .fc-title-wrap { display: flex; flex-direction: column; gap: 0.22rem; min-width: 0; flex: 1; }
 .fc-name { font-size: 1.05rem; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
 .fc-meta {

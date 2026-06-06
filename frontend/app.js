@@ -698,7 +698,7 @@ function renderReport(data) {
   if (chainsPanel && chains.length) {
     const chainsHtml = chains.map(chain => `
       <div class="chain-item chain-impact-${chain.impact || 'low'}">
-        <div class="chain-icon">✦</div>
+        <div class="chain-icon" style="display:flex;align-items:center;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
         <div class="chain-body">
           <div class="chain-title">
             <span class="chain-keyword">${escHtml(chain.constraint_key)}</span>
@@ -778,7 +778,11 @@ function buildRegistryRow(feat) {
   const vi = feat.viability || {};
   const feasibility = vi.revival_feasibility || 0;
   const id = feat.feature_id || feat.id || '';
-  const icons = { revive_now: '✦', investigate_further: '⬢', keep_buried: '⬩' };
+  const _rrIcons = {
+    revive_now:          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+    investigate_further: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+    keep_buried:         `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
+  };
   const badgeClass = { revive_now: 'badge-revive', investigate_further: 'badge-investigate', keep_buried: 'badge-buried' };
   const badgeLabel = { revive_now: 'Revive', investigate_further: 'Candidate', keep_buried: 'Buried' };
   const scoreColor = rec === 'revive_now' ? 'var(--green)' : rec === 'investigate_further' ? 'var(--amber)' : 'var(--text-muted)';
@@ -791,7 +795,7 @@ function buildRegistryRow(feat) {
   row.setAttribute('role', 'tab');
   row.onclick = () => selectFeature(id);
   row.innerHTML = `
-    <span class="rr-icon">${icons[rec] || '✦'}</span>
+    <span class="rr-icon" style="display:flex;align-items:center;">${_rrIcons[rec] || _rrIcons.revive_now}</span>
     <span class="rr-main">
       <span class="rr-name">${esc(feat.name || id)}</span>
       <span class="rr-sub">
@@ -917,7 +921,11 @@ function buildFeatureCard(feat, isDemo) {
     ? `${_effEst} ${_effCat}`
     : (_effEst || _effCat || '—');
 
-  const icons = { revive_now: '✦', investigate_further: '⬢', keep_buried: '⬩' };
+  const _cardIcons2 = {
+    revive_now:          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+    investigate_further: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+    keep_buried:         `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
+  };
   const badgeClass = { revive_now: 'badge-revive', investigate_further: 'badge-investigate', keep_buried: 'badge-buried' };
   const badgeLabel = { revive_now: 'Revive Now', investigate_further: 'Revival Candidate', keep_buried: 'Keep Buried' };
 
@@ -939,7 +947,7 @@ function buildFeatureCard(feat, isDemo) {
   card.innerHTML = `
     <div class="card-header" onclick="toggleCard(this)" style="display:flex;width:100%;justify-content:space-between;align-items:center">
       <div style="display:flex;align-items:center;gap:0.75rem">
-        <div class="tombstone-icon" style="font-size:1.45rem">${icons[rec] || '✦'}</div>
+        <div class="tombstone-icon" style="display:flex;align-items:center;">${_cardIcons2[rec] || _cardIcons2.revive_now}</div>
         <div class="card-title-group" style="display:flex;flex-direction:column;gap:0.15rem">
           <div class="card-name" style="font-size:0.95rem;font-weight:700;color:var(--text)">${esc(feat.name || featureId)}</div>
           <div class="card-meta">
@@ -1632,14 +1640,19 @@ function buildNecrosisRow(f) {
   row.dataset.rec = rec;
   row.setAttribute('role', 'option');
 
-  const icon = { excise_now: '✕', needs_biopsy: '◦', leave_intact: '⬩' }[rec] || '⬩';
+  const _rowIcons = {
+    excise_now:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+    needs_biopsy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+    leave_intact: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+  };
+  const icon = _rowIcons[rec] || _rowIcons.leave_intact;
   const badgeClass = { excise_now: 'badge-excise', needs_biopsy: 'badge-biopsy', leave_intact: 'badge-intact' }[rec] || 'badge-intact';
   const badgeLabel = { excise_now: 'Excise', needs_biopsy: 'Biopsy', leave_intact: 'Intact' }[rec] || rec;
   const scoreColor = safety.deletion_risk <= 3 ? 'var(--green)' : safety.deletion_risk <= 6 ? 'var(--amber)' : 'var(--red)';
 
   row.innerHTML = `
     <div class="necrosis-row-left">
-      <span style="font-size: 1.1rem; flex-shrink: 0; line-height: 1;">${icon}</span>
+      <span style="display:flex;align-items:center;flex-shrink:0;">${icon}</span>
       <div class="necrosis-row-info">
         <span class="necrosis-row-title">${esc(f.name || 'unknown')}</span>
         <span class="necrosis-row-path">${esc(f.file_path || '')}</span>
@@ -1688,7 +1701,12 @@ function buildNecrosisCard(f) {
   card.className = 'feature-card';
   card.dataset.rec = rec;
 
-  const icon = { excise_now: '✕', needs_biopsy: '◦', leave_intact: '⬩' }[rec] || '⬩';
+  const _cardIcons = {
+    excise_now:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+    needs_biopsy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+    leave_intact: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+  };
+  const icon = _cardIcons[rec] || _cardIcons.leave_intact;
   const badgeClass = { excise_now: 'badge-excise', needs_biopsy: 'badge-biopsy', leave_intact: 'badge-intact' }[rec] || 'badge-intact';
   const badgeLabel = { excise_now: 'Excise Now', needs_biopsy: 'Needs Biopsy', leave_intact: 'Leave Intact' }[rec] || rec;
   const strokeColor = rec === 'excise_now' ? '#ef4444' : rec === 'needs_biopsy' ? '#f59e0b' : '#6b7280';
@@ -1902,7 +1920,7 @@ async function startMission() {
     toast('Mission failed — check console', 'error');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '◎ Launch Autonomous Mission';
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg> Launch Autonomous Mission';
   }
 }
 
@@ -1961,7 +1979,9 @@ function renderMissionReport(d) {
     const isExcise = a.type === 'deletion_mr';
     const isIssue  = a.type === 'revival_issue';
     const name     = a.feature || a.symbol || '';
-    const icon     = isExcise ? '✕' : '✦';
+    const icon     = isExcise
+      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
     const verb     = isExcise ? 'Excise' : isIssue ? 'Revive (flagged)' : 'Revive';
     const badge    = created
       ? `<span class="m-badge m-badge-ok">Created</span>`
@@ -2000,7 +2020,7 @@ function renderMissionReport(d) {
       <!-- Status bar -->
       <div class="m-result-bar">
         <div class="m-result-bar-left">
-          <div class="m-result-icon">◎</div>
+          <div class="m-result-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg></div>
           <div>
             <div class="m-result-title">Mission ${d.dry_run ? 'Dry Run' : 'Complete'}</div>
             <div class="m-result-sub">
@@ -2020,7 +2040,7 @@ function renderMissionReport(d) {
           ${plan.mission_summary ? `<div class="m-plan">${escHtml(plan.mission_summary)}</div>` : ''}
           <div class="m-plan-cards">
             <div class="m-plan-card m-pc-revive">
-              <div class="m-pc-icon">✦</div>
+              <div class="m-pc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
               <div class="m-pc-body">
                 <div class="m-pc-verb">Revive</div>
                 <div class="m-pc-name">${escHtml(obj.revival || '—')}</div>
@@ -2028,7 +2048,7 @@ function renderMissionReport(d) {
               </div>
             </div>
             <div class="m-plan-card m-pc-excise">
-              <div class="m-pc-icon">✕</div>
+              <div class="m-pc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></div>
               <div class="m-pc-body">
                 <div class="m-pc-verb">Excise</div>
                 <div class="m-pc-name">${escHtml(obj.excision || '—')}</div>

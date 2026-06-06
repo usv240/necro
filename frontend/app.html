@@ -65,7 +65,7 @@
     <nav class="sidebar-nav">
       <button class="sidebar-nav-item nav-tab active" data-tab="graveyard">
         <div style="display:flex;align-items:center;gap:0.55rem;width:100%">
-          <span class="nav-item-icon">✦</span>
+          <span class="nav-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span>
           <span class="nav-item-text">Dormant Feature Registry</span>
           <span class="tab-badge" id="tabBadgeGraveyard" style="margin-left:auto">0</span>
           <span class="nav-info" tabindex="0" onclick="event.stopPropagation()" data-tip="Find features your team disabled or shelved in a GitLab repo, then verify whether the original blocker still applies today. The ones safe to bring back surface here with cited evidence.">ⓘ</span>
@@ -73,7 +73,7 @@
       </button>
       <button class="sidebar-nav-item nav-tab" data-tab="necrosis">
         <div style="display:flex;align-items:center;gap:0.55rem;width:100%">
-          <span class="nav-item-icon">✕</span>
+          <span class="nav-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></span>
           <span class="nav-item-text">Necrosis Registry</span>
           <span class="tab-badge" id="tabBadgeNecrosis" style="margin-left:auto">0</span>
           <span class="nav-info" tabindex="0" onclick="event.stopPropagation()" data-tip="The opposite of revival: finds deprecated / dead code still living in the repo, checks who still calls it, and flags only what is genuinely safe to delete, never load-bearing code.">ⓘ</span>
@@ -81,7 +81,7 @@
       </button>
       <button class="sidebar-nav-item nav-tab" data-tab="mission">
         <div style="display:flex;align-items:center;gap:0.55rem;width:100%">
-          <span class="nav-item-icon">◎</span>
+          <span class="nav-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg></span>
           <span class="nav-item-text">Mission Control</span>
           <span class="tab-badge tab-badge-hot" id="tabBadgeMission" style="margin-left:auto">AI</span>
           <span class="nav-info" tabindex="0" onclick="event.stopPropagation()" data-tip="Give one instruction and the autonomous agent runs the whole loop: scan → plan → self-critique → create real GitLab Draft MRs/issues → verify → report back.">ⓘ</span>
@@ -89,14 +89,14 @@
       </button>
       <button class="sidebar-nav-item nav-tab" data-tab="timeline">
         <div style="display:flex;align-items:center;gap:0.55rem;width:100%">
-          <span class="nav-item-icon">⬢</span>
+          <span class="nav-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
           <span class="nav-item-text">Timeline Forensics</span>
           <span class="nav-info" tabindex="0" onclick="event.stopPropagation()" style="margin-left:auto" data-tip="Visual analytics across all your scans: when features were killed, why, how revivable they are, and which are the easiest, highest-value wins.">ⓘ</span>
         </div>
       </button>
       <button class="sidebar-nav-item nav-tab" data-tab="watchlist">
         <div style="display:flex;align-items:center;gap:0.55rem;width:100%">
-          <span class="nav-item-icon">⬩</span>
+          <span class="nav-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
           <span class="nav-item-text">Active Watchlist</span>
           <span class="tab-badge" id="tabBadgeWatch" style="margin-left:auto">0</span>
           <span class="nav-info" tabindex="0" onclick="event.stopPropagation()" data-tip="Repos NECRO re-scans automatically every 24h, alerting you on Slack the moment new dormant features appear.">ⓘ</span>
@@ -104,7 +104,7 @@
       </button>
       <button class="sidebar-nav-item nav-tab" data-tab="auditlog">
         <div style="display:flex;align-items:center;gap:0.55rem;width:100%">
-          <span class="nav-item-icon">■</span>
+          <span class="nav-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
           <span class="nav-item-text">Revival Logs</span>
           <span class="tab-badge" id="tabBadgeLog" style="margin-left:auto">0</span>
           <span class="nav-info" tabindex="0" onclick="event.stopPropagation()" data-tip="Your audit trail: every GitLab issue and Draft MR NECRO has created on your behalf, with links to each.">ⓘ</span>
@@ -112,7 +112,7 @@
       </button>
       <button class="sidebar-nav-item nav-tab" data-tab="guide">
         <div style="display:flex;align-items:center;gap:0.55rem;width:100%">
-          <span class="nav-item-icon">ℹ</span>
+          <span class="nav-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
           <span class="nav-item-text">System Guide</span>
           <span class="nav-info" tabindex="0" onclick="event.stopPropagation()" style="margin-left:auto" data-tip="New here? Start with what NECRO is, why dead features cost money, and how the multi-agent pipeline works end-to-end.">ⓘ</span>
         </div>
@@ -480,7 +480,7 @@
           <aside class="mission-config">
 
             <div class="mlc-header">
-              <div class="mlc-orb">◎</div>
+              <div class="mlc-orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="28" height="28"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg></div>
               <div>
                 <div class="mlc-title">Autonomous Mission</div>
                 <div class="mlc-tagline">One instruction: agent finishes the job</div>
@@ -500,7 +500,8 @@
             </div>
 
             <button class="btn btn-mission" id="missionBtn" onclick="startMission()">
-              ◎ Launch Autonomous Mission
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+              Launch Autonomous Mission
             </button>
 
             <div class="mlc-secondary-row">
@@ -537,7 +538,7 @@
             </div>
 
             <div class="mission-idle" id="missionIdle">
-              <div class="mi-orb">◎</div>
+              <div class="mi-orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="56" height="56"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg></div>
               <div class="mi-title">Ready to launch</div>
               <div class="mi-sub">Configure repos on the left and launch the autonomous agent.</div>
               <div class="mi-phases-preview">
